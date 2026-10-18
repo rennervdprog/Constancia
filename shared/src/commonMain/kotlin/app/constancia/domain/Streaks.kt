@@ -3,6 +3,7 @@ package app.constancia.domain
 import app.constancia.model.FrequencyType
 import app.constancia.model.Habit
 import app.constancia.model.toLocalDate
+import app.constancia.model.isoDayNumberCompat
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
