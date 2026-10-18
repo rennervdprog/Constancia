@@ -97,5 +97,13 @@ fun String.toLocalDate(): LocalDate {
     return LocalDate(parts[0].toInt(), parts[1].toInt(), parts[2].toInt())
 }
 
-/** dayOfWeek.isoDayNumber: 1=segunda..7=domingo -> 1=domingo..7=sábado (padrão do app). */
+/**
+ * Número do dia na semana (ISO-8601: 1=segunda .. 7=domingo).
+ * Calculado via epoch days para não depender de API interna do kotlinx-datetime
+ * (DayOfWeek.isoDayNumber é internal na 0.6.1). 1970-01-01 (epoch 0) foi quinta-feira (4).
+ */
+fun LocalDate.isoDayNumberCompat(): Int =
+    (((toEpochDays() + 3) % 7 + 7) % 7 + 1)
+
+/** isoDayNumberCompat(): 1=segunda..7=domingo -> 1=domingo..7=sábado (padrão do app). */
 fun isoToAppDay(isoDayNumber: Int): Int = if (isoDayNumber == 7) 1 else isoDayNumber + 1
