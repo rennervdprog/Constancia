@@ -121,7 +121,7 @@ fun HomeScreen(deps: AppDeps, modifier: Modifier = Modifier) {
         else -> "Boa noite"
     }
     val date = today.toLocalDate()
-    val dateLine = WEEKDAYS_PT[date.dayOfWeek.isoDayNumber - 1] +
+    val dateLine = WEEKDAYS_PT[date.isoDayNumberCompat() - 1] +
         ", " + date.dayOfMonth + " de " + MONTHS_PT[date.monthNumber - 1]
 
     val active = statuses.filter { !it.habit.paused }
