@@ -56,7 +56,7 @@ private fun weeklyStreak(
 ): Int {
     val today = todayYmd.toLocalDate()
     // Segunda-feira da semana atual.
-    val isoDow = today.dayOfWeek.isoDayNumber // 1=seg .. 7=dom
+    val isoDow = today.isoDayNumberCompat() // 1=seg .. 7=dom
     var weekStart = today.minus(DatePeriod(days = isoDow - 1))
     var streak = 0
     while (true) {
@@ -95,7 +95,7 @@ fun weekDoneCount(
     todayYmd: String,
 ): Int {
     val today = todayYmd.toLocalDate()
-    val isoDow = today.dayOfWeek.isoDayNumber
+    val isoDow = today.isoDayNumberCompat()
     val weekStart = today.minus(DatePeriod(days = isoDow - 1))
     val weekEnd = weekStart.plus(DatePeriod(days = 6))
     return doneDates.count { d ->
