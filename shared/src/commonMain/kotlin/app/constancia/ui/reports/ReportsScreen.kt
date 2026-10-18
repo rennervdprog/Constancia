@@ -76,6 +76,7 @@ import app.constancia.model.DiaryEntry
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
+import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.isoToAppDay
 import app.constancia.model.toLocalDate
 import app.constancia.model.toYmd
