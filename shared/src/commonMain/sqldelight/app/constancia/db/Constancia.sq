@@ -1,0 +1,147 @@
+CREATE TABLE habit(
+  id TEXT NOT NULL PRIMARY KEY,
+  name TEXT NOT NULL,
+  icon TEXT NOT NULL,
+  color INTEGER NOT NULL,
+  goal_type TEXT NOT NULL, -- BINARY | QUANTITY
+  target_quantity REAL NOT NULL DEFAULT 1.0,
+  quantity_unit TEXT NOT NULL DEFAULT '',
+  frequency_type TEXT NOT NULL, -- DAILY | WEEKLY_X | DAYS_OF_WEEK
+  days_of_week TEXT NOT NULL DEFAULT '', -- csv de 1..7 (1=domingo), vazio = todos
+  weekly_target INTEGER NOT NULL DEFAULT 7,
+  session TEXT NOT NULL, -- MANHA | TARDE | NOITE
+  reminder_enabled INTEGER NOT NULL DEFAULT 0,
+  reminder_time TEXT NOT NULL DEFAULT '',
+  paused INTEGER NOT NULL DEFAULT 0,
+  archived INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE checkin(
+  id TEXT NOT NULL PRIMARY KEY,
+  habit_id TEXT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
+  date TEXT NOT NULL, -- yyyy-MM-dd
+  quantity REAL NOT NULL DEFAULT 1.0,
+  created_at TEXT NOT NULL,
+  UNIQUE(habit_id, date)
+);
+CREATE INDEX checkin_habit_date ON checkin(habit_id, date);
+
+CREATE TABLE task_item(
+  id TEXT NOT NULL PRIMARY KEY,
+  title TEXT NOT NULL,
+  due_time TEXT, -- HH:mm ou null
+  done INTEGER NOT NULL DEFAULT 0,
+  date TEXT NOT NULL, -- yyyy-MM-dd
+  created_at TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX task_date ON task_item(date);
+
+CREATE TABLE diary_entry(
+  id TEXT NOT NULL PRIMARY KEY,
+  date TEXT NOT NULL UNIQUE, -- yyyy-MM-dd
+  mood INTEGER, -- 1..5 ou null
+  note TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE challenge(
+  id TEXT NOT NULL PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  duration_days INTEGER NOT NULL,
+  habit_name TEXT NOT NULL,
+  habit_icon TEXT NOT NULL DEFAULT '',
+  start_date TEXT, -- yyyy-MM-dd ou null = ainda não iniciado
+  status TEXT NOT NULL DEFAULT 'AVAILABLE', -- AVAILABLE | ACTIVE | DONE | GIVEN_UP
+  is_pro INTEGER NOT NULL DEFAULT 0
+);
+
+-- Hábitos
+selectHabits:
+SELECT * FROM habit WHERE archived = 0 ORDER BY sort_order ASC, created_at ASC;
+
+selectHabitById:
+SELECT * FROM habit WHERE id = ?;
+
+insertHabit:
+INSERT INTO habit(id, name, icon, color, goal_type, target_quantity, quantity_unit,
+  frequency_type, days_of_week, weekly_target, session, reminder_enabled,
+  reminder_time, paused, archived, created_at, sort_order)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateHabit:
+UPDATE habit SET name = ?, icon = ?, color = ?, goal_type = ?, target_quantity = ?,
+  quantity_unit = ?, frequency_type = ?, days_of_week = ?, weekly_target = ?,
+  session = ?, reminder_enabled = ?, reminder_time = ?, sort_order = ?
+WHERE id = ?;
+
+setHabitPaused:
+UPDATE habit SET paused = ? WHERE id = ?;
+
+archiveHabit:
+UPDATE habit SET archived = 1 WHERE id = ?;
+
+deleteHabit:
+DELETE FROM habit WHERE id = ?;
+
+-- Check-ins
+selectCheckin:
+SELECT * FROM checkin WHERE habit_id = ? AND date = ?;
+
+selectCheckinsForHabit:
+SELECT * FROM checkin WHERE habit_id = ? ORDER BY date ASC;
+
+selectCheckinsInRange:
+SELECT * FROM checkin WHERE date >= ? AND date <= ? ORDER BY date ASC;
+
+-- INSERT OR REPLACE em vez de ON CONFLICT DO UPDATE: o upsert moderno exige
+-- SQLite 3.24+, mas o minSdk 24 roda SQLite 3.9 — REPLACE funciona desde sempre.
+upsertCheckin:
+INSERT OR REPLACE INTO checkin(id, habit_id, date, quantity, created_at)
+VALUES(?, ?, ?, ?, ?);
+
+deleteCheckin:
+DELETE FROM checkin WHERE habit_id = ? AND date = ?;
+
+-- Tarefas
+selectTasksForDate:
+SELECT * FROM task_item WHERE date = ? ORDER BY done ASC, sort_order ASC, created_at ASC;
+
+insertTask:
+INSERT INTO task_item(id, title, due_time, done, date, created_at, sort_order)
+VALUES(?, ?, ?, ?, ?, ?, ?);
+
+setTaskDone:
+UPDATE task_item SET done = ? WHERE id = ?;
+
+deleteTask:
+DELETE FROM task_item WHERE id = ?;
+
+-- Diário
+selectDiaryForDate:
+SELECT * FROM diary_entry WHERE date = ?;
+
+selectDiaryRecent:
+SELECT * FROM diary_entry ORDER BY date DESC LIMIT ?;
+
+upsertDiary:
+INSERT OR REPLACE INTO diary_entry(id, date, mood, note, updated_at)
+VALUES(?, ?, ?, ?, ?);
+
+-- Desafios
+selectChallenges:
+SELECT * FROM challenge ORDER BY status ASC;
+
+selectChallengeById:
+SELECT * FROM challenge WHERE id = ?;
+
+insertChallenge:
+INSERT INTO challenge(id, title, description, duration_days, habit_name, habit_icon,
+  start_date, status, is_pro)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+updateChallengeStatus:
+UPDATE challenge SET status = ?, start_date = ? WHERE id = ?;
