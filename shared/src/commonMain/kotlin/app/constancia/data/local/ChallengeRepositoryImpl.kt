@@ -18,23 +18,23 @@ class ChallengeRepositoryImpl(private val db: ConstanciaDb) : ChallengeRepositor
     override fun challengesFlow(): Flow<List<Challenge>> =
         queries.selectChallenges()
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toModel() } }
 
     override suspend fun start(id: String, startDateYmd: String): Unit =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             queries.updateChallengeStatus(ChallengeStatus.ACTIVE.name, startDateYmd, id)
         }
 
     override suspend fun setStatus(id: String, status: ChallengeStatus): Unit =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             // Preserva a data de inicio ja registrada, se houver.
             val current = queries.selectChallengeById(id).executeAsOneOrNull()
             queries.updateChallengeStatus(status.name, current?.start_date, id)
         }
 
     // Idempotente: so insere os pacotes padrao quando a tabela esta vazia.
-    override suspend fun ensureSeed(): Unit = withContext(Dispatchers.IO) {
+    override suspend fun ensureSeed(): Unit = withContext(Dispatchers.Default) {
         if (queries.selectChallenges().executeAsList().isEmpty()) {
             queries.insertChallenge(
                 "ch-meditar-7",
