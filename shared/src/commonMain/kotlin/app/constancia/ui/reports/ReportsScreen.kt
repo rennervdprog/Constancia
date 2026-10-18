@@ -173,7 +173,7 @@ private fun formatDay(d: LocalDate): String =
 // ---------------------------------------------------------------------------
 
 private fun weekStartOf(d: LocalDate): LocalDate =
-    d.minus(DatePeriod(days = d.dayOfWeek.isoDayNumber - 1))
+    d.minus(DatePeriod(days = d.isoDayNumberCompat() - 1))
 
 private fun isDueOn(habit: Habit, date: LocalDate, activeFrom: LocalDate?): Boolean {
     if (habit.paused) return false
@@ -183,7 +183,7 @@ private fun isDueOn(habit: Habit, date: LocalDate, activeFrom: LocalDate?): Bool
         FrequencyType.WEEKLY_X -> true
         FrequencyType.DAYS_OF_WEEK ->
             habit.daysOfWeek.isEmpty() ||
-                isoToAppDay(date.dayOfWeek.isoDayNumber) in habit.daysOfWeek
+                isoToAppDay(date.isoDayNumberCompat()) in habit.daysOfWeek
     }
 }
 
@@ -271,7 +271,7 @@ private fun computeReport(
     }.sortedByDescending { it.rate }
 
     val weekdayRates = (1..7).map { appDay ->
-        val pts = points.filter { isoToAppDay(it.date.dayOfWeek.isoDayNumber) == appDay }
+        val pts = points.filter { isoToAppDay(it.date.isoDayNumberCompat()) == appDay }
         if (pts.isEmpty()) -1.0 else rateOf(pts).let { if (pts.sumOf { p -> p.due } == 0) -1.0 else it }
     }
 
@@ -738,7 +738,7 @@ private fun HeatmapSection(data: ReportData) {
                     color = cs.onSurfaceVariant,
                 )
             } else {
-                val firstAppDay = isoToAppDay(points.first().date.dayOfWeek.isoDayNumber)
+                val firstAppDay = isoToAppDay(points.first().date.isoDayNumberCompat())
                 val totalCells = (firstAppDay - 1) + points.size
                 val cols = (totalCells + 6) / 7
                 repeat(cols) { c ->
