@@ -19,11 +19,11 @@ class DiaryRepositoryImpl(private val db: ConstanciaDb) : DiaryRepository {
     override fun entryForDateFlow(dateYmd: String): Flow<DiaryEntry?> =
         queries.selectDiaryForDate(dateYmd)
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(Dispatchers.Default)
             .map { rows -> rows.firstOrNull()?.toModel() }
 
     override suspend fun save(dateYmd: String, mood: Int?, note: String): Unit =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             queries.upsertDiary(
                 newId(),
                 dateYmd,
@@ -36,6 +36,6 @@ class DiaryRepositoryImpl(private val db: ConstanciaDb) : DiaryRepository {
     override fun recentFlow(limit: Int): Flow<List<DiaryEntry>> =
         queries.selectDiaryRecent(limit.toLong())
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toModel() } }
 }
