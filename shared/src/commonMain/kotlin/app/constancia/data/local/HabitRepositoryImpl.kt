@@ -28,14 +28,14 @@ class HabitRepositoryImpl(
     override fun habitsFlow(): Flow<List<Habit>> =
         queries.selectHabits()
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toModel() } }
 
-    override suspend fun getById(id: String): Habit? = withContext(Dispatchers.IO) {
+    override suspend fun getById(id: String): Habit? = withContext(Dispatchers.Default) {
         queries.selectHabitById(id).executeAsOneOrNull()?.toModel()
     }
 
-    override suspend fun save(habit: Habit): Unit = withContext(Dispatchers.IO) {
+    override suspend fun save(habit: Habit): Unit = withContext(Dispatchers.Default) {
         val createdAt = habit.createdAt.ifBlank { Clock.System.now().toString() }
         val exists = queries.selectHabitById(habit.id).executeAsOneOrNull() != null
         if (!exists) {
@@ -80,21 +80,21 @@ class HabitRepositoryImpl(
     }
 
     override suspend fun setPaused(id: String, paused: Boolean): Unit =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             queries.setHabitPaused(paused.toFlag(), id)
         }
 
-    override suspend fun archive(id: String): Unit = withContext(Dispatchers.IO) {
+    override suspend fun archive(id: String): Unit = withContext(Dispatchers.Default) {
         queries.archiveHabit(id)
     }
 
-    override suspend fun delete(id: String): Unit = withContext(Dispatchers.IO) {
+    override suspend fun delete(id: String): Unit = withContext(Dispatchers.Default) {
         queries.deleteHabit(id)
     }
 
     override fun todayStatusFlow(timeZone: TimeZone): Flow<List<HabitStatus>> =
         habitsFlow().map { habits ->
-            withContext(Dispatchers.IO) {
+            withContext(Dispatchers.Default) {
                 val today = todayYmd(timeZone)
                 habits.map { habit ->
                     val todayCheckin = checkins.get(habit.id, today)
