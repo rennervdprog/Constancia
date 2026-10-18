@@ -17,7 +17,7 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
     private val queries get() = db.constanciaDbQueries
 
     override suspend fun get(habitId: String, dateYmd: String): Checkin? =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             queries.selectCheckin(habitId, dateYmd).executeAsOneOrNull()?.toModel()
         }
 
@@ -26,7 +26,7 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
         habitId: String,
         dateYmd: String,
         quantity: Double,
-    ): Boolean = withContext(Dispatchers.IO) {
+    ): Boolean = withContext(Dispatchers.Default) {
         val existing = queries.selectCheckin(habitId, dateYmd).executeAsOneOrNull()
         if (existing != null) {
             queries.deleteCheckin(habitId, dateYmd)
@@ -41,23 +41,23 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
         habitId: String,
         dateYmd: String,
         quantity: Double,
-    ): Unit = withContext(Dispatchers.IO) {
+    ): Unit = withContext(Dispatchers.Default) {
         queries.upsertCheckin(newId(), habitId, dateYmd, quantity, nowIso())
     }
 
     override suspend fun remove(habitId: String, dateYmd: String): Unit =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             queries.deleteCheckin(habitId, dateYmd)
         }
 
     override fun checkinsInRangeFlow(fromYmd: String, toYmd: String): Flow<List<Checkin>> =
         queries.selectCheckinsInRange(fromYmd, toYmd)
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toModel() } }
 
     override suspend fun checkinsForHabit(habitId: String): List<Checkin> =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             queries.selectCheckinsForHabit(habitId).executeAsList().map { it.toModel() }
         }
 
