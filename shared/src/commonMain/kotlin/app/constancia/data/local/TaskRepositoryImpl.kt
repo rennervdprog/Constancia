@@ -19,11 +19,11 @@ class TaskRepositoryImpl(private val db: ConstanciaDb) : TaskRepository {
     override fun tasksForDateFlow(dateYmd: String): Flow<List<TaskItem>> =
         queries.selectTasksForDate(dateYmd)
             .asFlow()
-            .mapToList(Dispatchers.IO)
+            .mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toModel() } }
 
     override suspend fun add(title: String, dateYmd: String, dueTime: String?): Unit =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             queries.insertTask(
                 newId(),
                 title,
@@ -36,11 +36,11 @@ class TaskRepositoryImpl(private val db: ConstanciaDb) : TaskRepository {
         }
 
     override suspend fun setDone(id: String, done: Boolean): Unit =
-        withContext(Dispatchers.IO) {
+        withContext(Dispatchers.Default) {
             queries.setTaskDone(done.toFlag(), id)
         }
 
-    override suspend fun delete(id: String): Unit = withContext(Dispatchers.IO) {
+    override suspend fun delete(id: String): Unit = withContext(Dispatchers.Default) {
         queries.deleteTask(id)
     }
 }
