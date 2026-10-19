@@ -133,6 +133,7 @@ class ConstanciaUiTest {
         composeRule.mainClock.advanceTimeBy(1000)
         composeRule.waitForIdle()
         // Seleciona a sessão ANTES de digitar (teclado aberto cobre os chips).
+        composeRule.onNodeWithTag("session_opt_1").performScrollTo()
         composeRule.onNodeWithTag("session_opt_1").performClick()
         composeRule.waitForIdle()
         // Verifica se o clique mudou o estado: índice 1 (Tarde) selecionado?
