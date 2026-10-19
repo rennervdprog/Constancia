@@ -1,6 +1,8 @@
 package app.constancia.ui.paywall
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,11 +14,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,7 +71,7 @@ fun PaywallScreen(onClose: () -> Unit = {}) {
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
@@ -113,66 +113,79 @@ fun PaywallScreen(onClose: () -> Unit = {}) {
             }
         }
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    benefits.forEachIndexed { index, benefit ->
-                        Row(verticalAlignment = Alignment.Top) {
-                            Icon(
-                                Icons.Filled.Check,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp),
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+                    .padding(horizontal = 16.dp, vertical = 15.dp),
+            ) {
+                benefits.forEachIndexed { index, benefit ->
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(benefit.title, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                benefit.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Spacer(Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(benefit.title, style = MaterialTheme.typography.titleSmall)
-                                Text(
-                                    benefit.description,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
                         }
-                        if (index < benefits.lastIndex) {
-                            Spacer(Modifier.height(12.dp))
-                        }
+                    }
+                    if (index < benefits.lastIndex) {
+                        Spacer(Modifier.height(12.dp))
                     }
                 }
             }
         }
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    modifier = Modifier.clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         "7 DIAS GRÁTIS",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            "R$ 119,90",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(
-                            "/ano",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 4.dp),
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Sai por R$ 9,99 por mês — menos que um lanche. Cobrança só depois do período grátis.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                 }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        "R$ 119,90",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "/ano",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Sai por R$ 9,99 por mês — menos que um lanche. Cobrança só depois do período grátis.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
         item {
@@ -185,11 +198,19 @@ fun PaywallScreen(onClose: () -> Unit = {}) {
             )
         }
         item {
-            Button(
-                onClick = { purchaseMsg = "Assinatura via Google Play/App Store — em breve" },
-                modifier = Modifier.fillMaxWidth(),
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .clickable { purchaseMsg = "Assinatura via Google Play/App Store — em breve" }
+                    .padding(vertical = 16.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                Text("Começar 7 dias grátis")
+                Text(
+                    "Começar 7 dias grátis",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
             }
             if (purchaseMsg != null) {
                 Spacer(Modifier.height(8.dp))
