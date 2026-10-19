@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -24,26 +25,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -64,6 +56,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
@@ -80,6 +73,7 @@ import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.isoToAppDay
 import app.constancia.model.toLocalDate
 import app.constancia.model.toYmd
+import app.constancia.theme.constanciaExtra
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
@@ -405,68 +399,68 @@ fun ReportsScreen(deps: AppDeps, modifier: Modifier = Modifier) {
         computeReport(habits, checkins, diaryEntries, period, timeZone)
     }
     val summaryText = remember(data) { buildSummary(data) }
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
 
     Column(
         modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = 20.dp)
     ) {
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(10.dp))
         Text(
             "Relatórios",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onBackground,
+            style = MaterialTheme.typography.headlineSmall,
+            color = cs.onBackground,
         )
+        Spacer(Modifier.height(2.dp))
         Text(
             "Constância · sua evolução em números",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = cs.onSurfaceVariant,
         )
         Spacer(Modifier.height(16.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ReportPeriod.values().forEach { p ->
-                FilterChip(
-                    selected = period == p,
-                    onClick = { period = p },
-                    label = { Text(p.label) },
-                )
-            }
-        }
-        Spacer(Modifier.height(20.dp))
+        PeriodSegmented(period = period, onSelect = { period = it })
+        Spacer(Modifier.height(8.dp))
+        Text(
+            periodLabel(period) + " · ${formatDay(data.from)} a ${formatDay(data.to)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = extra.ink3,
+        )
+        Spacer(Modifier.height(12.dp))
 
         if (checkins.isEmpty()) {
             EmptyState()
         } else {
             KpiGrid(data)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
             EvolutionSection(
                 data = data,
                 mode = chartMode,
                 onModeChange = { chartMode = it },
             )
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
             HeatmapSection(data)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
             HabitPerformanceSection(data.habits)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
             WeekdayPatternSection(data)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
             MoodSection(data)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
             InsightsSection(data.insights)
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                PrimaryReportButton(
                     onClick = {
                         scope.launch {
                             val csv = buildExportCsv(habits, checkins)
@@ -474,39 +468,40 @@ fun ReportsScreen(deps: AppDeps, modifier: Modifier = Modifier) {
                         }
                     },
                     modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Filled.Download, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Exportar CSV")
-                }
-                OutlinedButton(
+                    icon = Icons.Filled.Download,
+                    text = "Exportar CSV",
+                )
+                SecondaryReportButton(
                     onClick = { showSummary = true },
                     modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Filled.ContentCopy, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("Copiar resumo")
-                }
+                    icon = Icons.Filled.ContentCopy,
+                    text = "Copiar resumo",
+                )
             }
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(18.dp))
         }
     }
 
     if (showSummary) {
         AlertDialog(
             onDismissRequest = { showSummary = false },
-            title = { Text("Resumo do período") },
+            containerColor = extra.pageCard,
+            titleContentColor = cs.onBackground,
+            textContentColor = cs.onBackground,
+            title = {
+                Text("Resumo do período", style = MaterialTheme.typography.titleMedium)
+            },
             text = {
                 SelectionContainer {
                     Text(summaryText, fontSize = 13.sp)
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showSummary = false }) {
-                    Icon(Icons.Filled.Close, contentDescription = null)
-                    Spacer(Modifier.width(4.dp))
-                    Text("Fechar")
-                }
+                PrimaryReportButton(
+                    onClick = { showSummary = false },
+                    icon = Icons.Filled.Close,
+                    text = "Fechar",
+                )
             },
         )
     }
@@ -516,8 +511,16 @@ fun ReportsScreen(deps: AppDeps, modifier: Modifier = Modifier) {
 // Componentes
 // ---------------------------------------------------------------------------
 
+private fun periodLabel(p: ReportPeriod): String = when (p) {
+    ReportPeriod.SEMANA -> "Últimos 7 dias"
+    ReportPeriod.MES -> "Últimos 30 dias"
+    ReportPeriod.ANO -> "Últimos 12 meses"
+}
+
 @Composable
 private fun EmptyState() {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
     Column(
         Modifier
             .fillMaxWidth()
@@ -528,125 +531,128 @@ private fun EmptyState() {
             Icons.Filled.Insights,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
-            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+            tint = extra.ink3.copy(alpha = 0.7f),
         )
         Spacer(Modifier.height(16.dp))
         Text(
             "Sem dados ainda",
-            fontWeight = FontWeight.Bold,
-            fontSize = 18.sp,
-            color = MaterialTheme.colorScheme.onBackground,
+            style = MaterialTheme.typography.titleMedium,
+            color = cs.onBackground,
         )
         Spacer(Modifier.height(8.dp))
         Text(
             "Complete hábitos para ver relatórios",
-            fontSize = 14.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            color = extra.ink2,
             textAlign = TextAlign.Center,
         )
     }
 }
 
 @Composable
-private fun SectionHeader(icon: ImageVector, title: String, hint: String?) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            title,
-            fontWeight = FontWeight.SemiBold,
-            fontSize = 17.sp,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+private fun PeriodSegmented(period: ReportPeriod, onSelect: (ReportPeriod) -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(extra.pageChip)
+            .padding(4.dp),
+    ) {
+        ReportPeriod.values().forEach { p ->
+            val selected = p == period
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .then(if (selected) Modifier.shadow(2.dp, RoundedCornerShape(10.dp)) else Modifier)
+                    .background(if (selected) extra.pageCard else Color.Transparent)
+                    .clickable { onSelect(p) }
+                    .padding(vertical = 9.dp, horizontal = 6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    p.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (selected) cs.onSurface else extra.ink2,
+                )
+            }
+        }
     }
+}
+
+@Composable
+private fun CardTitle(title: String, hint: String?) {
+    val extra = MaterialTheme.constanciaExtra
+    Text(
+        title,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground,
+    )
     if (hint != null) {
         Spacer(Modifier.height(2.dp))
         Text(
             hint,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            color = extra.ink3,
         )
     }
-    Spacer(Modifier.height(12.dp))
 }
 
 @Composable
-private fun CardBox(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+private fun CardBox(
+    modifier: Modifier = Modifier,
+    corner: Dp = 18.dp,
+    contentPadding: PaddingValues = PaddingValues(16.dp),
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val extra = MaterialTheme.constanciaExtra
     Column(
         modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-            .padding(16.dp),
+            .clip(RoundedCornerShape(corner))
+            .background(extra.pageCard)
+            .border(1.dp, extra.pageLine, RoundedCornerShape(corner))
+            .padding(contentPadding),
         content = content,
     )
 }
 
 @Composable
 private fun KpiGrid(data: ReportData) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            KpiCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Filled.TrendingUp,
-                value = pct(data.completionRate),
-                label = "taxa de conclusão",
-            )
-            KpiCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Filled.CheckCircle,
-                value = "${data.maxStreak}",
-                label = "dias de sequência",
-            )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            KpiCard(Modifier.weight(1f), pct(data.completionRate), "taxa de conclusão")
+            KpiCard(Modifier.weight(1f), "${data.maxStreak}", "dias de sequência")
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            KpiCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Filled.CalendarMonth,
-                value = "${data.perfectDays}",
-                label = "dias perfeitos",
-            )
-            KpiCard(
-                modifier = Modifier.weight(1f),
-                icon = Icons.Filled.BarChart,
-                value = "${data.totalCheckins}",
-                label = "check-ins no período",
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            KpiCard(Modifier.weight(1f), "${data.perfectDays}", "dias perfeitos")
+            KpiCard(Modifier.weight(1f), "${data.totalCheckins}", "check-ins no período")
         }
     }
 }
 
 @Composable
-private fun KpiCard(modifier: Modifier = Modifier, icon: ImageVector, value: String, label: String) {
+private fun KpiCard(modifier: Modifier = Modifier, value: String, label: String) {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
     Column(
         modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp))
-            .padding(14.dp),
+            .clip(RoundedCornerShape(18.dp))
+            .background(extra.pageCard)
+            .border(1.dp, extra.pageLine, RoundedCornerShape(18.dp))
+            .padding(horizontal = 16.dp, vertical = 18.dp),
     ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(20.dp),
+        Text(
+            label.uppercase(),
+            style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.8.sp),
+            color = extra.ink3,
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(5.dp))
         Text(
             value,
-            fontWeight = FontWeight.Bold,
-            fontSize = 22.sp,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Text(
-            label,
-            fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 29.sp),
+            color = cs.onBackground,
         )
     }
 }
@@ -657,20 +663,23 @@ private fun EvolutionSection(
     mode: ChartMode,
     onModeChange: (ChartMode) -> Unit,
 ) {
-    SectionHeader(Icons.Filled.BarChart, "Evolução", null)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ChartMode.values().forEach { m ->
-            FilterChip(
-                selected = mode == m,
-                onClick = { onModeChange(m) },
-                label = { Text(m.label) },
-            )
-        }
-    }
-    Spacer(Modifier.height(12.dp))
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val primary = cs.primary
+    val avgColor = extra.amber
     CardBox(Modifier.fillMaxWidth()) {
-        val primary = MaterialTheme.colorScheme.primary
-        val avgColor = MaterialTheme.colorScheme.onSurfaceVariant
+        CardTitle("Evolução", null)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChartMode.values().forEach { m ->
+                ReportChip(
+                    selected = mode == m,
+                    label = m.label,
+                    onClick = { onModeChange(m) },
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
         Canvas(
             Modifier
                 .fillMaxWidth()
@@ -711,22 +720,50 @@ private fun EvolutionSection(
         Text(
             "— média do período",
             fontSize = 11.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.Bold,
+            color = extra.amber,
+        )
+    }
+}
+
+@Composable
+private fun ReportChip(selected: Boolean, label: String, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val shape = CircleShape
+    Box(
+        Modifier
+            .clip(shape)
+            .border(1.5.dp, if (selected) cs.primary else extra.pageLine, shape)
+            .background(if (selected) cs.primaryContainer else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) cs.primary else cs.onSurfaceVariant,
         )
     }
 }
 
 @Composable
 private fun HeatmapSection(data: ReportData) {
-    SectionHeader(
-        Icons.Filled.DateRange,
-        "Mapa de consistência",
-        "Cada quadrado é um dia · ${data.period.label.lowercase()}",
-    )
-    val heatScroll = rememberScrollState()
-    LaunchedEffect(data.period) { heatScroll.scrollTo(heatScroll.maxValue) }
-    CardBox(Modifier.fillMaxWidth()) {
-        val cs = MaterialTheme.colorScheme
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    CardBox(
+        Modifier.fillMaxWidth(),
+        corner = 24.dp,
+        contentPadding = PaddingValues(top = 18.dp, bottom = 14.dp, start = 16.dp, end = 16.dp),
+    ) {
+        CardTitle(
+            "Mapa de consistência",
+            "Cada quadrado é um dia · ${data.period.label.lowercase()}",
+        )
+        Spacer(Modifier.height(12.dp))
+        val heatScroll = rememberScrollState()
+        LaunchedEffect(data.period) { heatScroll.scrollTo(heatScroll.maxValue) }
         Row(
             Modifier.horizontalScroll(heatScroll),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -736,7 +773,7 @@ private fun HeatmapSection(data: ReportData) {
                 Text(
                     "Sem dias no período.",
                     fontSize = 13.sp,
-                    color = cs.onSurfaceVariant,
+                    color = extra.ink3,
                 )
             } else {
                 val firstAppDay = isoToAppDay(points.first().date.isoDayNumberCompat())
@@ -749,14 +786,14 @@ private fun HeatmapSection(data: ReportData) {
                             if (dayIdx in points.indices) {
                                 val p = points[dayIdx]
                                 val cellColor = when {
-                                    p.due == 0 -> cs.surfaceVariant
+                                    p.due == 0 -> extra.heat0
                                     p.done == 0 -> cs.primary.copy(alpha = 0.12f)
                                     else -> cs.primary.copy(alpha = 0.12f + 0.88f * p.rate.toFloat())
                                 }
                                 Box(
                                     Modifier
                                         .size(18.dp)
-                                        .clip(RoundedCornerShape(5.dp))
+                                        .clip(RoundedCornerShape(4.dp))
                                         .background(cellColor)
                                 )
                             } else {
@@ -772,8 +809,14 @@ private fun HeatmapSection(data: ReportData) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text("Menos", fontSize = 11.sp, color = cs.onSurfaceVariant)
-            listOf(0.12f, 0.35f, 0.6f, 0.85f, 1f).forEach { a ->
+            Text("Menos", fontSize = 11.sp, color = extra.ink3)
+            Box(
+                Modifier
+                    .size(14.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(extra.heat0)
+            )
+            listOf(0.3f, 0.55f, 0.8f, 1f).forEach { a ->
                 Box(
                     Modifier
                         .size(14.dp)
@@ -781,29 +824,72 @@ private fun HeatmapSection(data: ReportData) {
                         .background(cs.primary.copy(alpha = a))
                 )
             }
-            Text("Mais", fontSize = 11.sp, color = cs.onSurfaceVariant)
+            Text("Mais", fontSize = 11.sp, color = extra.ink3)
+        }
+        Spacer(Modifier.height(12.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(extra.pageLine)
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth()) {
+            HeatMeta(
+                Modifier.weight(1f),
+                "${data.activeDays} de ${data.days.size}",
+                "dias ativos no período",
+            )
+            HeatMeta(Modifier.weight(1f), "${data.perfectDays}", "dias perfeitos")
+            HeatMeta(Modifier.weight(1f), "${data.maxStreak}", "recorde de sequência")
         }
     }
 }
 
 @Composable
-private fun HabitPerformanceSection(habits: List<HabitReport>) {
-    SectionHeader(
-        Icons.Filled.TrendingUp,
-        "Desempenho por hábito",
-        "Toque em um hábito para ver detalhes",
-    )
-    if (habits.isEmpty()) {
+private fun HeatMeta(modifier: Modifier, value: String, label: String) {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Column(modifier) {
         Text(
-            "Nenhum hábito no período.",
-            fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            value,
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 17.sp),
+            color = cs.onBackground,
         )
-        return
+        Text(
+            label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = extra.ink3,
+        )
     }
-    habits.forEach { hr ->
-        HabitRow(hr)
-        Spacer(Modifier.height(8.dp))
+}
+
+@Composable
+private fun HabitPerformanceSection(habits: List<HabitReport>) {
+    val extra = MaterialTheme.constanciaExtra
+    CardBox(Modifier.fillMaxWidth()) {
+        CardTitle("Desempenho por hábito", "Toque em um hábito para ver detalhes")
+        Spacer(Modifier.height(6.dp))
+        if (habits.isEmpty()) {
+            Text(
+                "Nenhum hábito no período.",
+                fontSize = 13.sp,
+                color = extra.ink3,
+            )
+        } else {
+            habits.forEachIndexed { i, hr ->
+                if (i > 0) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(extra.pageLine)
+                    )
+                }
+                HabitRow(hr)
+            }
+        }
     }
 }
 
@@ -811,88 +897,95 @@ private fun HabitPerformanceSection(habits: List<HabitReport>) {
 private fun HabitRow(hr: HabitReport) {
     var expanded by remember { mutableStateOf(false) }
     val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val habitColor = Color(hr.habit.color)
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(cs.surface)
-            .border(1.dp, cs.outline, RoundedCornerShape(16.dp))
             .clickable { expanded = !expanded }
-            .padding(14.dp),
+            .padding(vertical = 13.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 Modifier
                     .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color(hr.habit.color).copy(alpha = 0.16f)),
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(habitColor.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     hr.habit.name.firstOrNull()?.uppercase() ?: "•",
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
-                    color = Color(hr.habit.color),
+                    color = habitColor,
                 )
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(11.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     hr.habit.name,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 14.5.sp,
                     color = cs.onBackground,
                 )
                 Text(
                     goalDescription(hr.habit),
-                    fontSize = 12.sp,
-                    color = cs.onSurfaceVariant,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = extra.ink3,
                 )
             }
             Text(
                 pct(hr.rate),
-                fontWeight = FontWeight.Bold,
-                fontSize = 16.sp,
-                color = cs.primary,
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 19.sp),
+                color = cs.onBackground,
             )
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(6.dp))
             Icon(
                 Icons.Filled.ChevronRight,
                 contentDescription = null,
-                tint = cs.onSurfaceVariant,
+                tint = extra.ink3,
                 modifier = Modifier
-                    .size(20.dp)
-                    .rotate(if (expanded) 90f else 0f),
+                    .size(16.dp)
+                    .rotate(if (expanded) 180f else 0f),
             )
         }
         Spacer(Modifier.height(10.dp))
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(cs.surfaceVariant)
+                .height(7.dp)
+                .clip(RoundedCornerShape(99.dp))
+                .background(extra.pageChip)
         ) {
             Box(
                 Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(hr.rate.toFloat().coerceIn(0f, 1f))
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(cs.primary)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(habitColor)
             )
         }
         if (expanded) {
             Spacer(Modifier.height(12.dp))
-            HabitDetailLine("Sequência atual", "${hr.streak} dias")
-            HabitDetailLine("Dias concluídos", "${hr.doneDays} de ${hr.dueDays}")
-            HabitDetailLine("Check-ins", "${hr.checkinCount}")
-            if (hr.habit.goalType == GoalType.QUANTITY) {
-                val unit = hr.habit.quantityUnit.trim()
-                val total = fmtQty(hr.totalQuantity) + if (unit.isNotEmpty()) " $unit" else ""
-                HabitDetailLine("Total no período", total)
-            }
-            if (hr.habit.frequencyType == FrequencyType.WEEKLY_X) {
-                HabitDetailLine("Meta semanal", "${hr.habit.weeklyTarget}× por semana")
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(extra.pageChip)
+                    .padding(12.dp),
+            ) {
+                HabitDetailLine("Sequência atual", "${hr.streak} dias")
+                HabitDetailLine("Dias concluídos", "${hr.doneDays} de ${hr.dueDays}")
+                HabitDetailLine("Check-ins", "${hr.checkinCount}")
+                if (hr.habit.goalType == GoalType.QUANTITY) {
+                    val unit = hr.habit.quantityUnit.trim()
+                    val total = fmtQty(hr.totalQuantity) + if (unit.isNotEmpty()) " $unit" else ""
+                    HabitDetailLine("Total no período", total)
+                }
+                if (hr.habit.frequencyType == FrequencyType.WEEKLY_X) {
+                    HabitDetailLine("Meta semanal", "${hr.habit.weeklyTarget}× por semana")
+                }
             }
         }
     }
@@ -900,6 +993,8 @@ private fun HabitRow(hr: HabitReport) {
 
 @Composable
 private fun HabitDetailLine(label: String, value: String) {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
     Row(
         Modifier
             .fillMaxWidth()
@@ -909,26 +1004,24 @@ private fun HabitDetailLine(label: String, value: String) {
         Text(
             label,
             fontSize = 13.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = extra.ink3,
         )
         Text(
             value,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = cs.onBackground,
         )
     }
 }
 
 @Composable
 private fun WeekdayPatternSection(data: ReportData) {
-    SectionHeader(
-        Icons.Filled.CalendarMonth,
-        "Padrão da semana",
-        "Taxa de conclusão por dia",
-    )
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
     CardBox(Modifier.fillMaxWidth()) {
-        val cs = MaterialTheme.colorScheme
+        CardTitle("Padrão da semana", "Taxa de conclusão por dia")
+        Spacer(Modifier.height(14.dp))
         val bestIdx = data.weekdayRates
             .mapIndexedNotNull { i, r -> if (r >= 0) i to r else null }
             .maxByOrNull { it.second }?.first
@@ -938,7 +1031,15 @@ private fun WeekdayPatternSection(data: ReportData) {
             verticalAlignment = Alignment.Bottom,
         ) {
             data.weekdayRates.forEachIndexed { i, r ->
+                val isBest = i == bestIdx
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        if (r < 0) "–" else pct(r),
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = extra.ink3,
+                    )
+                    Spacer(Modifier.height(7.dp))
                     Box(
                         Modifier.height(110.dp),
                         contentAlignment = Alignment.BottomCenter,
@@ -950,22 +1051,17 @@ private fun WeekdayPatternSection(data: ReportData) {
                                 .fillMaxHeight(if (frac <= 0f) 0.02f else frac)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(
-                                    if (i == bestIdx) cs.primary
+                                    if (isBest) cs.primary
                                     else cs.primary.copy(alpha = 0.35f)
                                 )
                         )
                     }
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(7.dp))
                     Text(
                         DOW_SHORT[i],
                         fontSize = 11.sp,
-                        fontWeight = if (i == bestIdx) FontWeight.Bold else FontWeight.Normal,
-                        color = cs.onBackground,
-                    )
-                    Text(
-                        if (r < 0) "–" else pct(r),
-                        fontSize = 11.sp,
-                        color = cs.onSurfaceVariant,
+                        fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isBest) extra.brandStrong else extra.ink2,
                     )
                 }
             }
@@ -975,96 +1071,174 @@ private fun WeekdayPatternSection(data: ReportData) {
 
 @Composable
 private fun MoodSection(data: ReportData) {
-    SectionHeader(Icons.Filled.EmojiEmotions, "Diário & humor", null)
-    val cs = MaterialTheme.colorScheme
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        MoodCard(
-            modifier = Modifier.weight(1f),
-            value = data.moodPerfectAvg?.let(::fmt1) ?: "–",
-            label = "humor médio nos dias em que você completou tudo",
-        )
-        MoodCard(
-            modifier = Modifier.weight(1f),
-            value = data.moodPendingAvg?.let(::fmt1) ?: "–",
-            label = "humor médio nos dias com hábitos pendentes",
-        )
-    }
-    if (data.moodPerfectAvg == null && data.moodPendingAvg == null) {
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Registre seu humor no diário para ver a correlação.",
-            fontSize = 12.sp,
-            color = cs.onSurfaceVariant,
-        )
+    val extra = MaterialTheme.constanciaExtra
+    CardBox(Modifier.fillMaxWidth()) {
+        CardTitle("Diário & humor", null)
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MoodBox(
+                modifier = Modifier.weight(1f),
+                value = data.moodPerfectAvg?.let(::fmt1) ?: "–",
+                label = "humor médio nos dias em que você completou tudo",
+            )
+            MoodBox(
+                modifier = Modifier.weight(1f),
+                value = data.moodPendingAvg?.let(::fmt1) ?: "–",
+                label = "humor médio nos dias com hábitos pendentes",
+            )
+        }
+        if (data.moodPerfectAvg == null && data.moodPendingAvg == null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Registre seu humor no diário para ver a correlação.",
+                fontSize = 12.sp,
+                color = extra.ink3,
+            )
+        }
     }
 }
 
 @Composable
-private fun MoodCard(modifier: Modifier = Modifier, value: String, label: String) {
+private fun MoodBox(modifier: Modifier = Modifier, value: String, label: String) {
     val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
     Column(
         modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(cs.surface)
-            .border(1.dp, cs.outline, RoundedCornerShape(16.dp))
-            .padding(14.dp),
+            .clip(RoundedCornerShape(14.dp))
+            .background(extra.pageChip)
+            .padding(13.dp),
     ) {
-        Icon(
-            Icons.Filled.EmojiEmotions,
-            contentDescription = null,
-            tint = cs.primary,
-            modifier = Modifier.size(22.dp),
-        )
-        Spacer(Modifier.height(8.dp))
         Text(
             value,
-            fontWeight = FontWeight.Bold,
-            fontSize = 24.sp,
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
             color = cs.onBackground,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             label,
-            fontSize = 12.sp,
-            color = cs.onSurfaceVariant,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = extra.ink2,
         )
     }
 }
 
 @Composable
 private fun InsightsSection(insights: List<String>) {
-    SectionHeader(
-        Icons.Filled.Lightbulb,
-        "Insights",
-        "Padrões detectados nos seus dados",
-    )
     val cs = MaterialTheme.colorScheme
-    if (insights.isEmpty()) {
-        Text(
-            "Ainda não há padrões suficientes — continue registrando.",
-            fontSize = 13.sp,
-            color = cs.onSurfaceVariant,
-        )
-        return
-    }
+    val extra = MaterialTheme.constanciaExtra
     CardBox(Modifier.fillMaxWidth()) {
-        insights.forEachIndexed { i, text ->
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(
-                    Icons.Filled.Lightbulb,
-                    contentDescription = null,
-                    tint = cs.primary,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    text,
-                    fontSize = 14.sp,
-                    color = cs.onBackground,
-                    modifier = Modifier.weight(1f),
-                )
+        CardTitle("Insights", "Padrões detectados nos seus dados")
+        Spacer(Modifier.height(4.dp))
+        if (insights.isEmpty()) {
+            Text(
+                "Ainda não há padrões suficientes — continue registrando.",
+                fontSize = 13.sp,
+                color = extra.ink3,
+            )
+        } else {
+            insights.forEachIndexed { i, text ->
+                if (i > 0) Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.Top) {
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(11.dp))
+                            .background(cs.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.Lightbulb,
+                            contentDescription = null,
+                            tint = cs.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(11.dp))
+                    Text(
+                        text,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = extra.ink2,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
-            if (i < insights.lastIndex) Spacer(Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun PrimaryReportButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    text: String,
+) {
+    val cs = MaterialTheme.colorScheme
+    Box(
+        modifier
+            .clip(RoundedCornerShape(15.dp))
+            .background(cs.primary)
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp, horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = cs.onPrimary,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.5.sp,
+                ),
+                color = cs.onPrimary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SecondaryReportButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    text: String,
+) {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val shape = RoundedCornerShape(15.dp)
+    Box(
+        modifier
+            .clip(shape)
+            .border(1.5.dp, extra.pageLine, shape)
+            .background(extra.pageCard)
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp, horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = cs.onSurface,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.5.sp,
+                ),
+                color = cs.onSurface,
+            )
         }
     }
 }
