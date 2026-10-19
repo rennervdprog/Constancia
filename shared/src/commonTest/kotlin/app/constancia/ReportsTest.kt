@@ -72,7 +72,7 @@ class ReportsTest {
         // Feito em 5 dos 7 dias.
         val checkins = listOf("2026-10-12", "2026-10-13", "2026-10-14", "2026-10-16", "2026-10-18")
             .map { checkin("h1", it) }
-        val data = computeReport(listOf(h), checkins, emptyList(), ReportPeriod.SEMANA, TZ)
+        val data = computeReport(listOf(h), checkins, emptyList(), ReportPeriod.SEMANA, TZ, todayOverride = "2026-10-18".toLocalDate())
         assertEquals(7, data.days.size)
         assertEquals(5.0 / 7.0, data.completionRate, 0.0001)
         assertEquals(5, data.perfectDays)
@@ -84,7 +84,7 @@ class ReportsTest {
         val h = habit()
         // Só domingo (18/10/2026) com check-in.
         val checkins = listOf(checkin("h1", "2026-10-18"))
-        val data = computeReport(listOf(h), checkins, emptyList(), ReportPeriod.SEMANA, TZ)
+        val data = computeReport(listOf(h), checkins, emptyList(), ReportPeriod.SEMANA, TZ, todayOverride = "2026-10-18".toLocalDate())
         // Índice 0 = domingo.
         assertEquals(1.0, data.weekdayRates[0], 0.0001)
         // Segunda (índice 1) teve dia devido sem check-in.
@@ -94,7 +94,7 @@ class ReportsTest {
     @Test
     fun computeReport_pausedHabitExcludedFromDue() {
         val h = habit(paused = true)
-        val data = computeReport(listOf(h), emptyList(), emptyList(), ReportPeriod.SEMANA, TZ)
+        val data = computeReport(listOf(h), emptyList(), emptyList(), ReportPeriod.SEMANA, TZ, todayOverride = "2026-10-18".toLocalDate())
         assertEquals(0.0, data.completionRate)
         assertEquals(0, data.days.sumOf { it.due })
     }
