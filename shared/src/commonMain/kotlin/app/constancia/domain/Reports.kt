@@ -138,8 +138,9 @@ fun computeReport(
     period: ReportPeriod,
     timeZone: TimeZone,
     forgivenByHabit: Map<String, Set<String>> = emptyMap(),
+    todayOverride: LocalDate? = null, // só para testes: fixa o "hoje"
 ): ReportData {
-    val today = Clock.System.todayIn(timeZone)
+    val today = todayOverride ?: Clock.System.todayIn(timeZone)
     val from = today.minus(DatePeriod(days = period.days - 1))
     val dayList = buildList {
         var d = from
