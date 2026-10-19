@@ -60,9 +60,23 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
+import app.constancia.domain.DOW_FULL
+import app.constancia.domain.DOW_SHORT
+import app.constancia.domain.MONTHS
+import app.constancia.domain.DayPoint
+import app.constancia.domain.HabitReport
+import app.constancia.domain.ReportData
+import app.constancia.domain.ReportPeriod
 import app.constancia.domain.buildExportCsv
-import app.constancia.domain.currentStreak
-import app.constancia.domain.doneDatesFor
+import app.constancia.domain.buildSummary
+import app.constancia.domain.computeReport
+import app.constancia.domain.fmt1
+import app.constancia.domain.fmtQty
+import app.constancia.domain.forgivenDates
+import app.constancia.domain.formatDay
+import app.constancia.domain.goalDescription
+import app.constancia.domain.pct
+import app.constancia.domain.rateOf
 import app.constancia.export.shareTextFile
 import app.constancia.model.Checkin
 import app.constancia.model.DiaryEntry
@@ -86,293 +100,14 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------
-// Modelos internos da tela
+// Modelos e cálculos em domain/Reports.kt (lógica pura, testável)
 // ---------------------------------------------------------------------------
-
-private enum class ReportPeriod(val days: Int, val label: String) {
-    SEMANA(7, "Semana"),
-    MES(30, "Mês"),
-    ANO(365, "Ano"),
-}
 
 private enum class ChartMode(val label: String) {
     CONCLUSAO("Conclusão"),
     CHECKINS("Check-ins"),
 }
 
-private data class DayPoint(
-    val date: LocalDate,
-    val due: Int,
-    val done: Int,
-    val checkins: Int,
-) {
-    val rate: Double get() = if (due > 0) done.toDouble() / due else 0.0
-    val isPerfect: Boolean get() = due > 0 && done >= due
-}
-
-private data class HabitReport(
-    val habit: Habit,
-    val streak: Int,
-    val dueDays: Int,
-    val doneDays: Int,
-    val checkinCount: Int,
-    val totalQuantity: Double,
-) {
-    val rate: Double get() = if (dueDays > 0) doneDays.toDouble() / dueDays else 0.0
-}
-
-private data class ReportData(
-    val period: ReportPeriod,
-    val from: LocalDate,
-    val to: LocalDate,
-    val days: List<DayPoint>,
-    val completionRate: Double,
-    val totalCheckins: Int,
-    val perfectDays: Int,
-    val activeDays: Int,
-    val maxStreak: Int,
-    val habits: List<HabitReport>,
-    val weekdayRates: List<Double>, // índice 0..6 = Dom..Sáb; -1.0 = sem dados
-    val moodPerfectAvg: Double?,
-    val moodPendingAvg: Double?,
-    val insights: List<String>,
-)
-
-private val DOW_SHORT = listOf("Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb")
-private val DOW_FULL =
-    listOf("Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado")
-private val MONTHS =
-    listOf("jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez")
-
-// ---------------------------------------------------------------------------
-// Formatação (sem String.format — commonMain)
-// ---------------------------------------------------------------------------
-
-private fun pct(v: Double): String = "${(v * 100).roundToInt()}%"
-
-private fun fmt1(v: Double): String {
-    val r = (v * 10).roundToInt()
-    return "${r / 10},${abs(r % 10)}"
-}
-
-private fun fmtQty(v: Double): String {
-    val whole = v.roundToInt()
-    return if (v == whole.toDouble()) "$whole" else fmt1(v)
-}
-
-private fun formatDay(d: LocalDate): String =
-    "${d.dayOfMonth} de ${MONTHS[d.monthNumber - 1]}"
-
-// ---------------------------------------------------------------------------
-// Cálculo do relatório (função pura — tudo derivado dos dados reais)
-// ---------------------------------------------------------------------------
-
-private fun weekStartOf(d: LocalDate): LocalDate =
-    d.minus(DatePeriod(days = d.isoDayNumberCompat() - 1))
-
-private fun isDueOn(habit: Habit, date: LocalDate, activeFrom: LocalDate?): Boolean {
-    if (habit.paused) return false
-    if (activeFrom != null && date < activeFrom) return false
-    return when (habit.frequencyType) {
-        FrequencyType.DAILY -> true
-        FrequencyType.WEEKLY_X -> true
-        FrequencyType.DAYS_OF_WEEK ->
-            habit.daysOfWeek.isEmpty() ||
-                isoToAppDay(date.isoDayNumberCompat()) in habit.daysOfWeek
-    }
-}
-
-// Para WEEKLY_X: o dia conta como cumprido se houve check-in nele ou se a meta
-// semanal já tinha sido batida antes dele na mesma semana.
-private fun satisfiedDates(habit: Habit, doneDates: Set<String>): Set<String> {
-    if (habit.frequencyType != FrequencyType.WEEKLY_X || habit.weeklyTarget <= 0) {
-        return doneDates
-    }
-    val out = doneDates.toMutableSet()
-    doneDates.groupBy { weekStartOf(it.toLocalDate()) }.forEach { (ws, dates) ->
-        val sorted = dates.sorted()
-        if (sorted.size >= habit.weeklyTarget) {
-            var d = sorted[habit.weeklyTarget - 1].toLocalDate().plus(DatePeriod(days = 1))
-            val weekEnd = ws.plus(DatePeriod(days = 6))
-            while (d <= weekEnd) {
-                out.add(d.toYmd())
-                d = d.plus(DatePeriod(days = 1))
-            }
-        }
-    }
-    return out
-}
-
-private fun rateOf(points: List<DayPoint>): Double {
-    val due = points.sumOf { it.due }
-    return if (due > 0) points.sumOf { it.done }.toDouble() / due else 0.0
-}
-
-private fun computeReport(
-    habits: List<Habit>,
-    checkins: List<Checkin>,
-    diary: List<DiaryEntry>,
-    period: ReportPeriod,
-    timeZone: TimeZone,
-): ReportData {
-    val today = Clock.System.todayIn(timeZone)
-    val from = today.minus(DatePeriod(days = period.days - 1))
-    val dayList = buildList {
-        var d = from
-        while (d <= today) {
-            add(d)
-            d = d.plus(DatePeriod(days = 1))
-        }
-    }
-    val checkinsByHabit = checkins.groupBy { it.habitId }
-    val doneDatesByHabit = habits.associate { h ->
-        val pairs = checkinsByHabit[h.id].orEmpty().map { it.date to it.quantity }
-        h.id to satisfiedDates(h, doneDatesFor(h, pairs))
-    }
-    val activeFromByHabit = habits.associate { h ->
-        h.id to runCatching { h.createdAt.take(10).toLocalDate() }.getOrNull()
-    }
-    fun dueOn(h: Habit, d: LocalDate): Boolean =
-        isDueOn(h, d, activeFromByHabit[h.id])
-
-    val checkinsByDate = checkins.groupBy { it.date }
-    val points = dayList.map { d ->
-        val ymd = d.toYmd()
-        val dueHabits = habits.filter { dueOn(it, d) }
-        val doneCount =
-            dueHabits.count { doneDatesByHabit[it.id].orEmpty().contains(ymd) }
-        DayPoint(d, dueHabits.size, doneCount, checkinsByDate[ymd].orEmpty().size)
-    }
-
-    val habitReports = habits.map { h ->
-        val doneDates = doneDatesByHabit[h.id].orEmpty()
-        var due = 0
-        var done = 0
-        dayList.forEach { d ->
-            if (dueOn(h, d)) {
-                due++
-                if (doneDates.contains(d.toYmd())) done++
-            }
-        }
-        val hcis = checkinsByHabit[h.id].orEmpty()
-        HabitReport(
-            habit = h,
-            streak = currentStreak(h, doneDates, today.toYmd(), timeZone),
-            dueDays = due,
-            doneDays = done,
-            checkinCount = hcis.size,
-            totalQuantity = hcis.sumOf { it.quantity },
-        )
-    }.sortedByDescending { it.rate }
-
-    val weekdayRates = (1..7).map { appDay ->
-        val pts = points.filter { isoToAppDay(it.date.isoDayNumberCompat()) == appDay }
-        if (pts.isEmpty()) -1.0 else rateOf(pts).let { if (pts.sumOf { p -> p.due } == 0) -1.0 else it }
-    }
-
-    val moodByDate = diary.mapNotNull { e -> e.mood?.let { m -> e.date to m } }.toMap()
-    val perfectMoods = mutableListOf<Int>()
-    val pendingMoods = mutableListOf<Int>()
-    points.forEach { p ->
-        val m = moodByDate[p.date.toYmd()]
-        if (m != null) {
-            if (p.isPerfect) perfectMoods.add(m) else if (p.due > 0) pendingMoods.add(m)
-        }
-    }
-
-    val perfectDays = points.count { it.isPerfect }
-    val insights = buildList {
-        val valid = weekdayRates.mapIndexedNotNull { i, r -> if (r >= 0) i to r else null }
-        if (valid.size >= 2) {
-            val best = valid.maxBy { it.second }
-            val worst = valid.minBy { it.second }
-            if (best.first != worst.first && best.second > 0) {
-                add("${DOW_FULL[best.first]} é o seu melhor dia (${pct(best.second)} de conclusão).")
-                add("${DOW_FULL[worst.first]} costuma ser o dia mais difícil (${pct(worst.second)}).")
-            }
-        }
-        val topHabit = habitReports.filter { it.dueDays > 0 }.maxByOrNull { it.streak }
-        if (topHabit != null && topHabit.streak > 0) {
-            add("Maior sequência: ${topHabit.habit.name} (${topHabit.streak} dias seguidos).")
-        }
-        if (perfectDays > 0) {
-            add(
-                if (perfectDays == 1) "1 dia perfeito no período."
-                else "$perfectDays dias perfeitos no período."
-            )
-        }
-        val low = habitReports.filter { it.dueDays > 0 }.minByOrNull { it.rate }
-        if (low != null && habitReports.size >= 2) {
-            add("${low.habit.name} teve a menor taxa (${pct(low.rate)}) — considere ajustar a meta.")
-        }
-        val mp = perfectMoods.average().takeIf { perfectMoods.isNotEmpty() }
-        val mq = pendingMoods.average().takeIf { pendingMoods.isNotEmpty() }
-        if (mp != null && mq != null && mp > mq) {
-            add("Seu humor médio sobe para ${fmt1(mp)} nos dias em que você completa tudo.")
-        }
-        if (points.size >= 8) {
-            val half = points.size / 2
-            val delta = (rateOf(points.drop(half)) - rateOf(points.take(half))) * 100
-            if (abs(delta) >= 3) {
-                add(
-                    "Sua conclusão ${if (delta > 0) "subiu" else "caiu"} " +
-                        "${fmt1(abs(delta))} p.p. na segunda metade do período."
-                )
-            }
-        }
-    }.take(5)
-
-    return ReportData(
-        period = period,
-        from = from,
-        to = today,
-        days = points,
-        completionRate = rateOf(points),
-        totalCheckins = checkins.size,
-        perfectDays = perfectDays,
-        activeDays = points.count { it.checkins > 0 },
-        maxStreak = habitReports.maxOfOrNull { it.streak } ?: 0,
-        habits = habitReports,
-        weekdayRates = weekdayRates,
-        moodPerfectAvg = perfectMoods.average().takeIf { perfectMoods.isNotEmpty() },
-        moodPendingAvg = pendingMoods.average().takeIf { pendingMoods.isNotEmpty() },
-        insights = insights,
-    )
-}
-
-private fun goalDescription(h: Habit): String = when {
-    h.goalType == GoalType.QUANTITY ->
-        "Meta de ${fmtQty(h.targetQuantity)} ${h.quantityUnit}".trim()
-    h.frequencyType == FrequencyType.WEEKLY_X -> "${h.weeklyTarget}× por semana"
-    h.frequencyType == FrequencyType.DAYS_OF_WEEK && h.daysOfWeek.isNotEmpty() ->
-        h.daysOfWeek.sorted().joinToString(", ") { DOW_SHORT[it - 1] }
-    else -> "Diário"
-}
-
-private fun buildSummary(data: ReportData): String {
-    val sb = StringBuilder()
-    sb.append("Constância — Relatório (${data.period.label.lowercase()})\n")
-    sb.append("${formatDay(data.from)} a ${formatDay(data.to)}\n\n")
-    sb.append("Taxa de conclusão: ${pct(data.completionRate)}\n")
-    sb.append("Sequência atual: ${data.maxStreak} dias\n")
-    sb.append("Dias perfeitos: ${data.perfectDays}\n")
-    sb.append("Check-ins: ${data.totalCheckins}\n")
-    if (data.moodPerfectAvg != null) {
-        sb.append("Humor médio (dias 100%): ${fmt1(data.moodPerfectAvg)}\n")
-    }
-    if (data.moodPendingAvg != null) {
-        sb.append("Humor médio (dias com pendências): ${fmt1(data.moodPendingAvg)}\n")
-    }
-    sb.append("\nHábitos:\n")
-    data.habits.forEach { hr ->
-        sb.append("• ${hr.habit.name} — ${pct(hr.rate)}")
-        if (hr.streak > 0) sb.append(" · ${hr.streak} dias seguidos")
-        sb.append("\n")
-    }
-    return sb.toString()
-}
-
-// ---------------------------------------------------------------------------
 // Tela
 // ---------------------------------------------------------------------------
 
@@ -394,9 +129,15 @@ fun ReportsScreen(deps: AppDeps, modifier: Modifier = Modifier) {
     val checkins by remember(period) {
         deps.checkins.checkinsInRangeFlow(fromYmd, toYmd)
     }.collectAsState(initial = emptyList())
+    // Dias perdoados por pausas (streak congelado) — recarregados quando os hábitos mudam.
+    var forgivenByHabit by remember { mutableStateOf(emptyMap<String, Set<String>>()) }
+    LaunchedEffect(habits) {
+        forgivenByHabit = if (habits.isEmpty()) emptyMap()
+        else deps.habits.allPauseIntervals().mapValues { (_, ivs) -> forgivenDates(ivs, toYmd) }
+    }
 
-    val data = remember(period, habits, checkins, diaryEntries) {
-        computeReport(habits, checkins, diaryEntries, period, timeZone)
+    val data = remember(period, habits, checkins, diaryEntries, forgivenByHabit) {
+        computeReport(habits, checkins, diaryEntries, period, timeZone, forgivenByHabit)
     }
     val summaryText = remember(data) { buildSummary(data) }
     val cs = MaterialTheme.colorScheme
