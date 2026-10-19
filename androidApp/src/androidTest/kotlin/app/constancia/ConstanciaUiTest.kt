@@ -87,6 +87,8 @@ class ConstanciaUiTest {
     private fun shot(name: String) {
         // Marca no logcat: o CI monitora "UITEST_SHOT" e tira screenshot via adb.
         android.util.Log.d("UITEST_SHOT", name)
+        // Pausa para o CI capturar a tela antes da UI mudar (logcat tem delay).
+        try { Thread.sleep(1500) } catch (_: InterruptedException) { }
     }
 
     private fun nodesWith(text: String) =
