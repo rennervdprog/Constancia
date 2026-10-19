@@ -4,6 +4,7 @@ import app.constancia.db.Challenge as ChallengeRow
 import app.constancia.db.Checkin as CheckinRow
 import app.constancia.db.Diary_entry as DiaryEntryRow
 import app.constancia.db.Habit as HabitRow
+import app.constancia.db.Pause_interval as PauseIntervalRow
 import app.constancia.db.Task_item as TaskItemRow
 import app.constancia.model.Challenge
 import app.constancia.model.ChallengeStatus
@@ -12,6 +13,7 @@ import app.constancia.model.DiaryEntry
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
+import app.constancia.model.PauseInterval
 import app.constancia.model.Session
 import app.constancia.model.TaskItem
 
@@ -42,6 +44,13 @@ internal fun CheckinRow.toModel(): Checkin = Checkin(
     habitId = habit_id,
     date = date,
     quantity = quantity,
+)
+
+internal fun PauseIntervalRow.toModel(): PauseInterval = PauseInterval(
+    id = id,
+    habitId = habit_id,
+    startDate = start_date,
+    endDate = end_date,
 )
 
 internal fun TaskItemRow.toModel(): TaskItem = TaskItem(
