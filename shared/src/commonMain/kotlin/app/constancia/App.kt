@@ -1,18 +1,29 @@
 package app.constancia
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import app.constancia.data.DatabaseDriverFactory
 import app.constancia.theme.ConstanciaTheme
+import app.constancia.theme.constanciaExtra
 import app.constancia.ui.challenges.ChallengesScreen
 import app.constancia.ui.diary.DiaryScreen
 import app.constancia.ui.home.HomeScreen
@@ -37,16 +48,10 @@ fun App(driverFactory: DatabaseDriverFactory) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             bottomBar = {
-                NavigationBar {
-                    AppTab.entries.forEach { tab ->
-                        NavigationBarItem(
-                            selected = navigator.tab == tab,
-                            onClick = { navigator.navigateTo(tab) },
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) },
-                        )
-                    }
-                }
+                ConstanciaBottomBar(
+                    selected = navigator.tab,
+                    onSelect = { navigator.navigateTo(it) },
+                )
             },
         ) { innerPadding ->
             val screenModifier = Modifier
@@ -66,6 +71,52 @@ fun App(driverFactory: DatabaseDriverFactory) {
         }
         if (navigator.showPaywall) {
             PaywallScreen(onClose = { navigator.showPaywall = false })
+        }
+    }
+}
+
+/** Bottom navigation customizada do protótipo: fundo tab-bg translúcido,
+ *  borda superior 1dp, item = coluna (gap 3dp) com ícone 22dp + label 11sp/700.
+ *  Selecionado = primary, não selecionado = onSurfaceVariant. Sem pill. */
+@Composable
+private fun ConstanciaBottomBar(
+    selected: AppTab,
+    onSelect: (AppTab) -> Unit,
+) {
+    Column {
+        Box(
+            modifier = Modifier.fillMaxWidth().height(1.dp)
+                .background(MaterialTheme.colorScheme.outline),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .background(MaterialTheme.constanciaExtra.tabBg)
+                .padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 10.dp),
+        ) {
+            AppTab.entries.forEach { tab ->
+                val isSelected = tab == selected
+                val color = if (isSelected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier.weight(1f)
+                        .clickable(onClick = { onSelect(tab) })
+                        .padding(vertical = 4.dp),
+                ) {
+                    Icon(
+                        tab.icon,
+                        contentDescription = tab.label,
+                        tint = color,
+                        modifier = Modifier.size(22.dp),
+                    )
+                    Text(
+                        tab.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = color,
+                    )
+                }
+            }
         }
     }
 }
