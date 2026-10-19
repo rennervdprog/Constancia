@@ -83,18 +83,23 @@ class ConstanciaUiTest {
     private val targetContext: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    /** Screenshot: UiDevice (tela cheia) em /data/local/tmp/uitests; nunca falha o teste. */
+    /** Screenshot: UiDevice (tela cheia); nunca falha o teste, mas loga o erro. */
     private fun shot(name: String) {
         try {
-            // /data/local/tmp é world-writable e legível via `adb pull` sem root.
             val dir = File("/data/local/tmp/uitests")
-            dir.mkdirs()
+            val ok = dir.mkdirs() || dir.exists()
+            if (!ok) throw IllegalStateException("mkdirs falhou para ${dir.absolutePath}")
             val file = File(dir, "$name.png")
             if (!device.takeScreenshot(file)) {
-                throw IllegalStateException("takeScreenshot retornou false")
+                throw IllegalStateException("takeScreenshot retornou false para $name")
+            }
+            // Confirma que o arquivo existe e tem tamanho > 0.
+            if (!file.exists() || file.length() == 0L) {
+                throw IllegalStateException("arquivo vazio/inexistente: ${file.absolutePath}")
             }
         } catch (t: Throwable) {
-            // screenshot é acessório: ignora
+            // Loga no logcat do CI para diagnóstico (não falha o teste).
+            println("UI_TEST_SHOT_ERRO $name: ${t.message}")
         }
     }
 
