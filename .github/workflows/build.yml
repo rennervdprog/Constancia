@@ -108,12 +108,19 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace --max-workers=2 || echo FAILED > /tmp/uitest_failed
             mkdir -p uitest-screenshots
-            # Diagnóstico: o que existe em /data/local/tmp?
-            adb shell ls -la /data/local/tmp/ || true
-            # Screenshots em /data/local/tmp/uitests (world-readable, sem root).
-            adb pull /data/local/tmp/uitests ./uitest-screenshots || true
+            # Monitora o logcat por marcadores UITEST_SHOT e tira screenshot via adb
+            # a cada marcador. Roda em background durante os testes.
+            ( adb logcat -s UITEST_SHOT:D | while read -r line; do
+                marker=$(echo "$line" | grep -oP 'UITEST_SHOT: \K.*' | tr -d '\r')
+                if [ -n "$marker" ]; then
+                  adb exec-out screencap -p > "uitest-screenshots/${marker}.png" 2>/dev/null || true
+                fi
+              done ) &
+            LOGCAT_PID=$!
+            ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace --max-workers=2 || echo FAILED > /tmp/uitest_failed
+            # Para o monitor do logcat e lista os screenshots capturados.
+            kill $LOGCAT_PID || true
             ls -la ./uitest-screenshots || true
             if [ -f /tmp/uitest_failed ]; then exit 1; fi
 

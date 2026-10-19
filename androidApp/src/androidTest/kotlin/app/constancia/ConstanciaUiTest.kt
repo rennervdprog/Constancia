@@ -83,24 +83,10 @@ class ConstanciaUiTest {
     private val targetContext: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    /** Screenshot: UiDevice (tela cheia); nunca falha o teste, mas loga o erro. */
+    /** Screenshot: sinaliza via logcat; o script do CI captura via `adb exec-out screencap`. */
     private fun shot(name: String) {
-        try {
-            val dir = File("/data/local/tmp/uitests")
-            val ok = dir.mkdirs() || dir.exists()
-            if (!ok) throw IllegalStateException("mkdirs falhou para ${dir.absolutePath}")
-            val file = File(dir, "$name.png")
-            if (!device.takeScreenshot(file)) {
-                throw IllegalStateException("takeScreenshot retornou false para $name")
-            }
-            // Confirma que o arquivo existe e tem tamanho > 0.
-            if (!file.exists() || file.length() == 0L) {
-                throw IllegalStateException("arquivo vazio/inexistente: ${file.absolutePath}")
-            }
-        } catch (t: Throwable) {
-            // Loga no logcat do CI para diagnóstico (não falha o teste).
-            println("UI_TEST_SHOT_ERRO $name: ${t.message}")
-        }
+        // Marca no logcat: o CI monitora "UITEST_SHOT" e tira screenshot via adb.
+        android.util.Log.d("UITEST_SHOT", name)
     }
 
     private fun nodesWith(text: String) =
