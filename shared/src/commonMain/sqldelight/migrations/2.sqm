@@ -1,0 +1,8 @@
+-- Migração 1 -> 2: intervalos de pausa (streak congelada enquanto pausado).
+CREATE TABLE pause_interval(
+  id TEXT NOT NULL PRIMARY KEY,
+  habit_id TEXT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
+  start_date TEXT NOT NULL,
+  end_date TEXT
+);
+CREATE INDEX pause_interval_habit ON pause_interval(habit_id);
