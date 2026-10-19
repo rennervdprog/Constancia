@@ -431,10 +431,6 @@ private fun SegmentedRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .let { m ->
-                if (tagPrefix != null) m.testTag(tagPrefix + "_sel_" + selectedIndex)
-                else m
-            }
             .background(scheme.surfaceVariant, RoundedCornerShape(12.dp))
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
