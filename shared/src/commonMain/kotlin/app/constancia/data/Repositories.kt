@@ -6,6 +6,7 @@ import app.constancia.model.Checkin
 import app.constancia.model.DiaryEntry
 import app.constancia.model.Habit
 import app.constancia.model.HabitStatus
+import app.constancia.model.PauseInterval
 import app.constancia.model.TaskItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.TimeZone
@@ -22,6 +23,10 @@ interface HabitRepository {
     suspend fun setPaused(id: String, paused: Boolean)
     suspend fun archive(id: String)
     suspend fun delete(id: String)
+    /** Intervalos de pausa de um hábito (para congelar o streak). */
+    suspend fun pauseIntervals(habitId: String): List<PauseInterval>
+    /** Todos os intervalos de pausa, agrupados por hábito. */
+    suspend fun allPauseIntervals(): Map<String, List<PauseInterval>>
     /** Hábitos com o status de hoje (check-in, streak, progresso semanal). */
     fun todayStatusFlow(timeZone: TimeZone = TimeZone.currentSystemDefault()): Flow<List<HabitStatus>>
 }
