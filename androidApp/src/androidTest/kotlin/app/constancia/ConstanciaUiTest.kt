@@ -127,7 +127,12 @@ class ConstanciaUiTest {
     fun criarHabitoComSessao_apareceNaHoje() {
         composeRule.onNodeWithTag("fab_add_habit").performClick()
         composeRule.onNodeWithTag("habit_name_field").performTextInput("Beber água")
-        composeRule.onNodeWithTag("session_opt_1").performClick()
+        // Tap real por coordenadas (UiDevice) no chip "Tarde": distingue bug do app
+        // de limitação do performClick sintético.
+        val chipNode = composeRule.onNodeWithTag("session_opt_1").fetchSemanticsNode()
+        val chipBounds = chipNode.boundsInRoot
+        device.click(chipBounds.center.x.toInt(), chipBounds.center.y.toInt())
+        composeRule.waitForIdle()
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
@@ -213,7 +218,12 @@ class ConstanciaUiTest {
         check(visiveis.contains("Constância Pro")) { "UI_TEST_DIAG visiveis=$visiveis" }
         composeRule.onNodeWithText("Constância Pro").performScrollTo()
         shot("06_mais_banner_pro")
-        composeRule.onNodeWithText("Constância Pro").performClick()
+        // Tap real por coordenadas (UiDevice) — performClick sintético não
+        // estava disparando o onClick do banner.
+        val bannerNode = composeRule.onNodeWithText("Constância Pro").fetchSemanticsNode()
+        val bannerBounds = bannerNode.boundsInRoot
+        device.click(bannerBounds.center.x.toInt(), bannerBounds.center.y.toInt())
+        composeRule.waitForIdle()
         // O paywall abriu? (exists = está na árvore; mais robusto que visibilidade)
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("7 DIAS GRÁTIS") }
         shot("07_paywall")
