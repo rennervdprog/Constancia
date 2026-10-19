@@ -443,7 +443,10 @@ private fun SegmentedRow(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .let { m -> if (tagPrefix != null) m.testTag(tagPrefix + "_" + index) else m }
+                    .then(
+                        if (tagPrefix != null) Modifier.testTag(tagPrefix + "_" + index)
+                        else Modifier
+                    )
                     .then(
                         if (selected) {
                             Modifier.shadow(
@@ -460,8 +463,8 @@ private fun SegmentedRow(
                         if (selected) scheme.surface else Color.Transparent,
                         RoundedCornerShape(10.dp),
                     )
-                    .clickable { onSelect(index) }
-                    .padding(horizontal = 6.dp, vertical = 9.dp),
+                    .padding(horizontal = 6.dp, vertical = 9.dp)
+                    .clickable { onSelect(index) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
