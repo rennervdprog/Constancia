@@ -108,7 +108,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: |
-            ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace || echo FAILED > /tmp/uitest_failed
+            ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace --max-workers=2 || echo FAILED > /tmp/uitest_failed
             mkdir -p uitest-screenshots
             adb root || true
             adb pull /data/data/app.constancia/files/uitests ./uitest-screenshots || true
