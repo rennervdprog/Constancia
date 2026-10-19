@@ -53,6 +53,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
@@ -213,6 +214,7 @@ fun HomeScreen(deps: AppDeps, modifier: Modifier = Modifier) {
                 .align(Alignment.BottomEnd)
                 .padding(20.dp)
                 .size(54.dp)
+                .testTag("fab_add_habit")
                 .shadow(
                     elevation = 8.dp,
                     shape = CircleShape,
@@ -514,7 +516,7 @@ private fun QuantityStepper(
             .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StepperButton(text = "−", onClick = onDecrease)
+        StepperButton(text = "−", onClick = onDecrease, tag = "qty_dec")
         Text(
             text = fmtQty(current) + "/" + fmtQty(target) + " " + unit,
             style = MaterialTheme.typography.labelLarge.copy(
@@ -526,17 +528,18 @@ private fun QuantityStepper(
                 .padding(horizontal = 8.dp),
             maxLines = 1,
         )
-        StepperButton(text = "+", onClick = onIncrease)
+        StepperButton(text = "+", onClick = onIncrease, tag = "qty_inc")
     }
 }
 
 @Composable
-private fun StepperButton(text: String, onClick: () -> Unit) {
+private fun StepperButton(text: String, onClick: () -> Unit, tag: String? = null) {
     val scheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .size(30.dp)
             .clip(CircleShape)
+            .then(if (tag != null) Modifier.testTag(tag) else Modifier)
             .background(scheme.surfaceVariant)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -559,6 +562,7 @@ private fun CheckCircleButton(done: Boolean, onToggle: () -> Unit) {
         modifier = Modifier
             .size(46.dp)
             .clip(CircleShape)
+            .testTag("habit_check")
             .background(if (done) scheme.primary else Color.Transparent)
             .then(
                 if (done) Modifier
@@ -678,13 +682,14 @@ private fun TasksSection(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { addTask() }),
             shape = RoundedCornerShape(16.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).testTag("task_input"),
         )
         Spacer(Modifier.width(8.dp))
         Box(
             modifier = Modifier
                 .size(48.dp)
                 .background(scheme.primary, CircleShape)
+                .testTag("task_add")
                 .clickable { addTask() },
             contentAlignment = Alignment.Center,
         ) {

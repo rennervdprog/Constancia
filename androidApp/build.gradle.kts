@@ -15,6 +15,7 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -39,4 +40,12 @@ android {
 dependencies {
     implementation(project(":shared"))
     implementation(libs.androidx.activity.compose)
+
+    // Testes de UI instrumentados (emulador): tocam nos fluxos de verdade
+    // e tiram screenshots. Roda no CI via :androidApp:connectedDebugAndroidTest.
+    androidTestImplementation(libs.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.sqldelight.android.driver)
+    debugImplementation(libs.compose.ui.test.manifest)
 }

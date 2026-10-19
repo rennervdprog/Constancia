@@ -78,3 +78,48 @@ jobs:
       # via unit tests do Android.
       - name: Run unit tests
         run: ./gradlew :shared:testDebugUnitTest --stacktrace
+
+  ui-tests:
+    name: UI tests (emulador)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Testes de UI instrumentados num emulador Android de verdade:
+      # tocam nos fluxos (criar hábito, check-in, tarefa, diário, stepper,
+      # paywall) e tiram screenshots. O emulador continua vivo nos steps
+      # seguintes para o adb pull dos screenshots.
+      - name: Run UI tests on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace
+
+      - name: Pull screenshots from emulator
+        if: always()
+        run: |
+          mkdir -p uitest-screenshots
+          adb pull /sdcard/Android/data/app.constancia/files/uitests ./uitest-screenshots || true
+          ls -la ./uitest-screenshots || true
+
+      - name: Upload UI test screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-screenshots
+          path: uitest-screenshots/
+          if-no-files-found: warn

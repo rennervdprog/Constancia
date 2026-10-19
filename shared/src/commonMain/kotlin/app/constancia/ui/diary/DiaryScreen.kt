@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.constancia.AppDeps
@@ -109,6 +110,7 @@ fun DiaryScreen(deps: AppDeps, modifier: Modifier = Modifier) {
                             Box(
                                 modifier = Modifier.size(48.dp)
                                     .clip(CircleShape)
+                                    .testTag("mood_" + value)
                                     .background(
                                         if (selected) MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.surfaceVariant
@@ -138,7 +140,7 @@ fun DiaryScreen(deps: AppDeps, modifier: Modifier = Modifier) {
                     onValueChange = { note = it },
                     placeholder = { Text("Como foi seu dia? Uma ou duas linhas bastam.") },
                     minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("diary_note"),
                 )
                 Spacer(Modifier.height(12.dp))
                 CtaButton(

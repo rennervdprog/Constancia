@@ -20,6 +20,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.constancia.data.DatabaseDriverFactory
 import app.constancia.theme.ConstanciaTheme
@@ -41,6 +42,15 @@ import app.constancia.ui.reports.ReportsScreen
 @Composable
 fun App(driverFactory: DatabaseDriverFactory) {
     val deps = rememberAppDeps(driverFactory)
+    AppContent(deps)
+}
+
+/**
+ * Conteúdo do app com dependências já montadas.
+ * Separado de [App] para permitir testes de UI com banco em memória.
+ */
+@Composable
+fun AppContent(deps: AppDeps) {
     val navigator = rememberAppNavigator()
     val darkTheme by deps.prefs.darkThemeFlow().collectAsState(initial = false)
 
@@ -103,6 +113,7 @@ private fun ConstanciaBottomBar(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                     modifier = Modifier.weight(1f)
+                        .testTag("tab_" + tab.name)
                         .clickable(onClick = { onSelect(tab) })
                         // tab do protótipo: padding 4px 10px, gap 3px.
                         .padding(horizontal = 10.dp, vertical = 4.dp),

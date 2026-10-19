@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.constancia.AppDeps
@@ -113,7 +114,7 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 label = { Text("Nome do hábito") },
                 placeholder = { Text("Ex.: Beber água") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("habit_name_field"),
                 shape = RoundedCornerShape(16.dp),
             )
 
@@ -345,6 +346,7 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(scheme.primary, RoundedCornerShape(18.dp))
+                    .testTag("habit_save")
                     .clickable(enabled = ctaEnabled) {
                         if (saving || name.isBlank()) return@clickable
                         saving = true
