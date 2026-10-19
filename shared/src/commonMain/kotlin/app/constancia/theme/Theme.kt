@@ -15,12 +15,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.Font
 import app.constancia.shared.generated.resources.Res
-import app.constancia.shared.generated.resources.font.manrope_bold
-import app.constancia.shared.generated.resources.font.manrope_extrabold
-import app.constancia.shared.generated.resources.font.manrope_regular
-import app.constancia.shared.generated.resources.font.manrope_semibold
-import app.constancia.shared.generated.resources.font.sora_bold
-import app.constancia.shared.generated.resources.font.sora_extrabold
+import app.constancia.shared.generated.resources.manrope_bold
+import app.constancia.shared.generated.resources.manrope_extrabold
+import app.constancia.shared.generated.resources.manrope_regular
+import app.constancia.shared.generated.resources.manrope_semibold
+import app.constancia.shared.generated.resources.sora_bold
+import app.constancia.shared.generated.resources.sora_extrabold
 
 // Tipografia do protótipo: Sora (títulos/destaques) + Manrope (todo o resto).
 @Composable
