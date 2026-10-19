@@ -49,6 +49,9 @@ kotlin {
             implementation(libs.multiplatform.settings.no.arg)
             implementation(libs.multiplatform.settings.coroutines)
         }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
         androidMain.dependencies {
             implementation(libs.sqldelight.android.driver)
             implementation(libs.androidx.activity.compose)
