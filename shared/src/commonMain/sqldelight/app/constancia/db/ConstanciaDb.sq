@@ -59,6 +59,16 @@ CREATE TABLE challenge(
   is_pro INTEGER NOT NULL DEFAULT 0
 );
 
+-- Pausas: intervalos em que o hábito ficou pausado (streak congelada, sem zerar).
+-- end_date null = pausa ainda aberta.
+CREATE TABLE pause_interval(
+  id TEXT NOT NULL PRIMARY KEY,
+  habit_id TEXT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
+  start_date TEXT NOT NULL, -- yyyy-MM-dd (inclusive)
+  end_date TEXT -- yyyy-MM-dd (inclusive) ou null
+);
+CREATE INDEX pause_interval_habit ON pause_interval(habit_id);
+
 -- Hábitos
 selectHabits:
 SELECT * FROM habit WHERE archived = 0 ORDER BY sort_order ASC, created_at ASC;
@@ -86,6 +96,20 @@ UPDATE habit SET archived = 1 WHERE id = ?;
 
 deleteHabit:
 DELETE FROM habit WHERE id = ?;
+
+-- Intervalos de pausa
+selectPauseIntervalsForHabit:
+SELECT * FROM pause_interval WHERE habit_id = ? ORDER BY start_date ASC;
+
+selectAllPauseIntervals:
+SELECT * FROM pause_interval ORDER BY habit_id ASC, start_date ASC;
+
+openPauseInterval:
+INSERT INTO pause_interval(id, habit_id, start_date, end_date)
+VALUES(?, ?, ?, NULL);
+
+closeOpenPauseIntervals:
+UPDATE pause_interval SET end_date = ? WHERE habit_id = ? AND end_date IS NULL;
 
 -- Check-ins
 selectCheckin:
