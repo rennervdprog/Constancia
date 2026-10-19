@@ -1,5 +1,6 @@
 package app.constancia.ui.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,17 +32,11 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Whatshot
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -60,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import app.constancia.AppDeps
 import app.constancia.model.FrequencyType
@@ -70,6 +67,7 @@ import app.constancia.model.TaskItem
 import app.constancia.model.todayYmd
 import app.constancia.model.toLocalDate
 import app.constancia.model.isoDayNumberCompat
+import app.constancia.theme.constanciaExtra
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -133,21 +131,23 @@ fun HomeScreen(deps: AppDeps, modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            // Tela: padding horizontal 20dp, topo 10dp (DESIGN_TOKENS.md).
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             item {
-                Text(
-                    text = dateLine,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = greeting,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                )
+                Column(modifier = Modifier.padding(bottom = 16.dp)) {
+                    Text(
+                        text = dateLine,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = greeting,
+                        style = MaterialTheme.typography.displaySmall,
+                    )
+                }
             }
 
             item {
@@ -156,21 +156,22 @@ fun HomeScreen(deps: AppDeps, modifier: Modifier = Modifier) {
 
             if (active.isEmpty()) {
                 item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(22.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                        ),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp, MaterialTheme.colorScheme.outline,
-                        ),
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                MaterialTheme.colorScheme.surface,
+                                RoundedCornerShape(22.dp),
+                            )
+                            .border(
+                                BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                                RoundedCornerShape(22.dp),
+                            ),
                     ) {
                         Column(Modifier.padding(20.dp)) {
                             Text(
                                 text = "Vamos começar?",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -218,13 +219,28 @@ fun HomeScreen(deps: AppDeps, modifier: Modifier = Modifier) {
             }
         }
 
-        FloatingActionButton(
-            onClick = { showNewHabit = true },
+        // FAB: 54dp círculo, fundo primary, ícone onPrimary, sombra (DESIGN_TOKENS.md).
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(16.dp),
+                .padding(20.dp)
+                .size(54.dp)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = CircleShape,
+                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                    ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                )
+                .background(MaterialTheme.colorScheme.primary, CircleShape)
+                .clickable { showNewHabit = true },
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Add, contentDescription = "Novo hábito")
+            Icon(
+                Icons.Filled.Add,
+                contentDescription = "Novo hábito",
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(26.dp),
+            )
         }
 
         if (showNewHabit) {
@@ -244,6 +260,7 @@ fun HomeScreen(deps: AppDeps, modifier: Modifier = Modifier) {
 @Composable
 private fun DayProgressCard(doneCount: Int, total: Int, bestStreak: Int) {
     val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
     val progress = if (total == 0) 0f else doneCount.toFloat() / total.toFloat()
     val pct = (progress * 100).toInt()
 
@@ -258,99 +275,104 @@ private fun DayProgressCard(doneCount: Int, total: Int, bestStreak: Int) {
         else -> "Toque no círculo de um hábito para marcar o dia."
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = scheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outline),
+    // Cartão INVERTIDO: fundo ink, conteúdo bg. Raio 24dp, padding 18dp,
+    // gap 16dp, margin-bottom 14dp (DESIGN_TOKENS.md).
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(extra.progressCardBg, RoundedCornerShape(24.dp))
+            .padding(18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            modifier = Modifier.size(84.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier.size(84.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Canvas(modifier = Modifier.size(84.dp)) {
-                    val stroke = 9.dp.toPx()
-                    drawArc(
-                        color = scheme.outline.copy(alpha = 0.35f),
-                        startAngle = 0f,
-                        sweepAngle = 360f,
-                        useCenter = false,
-                        style = Stroke(stroke, cap = StrokeCap.Round),
-                    )
-                    drawArc(
-                        color = scheme.secondary,
-                        startAngle = -90f,
-                        sweepAngle = 360f * progress,
-                        useCenter = false,
-                        style = Stroke(stroke, cap = StrokeCap.Round),
-                    )
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = pct.toString() + "%",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = doneCount.toString() + " de " + total,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = scheme.onSurfaceVariant,
-                    )
-                }
+            Canvas(modifier = Modifier.size(84.dp)) {
+                val stroke = 9.dp.toPx()
+                drawArc(
+                    color = extra.progressCardContent.copy(alpha = 0.16f),
+                    startAngle = 0f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    style = Stroke(stroke, cap = StrokeCap.Round),
+                )
+                drawArc(
+                    color = scheme.secondary,
+                    startAngle = -90f,
+                    sweepAngle = 360f * progress,
+                    useCenter = false,
+                    style = Stroke(stroke, cap = StrokeCap.Round),
+                )
             }
-            Spacer(Modifier.width(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = bigText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    text = pct.toString() + "%",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = extra.progressCardContent,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(3.dp))
                 Text(
-                    text = subText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurfaceVariant,
+                    text = doneCount.toString() + " de " + total,
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
+                    color = extra.progressCardContent.copy(alpha = 0.65f),
                 )
-                if (bestStreak > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(scheme.secondary.copy(alpha = 0.14f))
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Filled.Whatshot,
-                            contentDescription = null,
-                            tint = scheme.secondary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = bestStreak.toString() + " dias seguidos",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.secondary,
-                        )
-                    }
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = bigText,
+                style = MaterialTheme.typography.titleLarge,
+                color = extra.progressCardContent,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = subText,
+                style = MaterialTheme.typography.bodySmall,
+                color = extra.progressCardContent.copy(alpha = 0.72f),
+            )
+            if (bestStreak > 0) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(scheme.secondary.copy(alpha = 0.16f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.Whatshot,
+                        contentDescription = null,
+                        tint = scheme.secondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = bestStreak.toString() + " dias seguidos",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                        color = scheme.secondary,
+                    )
                 }
             }
         }
     }
+    Spacer(Modifier.height(14.dp))
 }
 
 @Composable
 private fun SessionHeader(session: Session, done: Int, total: Int) {
     val scheme = MaterialTheme.colorScheme
+    // Cabeçalho de sessão: margem 16/2/10dp (DESIGN_TOKENS.md).
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 4.dp),
+            .padding(start = 2.dp, top = 16.dp, end = 2.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -363,13 +385,11 @@ private fun SessionHeader(session: Session, done: Int, total: Int) {
         Text(
             text = sessionTitle(session),
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
         )
         Text(
             text = done.toString() + " de " + total + " feitos",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodySmall,
             color = scheme.onSurfaceVariant,
         )
     }
@@ -389,99 +409,141 @@ private fun HabitCard(
     val isQuantity = habit.goalType == GoalType.QUANTITY
     val currentQty = status.todayCheckin?.quantity ?: 0.0
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = scheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outline),
+    // habit-card: surface, borda 1dp line, raio 22dp, padding 14dp, gap 13dp,
+    // margin-bottom 11dp (DESIGN_TOKENS.md).
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 11.dp)
+            .background(scheme.surface, RoundedCornerShape(22.dp))
+            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(22.dp))
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // Ícone do hábito: caixa 48dp, raio 15dp.
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(habitColor.copy(alpha = 0.16f), RoundedCornerShape(15.dp))
+                .padding(12.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(habitColor.copy(alpha = 0.16f))
-                    .padding(12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(habitIcon(habit.icon), contentDescription = null, tint = habitColor)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = habit.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (status.currentStreak > 0) {
-                        Icon(
-                            Icons.Filled.Whatshot,
-                            contentDescription = null,
-                            tint = scheme.secondary,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Spacer(Modifier.width(2.dp))
-                        Text(
-                            text = status.currentStreak.toString() +
-                                if (status.currentStreak == 1) " dia" else " dias",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.secondary,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    if (habit.frequencyType == FrequencyType.WEEKLY_X) {
-                        Text(
-                            text = status.weekDone.toString() + "/" +
-                                habit.weeklyTarget + " na semana",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = scheme.onSurfaceVariant,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
+            Icon(habitIcon(habit.icon), contentDescription = null, tint = habitColor)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = habit.name,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(3.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (status.currentStreak > 0) {
+                    Icon(
+                        Icons.Filled.Whatshot,
+                        contentDescription = null,
+                        tint = scheme.secondary,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Text(
+                        text = status.currentStreak.toString() +
+                            if (status.currentStreak == 1) " dia" else " dias",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                        color = scheme.secondary,
+                    )
+                    Spacer(Modifier.width(8.dp))
                 }
-                if (isQuantity) {
-                    Spacer(Modifier.height(4.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
-                            onClick = {
-                                val next = (currentQty - 1.0).coerceAtLeast(0.0)
-                                scope.launch { deps.checkins.setQuantity(habit.id, today, next) }
-                            },
-                        ) { Text("−", style = MaterialTheme.typography.titleLarge) }
-                        Text(
-                            text = fmtQty(currentQty) + "/" + fmtQty(habit.targetQuantity) +
-                                " " + habit.quantityUnit,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp),
-                        )
-                        TextButton(
-                            onClick = {
-                                scope.launch {
-                                    deps.checkins.setQuantity(habit.id, today, currentQty + 1.0)
-                                }
-                            },
-                        ) { Text("+", style = MaterialTheme.typography.titleLarge) }
-                    }
+                if (habit.frequencyType == FrequencyType.WEEKLY_X) {
+                    Text(
+                        text = status.weekDone.toString() + "/" +
+                            habit.weeklyTarget + " na semana",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
                 }
             }
-            IconButton(onClick = onOpenTimer) {
-                Icon(
-                    Icons.Filled.Timer,
-                    contentDescription = "Timer de foco",
-                    tint = scheme.onSurfaceVariant,
+            if (isQuantity) {
+                Spacer(Modifier.height(8.dp))
+                QuantityStepper(
+                    current = currentQty,
+                    target = habit.targetQuantity,
+                    unit = habit.quantityUnit,
+                    onDecrease = {
+                        val next = (currentQty - 1.0).coerceAtLeast(0.0)
+                        scope.launch { deps.checkins.setQuantity(habit.id, today, next) }
+                    },
+                    onIncrease = {
+                        scope.launch {
+                            deps.checkins.setQuantity(habit.id, today, currentQty + 1.0)
+                        }
+                    },
                 )
             }
-            Spacer(Modifier.width(4.dp))
-            CheckCircleButton(
-                done = status.isDoneToday,
-                onToggle = { scope.launch { deps.checkins.toggle(habit.id, today) } },
+        }
+        IconButton(onClick = onOpenTimer) {
+            Icon(
+                Icons.Filled.Timer,
+                contentDescription = "Timer de foco",
+                tint = scheme.onSurfaceVariant,
+            )
+        }
+        CheckCircleButton(
+            done = status.isDoneToday,
+            onToggle = { scope.launch { deps.checkins.toggle(habit.id, today) } },
+        )
+    }
+}
+
+@Composable
+private fun QuantityStepper(
+    current: Double,
+    target: Double,
+    unit: String,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    // Stepper: fundo surface, borda 1.5dp line, raio pill, padding 3dp (DESIGN_TOKENS.md).
+    Row(
+        modifier = Modifier
+            .background(scheme.surface, RoundedCornerShape(999.dp))
+            .border(BorderStroke(1.5.dp, scheme.outline), RoundedCornerShape(999.dp))
+            .padding(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onDecrease),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "−",
+                style = MaterialTheme.typography.titleLarge,
+                color = scheme.onSurface,
+            )
+        }
+        Text(
+            text = fmtQty(current) + "/" + fmtQty(target) + " " + unit,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(CircleShape)
+                .background(scheme.primary)
+                .clickable(onClick = onIncrease),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "+",
+                style = MaterialTheme.typography.titleLarge,
+                color = scheme.onPrimary,
             )
         }
     }
@@ -534,77 +596,69 @@ private fun TasksSection(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp, bottom = 4.dp),
+            .padding(start = 2.dp, top = 16.dp, end = 2.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = "Tarefas de hoje",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
         )
         Text(
             text = doneCount.toString() + " de " + tasks.size + " feitas",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.bodySmall,
             color = scheme.onSurfaceVariant,
         )
     }
 
     tasks.forEach { task ->
-        Card(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = scheme.surface),
-            border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outline),
+                .padding(bottom = 8.dp)
+                .background(scheme.surface, RoundedCornerShape(20.dp))
+                .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(20.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(if (task.done) scheme.primary else Color.Transparent)
+                    .then(
+                        if (task.done) Modifier
+                        else Modifier.border(2.dp, scheme.outline, CircleShape),
+                    )
+                    .clickable {
+                        scope.launch { deps.tasks.setDone(task.id, !task.done) }
+                    },
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(if (task.done) scheme.primary else Color.Transparent)
-                        .then(
-                            if (task.done) Modifier
-                            else Modifier.border(2.dp, scheme.outline, CircleShape),
-                        )
-                        .clickable {
-                            scope.launch { deps.tasks.setDone(task.id, !task.done) }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (task.done) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = "Tarefa feita",
-                            tint = scheme.onPrimary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = if (task.done) scheme.onSurfaceVariant else scheme.onSurface,
-                    textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                    modifier = Modifier.weight(1f),
-                )
-                if (task.dueTime != null) {
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = task.dueTime,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = scheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold,
+                if (task.done) {
+                    Icon(
+                        Icons.Filled.Check,
+                        contentDescription = "Tarefa feita",
+                        tint = scheme.onPrimary,
+                        modifier = Modifier.size(16.dp),
                     )
                 }
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = task.title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (task.done) scheme.onSurfaceVariant else scheme.onSurface,
+                textDecoration = if (task.done) TextDecoration.LineThrough else null,
+                modifier = Modifier.weight(1f),
+            )
+            if (task.dueTime != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = task.dueTime,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = scheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -624,8 +678,19 @@ private fun TasksSection(
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(8.dp))
-        FilledIconButton(onClick = { addTask() }) {
-            Icon(Icons.Filled.Add, contentDescription = "Adicionar tarefa")
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(scheme.primary, CircleShape)
+                .clickable { addTask() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Add,
+                contentDescription = "Adicionar tarefa",
+                tint = scheme.onPrimary,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
@@ -639,11 +704,12 @@ private fun PausedSection(
     val scheme = MaterialTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = scheme.surface),
-        border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outline),
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .background(scheme.surface, RoundedCornerShape(22.dp))
+            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(22.dp)),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -657,12 +723,11 @@ private fun PausedSection(
                 Text(
                     text = "Em pausa",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
                     text = "sequência protegida",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.width(4.dp))
@@ -685,8 +750,10 @@ private fun PausedSection(
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(Color(habit.color).copy(alpha = 0.16f))
+                                .background(
+                                    Color(habit.color).copy(alpha = 0.16f),
+                                    RoundedCornerShape(12.dp),
+                                )
                                 .padding(8.dp),
                             contentAlignment = Alignment.Center,
                         ) {
@@ -701,16 +768,16 @@ private fun PausedSection(
                         Text(
                             text = habit.name,
                             style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
                             modifier = Modifier.weight(1f),
                         )
-                        TextButton(
-                            onClick = {
+                        Text(
+                            text = "Retomar",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = scheme.primary,
+                            modifier = Modifier.clickable {
                                 scope.launch { deps.habits.setPaused(habit.id, false) }
                             },
-                        ) {
-                            Text("Retomar")
-                        }
+                        )
                     }
                 }
             }
@@ -778,9 +845,10 @@ private fun FocusTimerDialog(
     }
 
     Dialog(onDismissRequest = onDismiss) {
-        Card(
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = scheme.surface),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(scheme.surface, RoundedCornerShape(24.dp)),
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
@@ -789,33 +857,52 @@ private fun FocusTimerDialog(
                 Text(
                     text = "Timer de foco",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = habit.name + " · ao terminar, o hábito é marcado sozinho.",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Segmentado (DESIGN_TOKENS.md): botão flex-1, padding 9/6dp, raio 10dp;
+                // selecionado fundo surface com sombra leve e texto ink.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(scheme.surfaceVariant, RoundedCornerShape(12.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     FOCUS_PRESETS.forEach { preset ->
                         val selected = preset == selectedMinutes
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(999.dp))
+                                .weight(1f)
+                                .then(
+                                    if (selected) {
+                                        Modifier.shadow(
+                                            elevation = 2.dp,
+                                            shape = RoundedCornerShape(10.dp),
+                                            spotColor = Color.Black.copy(alpha = 0.14f),
+                                            ambientColor = Color.Black.copy(alpha = 0.14f),
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                )
                                 .background(
-                                    if (selected) scheme.primary else scheme.surfaceVariant,
+                                    if (selected) scheme.surface else Color.Transparent,
+                                    RoundedCornerShape(10.dp),
                                 )
                                 .clickable { pickPreset(preset) }
-                                .padding(horizontal = 14.dp, vertical = 8.dp),
+                                .padding(horizontal = 6.dp, vertical = 9.dp),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
                                 text = preset.toString() + " min",
                                 style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = if (selected) scheme.onPrimary
+                                color = if (selected) scheme.onSurface
                                 else scheme.onSurfaceVariant,
                             )
                         }
@@ -825,7 +912,6 @@ private fun FocusTimerDialog(
                 Text(
                     text = minutes + ":" + seconds,
                     style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -834,28 +920,48 @@ private fun FocusTimerDialog(
                     color = scheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(20.dp))
-                Button(
-                    onClick = { running = !running },
-                    modifier = Modifier.fillMaxWidth(),
+                // CTA: largura total, raio 18dp, padding vertical 16dp,
+                // fundo primary, texto onPrimary Sora 16/700.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(scheme.primary, RoundedCornerShape(18.dp))
+                        .clickable { running = !running }
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        when {
-                            running -> "Pausar"
-                            remaining < selectedMinutes * 60 -> "Retomar foco"
-                            else -> "Iniciar foco"
-                        },
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = scheme.onPrimary,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = when {
+                                running -> "Pausar"
+                                remaining < selectedMinutes * 60 -> "Retomar foco"
+                                else -> "Iniciar foco"
+                            },
+                            style = MaterialTheme.typography.titleLarge,
+                            color = scheme.onPrimary,
+                        )
+                    }
                 }
-                TextButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.fillMaxWidth(),
+                Spacer(Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable(onClick = onDismiss)
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text("Cancelar")
+                    Text(
+                        text = "Cancelar",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = scheme.primary,
+                    )
                 }
             }
         }
