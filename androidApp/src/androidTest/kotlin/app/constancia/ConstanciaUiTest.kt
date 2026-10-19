@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -14,6 +15,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
@@ -76,12 +79,20 @@ class ConstanciaUiTest {
         composeRule.setContent { AppContent(deps) }
     }
 
+    /** Screenshot da tela atual; nunca falha o teste (captura pode não funcionar no emulador). */
     private fun shot(name: String) {
-        val dir = File(appContext.getExternalFilesDir("uitests"), "")
-        dir.mkdirs()
-        File(dir, "$name.png").outputStream().use { out ->
-            composeRule.onRoot().captureToImage().asAndroidBitmap()
-                .compress(Bitmap.CompressFormat.PNG, 100, out)
+        try {
+            // onRoot() exige raiz única; diálogos/snackbars criam raízes extras,
+            // então captura a primeira raiz (janela principal).
+            val dir = File(appContext.getExternalFilesDir("uitests"), "")
+            dir.mkdirs()
+            File(dir, "$name.png").outputStream().use { out ->
+                composeRule.onAllNodes(isRoot()).onFirst()
+                    .captureToImage().asAndroidBitmap()
+                    .compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+        } catch (t: Throwable) {
+            // screenshot é acessório: ignora
         }
     }
 
@@ -174,8 +185,21 @@ class ConstanciaUiTest {
     @Test
     fun paywall_abrePeloConstanciaPro() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.waitForIdle()
+        // O banner "Constância Pro" é o 7º item da LazyColumn: rola até ele ser
+        // composto (itens fora da tela não existem na árvore de semântica).
+        var tries = 0
+        while (!nodesWith("Constância Pro") && tries < 6) {
+            composeRule.onAllNodes(isRoot()).onFirst()
+                .performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+            tries++
+        }
+        composeRule.onNodeWithText("Constância Pro").assertIsDisplayed()
+        shot("06_mais_banner_pro")
         composeRule.onNodeWithText("Constância Pro").performClick()
-        composeRule.onNodeWithText("Começar 7 dias grátis").assertIsDisplayed()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("7 DIAS GRÁTIS").assertIsDisplayed()
         shot("07_paywall")
     }
 }

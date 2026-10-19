@@ -97,8 +97,8 @@ jobs:
 
       # Testes de UI instrumentados num emulador Android de verdade:
       # tocam nos fluxos (criar hábito, check-in, tarefa, diário, stepper,
-      # paywall) e tiram screenshots. O emulador continua vivo nos steps
-      # seguintes para o adb pull dos screenshots.
+      # paywall) e tiram screenshots. O adb pull roda DENTRO deste step
+      # porque o emulador é desligado quando ele termina.
       - name: Run UI tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -107,14 +107,13 @@ jobs:
           arch: x86_64
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace
-
-      - name: Pull screenshots from emulator
-        if: always()
-        run: |
-          mkdir -p uitest-screenshots
-          adb pull /sdcard/Android/data/app.constancia/files/uitests ./uitest-screenshots || true
-          ls -la ./uitest-screenshots || true
+          script: |
+            ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace
+            TEST_EXIT=$?
+            mkdir -p uitest-screenshots
+            adb pull /sdcard/Android/data/app.constancia/files/uitests ./uitest-screenshots || true
+            ls -la ./uitest-screenshots || true
+            exit $TEST_EXIT
 
       - name: Upload UI test screenshots
         if: always()
