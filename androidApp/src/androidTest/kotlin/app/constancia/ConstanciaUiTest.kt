@@ -1,24 +1,19 @@
 package app.constancia
 
 import android.content.Context
-import android.graphics.Bitmap
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import app.constancia.data.LocalSyncRepository
 import app.constancia.data.local.ChallengeRepositoryImpl
@@ -79,21 +74,23 @@ class ConstanciaUiTest {
         composeRule.setContent { AppContent(deps) }
     }
 
-    /** Screenshot da tela atual; nunca falha o teste (captura pode não funcionar no emulador). */
+    private val device: UiDevice
+        get() = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+
+    /** Screenshot de tela cheia via UiDevice (confiável no emulador); nunca falha o teste. */
     private fun shot(name: String) {
-        try {
-            // onRoot() exige raiz única; diálogos/snackbars criam raízes extras,
-            // então captura a primeira raiz (janela principal).
+        runCatching {
             val dir = File(appContext.getExternalFilesDir("uitests"), "")
             dir.mkdirs()
-            File(dir, "$name.png").outputStream().use { out ->
-                composeRule.onAllNodes(isRoot())[0]
-                    .captureToImage().asAndroidBitmap()
-                    .compress(Bitmap.CompressFormat.PNG, 100, out)
-            }
-        } catch (t: Throwable) {
-            // screenshot é acessório: ignora
+            device.takeScreenshot(File(dir, "$name.png"))
         }
+    }
+
+    /** Swipe pra cima de tela cheia (rola listas); mais confiável que gesto no nó. */
+    private fun swipeUpFull() {
+        val w = device.displayWidth
+        val h = device.displayHeight
+        device.swipe(w / 2, h * 3 / 4, w / 2, h / 4, 30)
     }
 
     private fun nodesWith(text: String) =
@@ -128,6 +125,10 @@ class ConstanciaUiTest {
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
+        // diagnóstico (vai pro logcat/CI): qual cabeçalho de sessão foi renderizado?
+        val sessaoVisivel = listOf("Manhã", "Tarde", "Noite").firstOrNull { nodesWith(it) }
+        println("UI_TEST sessao header apos salvar: $sessaoVisivel")
+        shot("02_habito_criado_diag")
         composeRule.onNodeWithText("Tarde").performScrollTo()
         composeRule.onNodeWithText("Tarde").assertIsDisplayed()
         shot("02_habito_criado")
@@ -190,9 +191,8 @@ class ConstanciaUiTest {
         // O banner "Constância Pro" é o 7º item da LazyColumn: rola até ele ser
         // composto (itens fora da tela não existem na árvore de semântica).
         var tries = 0
-        while (!nodesWith("Constância Pro") && tries < 6) {
-            composeRule.onAllNodes(isRoot())[0]
-                .performTouchInput { swipeUp() }
+        while (!nodesWith("Constância Pro") && tries < 8) {
+            swipeUpFull()
             composeRule.waitForIdle()
             tries++
         }
