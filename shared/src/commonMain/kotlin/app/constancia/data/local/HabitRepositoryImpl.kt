@@ -9,6 +9,7 @@ import app.constancia.domain.currentStreak
 import app.constancia.domain.doneDatesFor
 import app.constancia.domain.forgivenDates
 import app.constancia.domain.weekDoneCount
+import app.constancia.model.Checkin
 import app.constancia.model.Habit
 import app.constancia.model.HabitStatus
 import app.constancia.model.PauseInterval
@@ -16,10 +17,16 @@ import app.constancia.model.newId
 import app.constancia.model.todayYmd
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
+
+// Limites para carregar "todos" os check-ins no cálculo do status.
+private const val MIN_YMD = "0000-01-01"
+private const val MAX_YMD = "9999-12-31"
 
 class HabitRepositoryImpl(
     private val db: ConstanciaDb,
@@ -113,25 +120,58 @@ class HabitRepositoryImpl(
         queries.deleteHabit(id)
     }
 
-    override fun todayStatusFlow(timeZone: TimeZone): Flow<List<HabitStatus>> =
-        habitsFlow().map { habits ->
-            withContext(Dispatchers.Default) {
-                val today = todayYmd(timeZone)
-                habits.map { habit ->
-                    val todayCheckin = checkins.get(habit.id, today)
-                    val doneDates = doneDatesFor(
-                        habit,
-                        checkins.checkinsForHabit(habit.id).map { it.date to it.quantity },
-                    )
-                    val forgiven = forgivenDates(pauseIntervals(habit.id), today)
-                    HabitStatus(
-                        habit = habit,
-                        todayCheckin = todayCheckin,
-                        isDoneToday = todayCheckin != null && doneDates.contains(today),
-                        currentStreak = currentStreak(habit, doneDates, today, timeZone, forgiven),
-                        weekDone = weekDoneCount(doneDates, today),
-                    )
-                }
-            }
-        }
+    override fun todayStatusFlow(timeZone: TimeZone): Flow<List<HabitStatus>> {
+        // Observa TUDO que afeta o status: hábitos, check-ins e pausas.
+        // (Bug corrigido 2026-10-19: antes observava só a tabela habit, então
+        // tocar no check-in gravava no banco mas a tela nunca atualizava.)
+        val checkinsFlow = checkins.checkinsInRangeFlow(MIN_YMD, MAX_YMD)
+        val pausesFlow: Flow<List<PauseInterval>> = queries.selectAllPauseIntervals()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+        return combineTodayStatus(habitsFlow(), checkinsFlow, pausesFlow, timeZone)
+            .flowOn(Dispatchers.Default)
+    }
+}
+
+/**
+ * Junta os 3 fluxos e recalcula o status de hoje a cada mudança em qualquer
+ * um deles. Extraído para ser testável sem banco.
+ */
+internal fun combineTodayStatus(
+    habitsFlow: Flow<List<Habit>>,
+    checkinsFlow: Flow<List<Checkin>>,
+    pausesFlow: Flow<List<PauseInterval>>,
+    timeZone: TimeZone,
+): Flow<List<HabitStatus>> =
+    combine(habitsFlow, checkinsFlow, pausesFlow) { habits, checkins, pauses ->
+        computeTodayStatuses(habits, checkins, pauses, todayYmd(timeZone), timeZone)
+    }
+
+/**
+ * Cálculo puro do status de hoje a partir de snapshots — síncrono e 100%
+ * testável. Também elimina as N+1 queries da implementação anterior.
+ */
+internal fun computeTodayStatuses(
+    habits: List<Habit>,
+    checkins: List<Checkin>,
+    pauses: List<PauseInterval>,
+    today: String,
+    timeZone: TimeZone,
+): List<HabitStatus> {
+    val checkinsByHabit = checkins.groupBy { it.habitId }
+    val pausesByHabit = pauses.groupBy { it.habitId }
+    return habits.map { habit ->
+        val hcs = checkinsByHabit[habit.id].orEmpty()
+        val todayCheckin = hcs.firstOrNull { it.date == today }
+        val doneDates = doneDatesFor(habit, hcs.map { it.date to it.quantity })
+        val forgiven = forgivenDates(pausesByHabit[habit.id].orEmpty(), today)
+        HabitStatus(
+            habit = habit,
+            todayCheckin = todayCheckin,
+            isDoneToday = todayCheckin != null && doneDates.contains(today),
+            currentStreak = currentStreak(habit, doneDates, today, timeZone, forgiven),
+            weekDone = weekDoneCount(doneDates, today),
+        )
+    }
 }

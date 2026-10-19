@@ -52,6 +52,11 @@ kotlin {
         commonTest.dependencies {
             implementation(kotlin("test"))
         }
+        // Testes contra o SQLDelight de verdade (driver JDBC em memória):
+        // provam que escrever -> o Flow reemite (bugs #1, #2 e #4).
+        androidUnitTest.dependencies {
+            implementation(libs.sqldelight.sqlite.driver)
+        }
         androidMain.dependencies {
             implementation(libs.sqldelight.android.driver)
             implementation(libs.androidx.activity.compose)

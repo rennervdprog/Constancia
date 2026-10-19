@@ -88,6 +88,7 @@ import app.constancia.model.isoToAppDay
 import app.constancia.model.toLocalDate
 import app.constancia.model.toYmd
 import app.constancia.theme.constanciaExtra
+import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
@@ -654,11 +655,13 @@ private fun HabitRow(hr: HabitReport) {
                     .background(habitColor.copy(alpha = 0.16f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    hr.habit.name.firstOrNull()?.uppercase() ?: "•",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = habitColor,
+                // Ícone de verdade do hábito (igual ao card da home),
+                // não a inicial do nome.
+                Icon(
+                    habitIcon(hr.habit.icon),
+                    contentDescription = null,
+                    tint = habitColor,
+                    modifier = Modifier.size(20.dp),
                 )
             }
             Spacer(Modifier.width(11.dp))

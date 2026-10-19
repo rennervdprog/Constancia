@@ -48,6 +48,7 @@ import app.constancia.model.Session
 import app.constancia.model.newId
 import app.constancia.model.toLocalDate
 import app.constancia.model.todayYmd
+import app.constancia.theme.HabitPalette
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
 
@@ -85,7 +86,9 @@ fun ChallengesScreen(deps: AppDeps, modifier: Modifier = Modifier) {
                                 newId(),
                                 challenge.habitName,
                                 challenge.habitIcon,
-                                0xFF0B7A55,
+                                // Long de verdade: 0xFF0B7A55 como Int vira
+                                // negativo e o Color() sai cinza/quebrado.
+                                HabitPalette[0].value.toLong(),
                                 GoalType.BINARY,
                                 1.0,
                                 "",

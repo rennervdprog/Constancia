@@ -91,7 +91,9 @@ private fun ConstanciaBottomBar(
         Row(
             modifier = Modifier.fillMaxWidth()
                 .background(MaterialTheme.constanciaExtra.tabBg)
-                .padding(start = 20.dp, top = 8.dp, end = 20.dp, bottom = 10.dp),
+                // tabbar do protótipo: padding 8px 10px 20px (topo/lados/fundo).
+                .padding(horizontal = 10.dp)
+                .padding(top = 8.dp, bottom = 20.dp),
         ) {
             AppTab.entries.forEach { tab ->
                 val isSelected = tab == selected
@@ -102,7 +104,8 @@ private fun ConstanciaBottomBar(
                     verticalArrangement = Arrangement.spacedBy(3.dp),
                     modifier = Modifier.weight(1f)
                         .clickable(onClick = { onSelect(tab) })
-                        .padding(vertical = 4.dp),
+                        // tab do protótipo: padding 4px 10px, gap 3px.
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
                     Icon(
                         tab.icon,

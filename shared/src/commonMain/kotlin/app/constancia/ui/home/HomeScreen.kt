@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -397,90 +398,100 @@ private fun HabitCard(
     val currentQty = status.todayCheckin?.quantity ?: 0.0
 
     // habit-card: surface, borda 1dp line, raio 22dp, padding 14dp, gap 13dp,
-    // margin-bottom 11dp (DESIGN_TOKENS.md).
-    Row(
+    // margin-bottom 11dp (DESIGN_TOKENS.md). O stepper fica numa linha própria
+    // abaixo (largura total) para nunca estourar em telas estreitas.
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 11.dp)
             .background(scheme.surface, RoundedCornerShape(22.dp))
             .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(22.dp))
             .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(13.dp),
     ) {
-        // Ícone do hábito: caixa 48dp, raio 15dp.
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(habitColor.copy(alpha = 0.16f), RoundedCornerShape(15.dp))
-                .padding(12.dp),
-            contentAlignment = Alignment.Center,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(13.dp),
         ) {
-            Icon(habitIcon(habit.icon), contentDescription = null, tint = habitColor)
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = habit.name,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(3.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (status.currentStreak > 0) {
-                    Icon(
-                        Icons.Filled.Whatshot,
-                        contentDescription = null,
-                        tint = scheme.secondary,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Spacer(Modifier.width(3.dp))
-                    Text(
-                        text = status.currentStreak.toString() +
-                            if (status.currentStreak == 1) " dia" else " dias",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                        ),
-                        color = scheme.secondary,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                if (habit.frequencyType == FrequencyType.WEEKLY_X) {
-                    Text(
-                        text = status.weekDone.toString() + "/" +
-                            habit.weeklyTarget + " na semana",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = scheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (isQuantity) {
-                Spacer(Modifier.height(8.dp))
-                QuantityStepper(
-                    current = currentQty,
-                    target = habit.targetQuantity,
-                    unit = habit.quantityUnit,
-                    onDecrease = {
-                        val next = (currentQty - 1.0).coerceAtLeast(0.0)
-                        scope.launch { deps.checkins.setQuantity(habit.id, today, next) }
-                    },
-                    onIncrease = {
-                        scope.launch {
-                            deps.checkins.setQuantity(habit.id, today, currentQty + 1.0)
-                        }
-                    },
+            // Ícone do hábito: caixa 48dp, raio 15dp, ícone 24dp explícito.
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(habitColor.copy(alpha = 0.16f), RoundedCornerShape(15.dp))
+                    .padding(12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    habitIcon(habit.icon),
+                    contentDescription = null,
+                    tint = habitColor,
+                    modifier = Modifier.size(24.dp),
                 )
             }
-        }
-        IconButton(onClick = onOpenTimer) {
-            Icon(
-                Icons.Filled.Timer,
-                contentDescription = "Timer de foco",
-                tint = scheme.onSurfaceVariant,
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = habit.name,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (status.currentStreak > 0) {
+                        Icon(
+                            Icons.Filled.Whatshot,
+                            contentDescription = null,
+                            tint = scheme.secondary,
+                            modifier = Modifier.size(14.dp),
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = status.currentStreak.toString() +
+                                if (status.currentStreak == 1) " dia" else " dias",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = scheme.secondary,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    if (habit.frequencyType == FrequencyType.WEEKLY_X) {
+                        Text(
+                            text = status.weekDone.toString() + "/" +
+                                habit.weeklyTarget + " na semana",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            IconButton(onClick = onOpenTimer) {
+                Icon(
+                    Icons.Filled.Timer,
+                    contentDescription = "Timer de foco",
+                    tint = scheme.onSurfaceVariant,
+                )
+            }
+            CheckCircleButton(
+                done = status.isDoneToday,
+                onToggle = { scope.launch { deps.checkins.toggle(habit.id, today) } },
             )
         }
-        CheckCircleButton(
-            done = status.isDoneToday,
-            onToggle = { scope.launch { deps.checkins.toggle(habit.id, today) } },
-        )
+        if (isQuantity) {
+            Spacer(Modifier.height(10.dp))
+            QuantityStepper(
+                current = currentQty,
+                target = habit.targetQuantity,
+                unit = habit.quantityUnit,
+                onDecrease = {
+                    val next = (currentQty - 1.0).coerceAtLeast(0.0)
+                    scope.launch { deps.checkins.setQuantity(habit.id, today, next) }
+                },
+                onIncrease = {
+                    scope.launch {
+                        deps.checkins.setQuantity(habit.id, today, currentQty + 1.0)
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -493,7 +504,9 @@ private fun QuantityStepper(
     onIncrease: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    // Stepper: fundo surface, borda 1.5dp line, raio pill, padding 3dp (DESIGN_TOKENS.md).
+    // Stepper do protótipo: pílula surface com borda 1.5dp line, raio 999dp,
+    // padding 3dp; botões 30dp surface-2 com glifo 16sp/800; valor min 46dp
+    // centralizado 13sp/800. Tamanhos fixos e simétricos — sem overflow.
     Row(
         modifier = Modifier
             .background(scheme.surface, RoundedCornerShape(999.dp))
@@ -501,38 +514,41 @@ private fun QuantityStepper(
             .padding(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .clickable(onClick = onDecrease),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "−",
-                style = MaterialTheme.typography.titleLarge,
-                color = scheme.onSurface,
-            )
-        }
+        StepperButton(text = "−", onClick = onDecrease)
         Text(
             text = fmtQty(current) + "/" + fmtQty(target) + " " + unit,
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(horizontal = 8.dp),
-        )
-        Box(
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 13.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
             modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(scheme.primary)
-                .clickable(onClick = onIncrease),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = "+",
-                style = MaterialTheme.typography.titleLarge,
-                color = scheme.onPrimary,
-            )
-        }
+                .widthIn(min = 46.dp)
+                .padding(horizontal = 8.dp),
+            maxLines = 1,
+        )
+        StepperButton(text = "+", onClick = onIncrease)
+    }
+}
+
+@Composable
+private fun StepperButton(text: String, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .clip(CircleShape)
+            .background(scheme.surfaceVariant)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = scheme.onSurface,
+        )
     }
 }
 
