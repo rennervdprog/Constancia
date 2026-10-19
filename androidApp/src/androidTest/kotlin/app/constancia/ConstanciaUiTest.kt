@@ -133,15 +133,14 @@ class ConstanciaUiTest {
         composeRule.mainClock.advanceTimeBy(1000)
         composeRule.waitForIdle()
         // Seleciona a sessão ANTES de digitar (teclado aberto cobre os chips).
-        // TESTE DIAGNÓSTICO: clica no chip 2 (Noite) p/ ver se o índice chega.
-        composeRule.onNodeWithTag("session_opt_2").performClick()
+        composeRule.onNodeWithTag("session_opt_1").performClick()
         composeRule.waitForIdle()
         // Verifica se o clique mudou o estado: índice 1 (Tarde) selecionado?
         val selAposClique = listOf(0, 1, 2).firstOrNull { i ->
             composeRule.onAllNodesWithTag("session_opt_sel_$i")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        check(selAposClique == 2) { "UI_TEST_DIAG sel apos clique=$selAposClique (clicou chip 2)" }
+        check(selAposClique == 1) { "UI_TEST_DIAG sel apos clique=$selAposClique" }
         composeRule.onNodeWithTag("habit_name_field").performTextInput("Beber água")
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()

@@ -439,40 +439,52 @@ private fun SegmentedRow(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         options.forEachIndexed { index, label ->
-            val selected = index == selectedIndex
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .then(
-                        if (tagPrefix != null) Modifier.testTag(tagPrefix + "_" + index)
-                        else Modifier
-                    )
-                    .then(
-                        if (selected) {
-                            Modifier.shadow(
-                                elevation = 2.dp,
-                                shape = RoundedCornerShape(10.dp),
-                                spotColor = Color.Black.copy(alpha = 0.14f),
-                                ambientColor = Color.Black.copy(alpha = 0.14f),
-                            )
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .background(
-                        if (selected) scheme.surface else Color.Transparent,
-                        RoundedCornerShape(10.dp),
-                    )
-                    .padding(horizontal = 6.dp, vertical = 9.dp)
-                    .clickable { onSelect(index) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (selected) scheme.onSurface else scheme.onSurfaceVariant,
-                )
-            }
+            SegmentedChip(
+                label = label,
+                selected = index == selectedIndex,
+                onClick = { onSelect(index) },
+                tag = if (tagPrefix != null) tagPrefix + "_" + index else null,
+            )
         }
+    }
+}
+
+@Composable
+private fun SegmentedChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    tag: String?,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .then(if (tag != null) Modifier.testTag(tag) else Modifier)
+            .then(
+                if (selected) {
+                    Modifier.shadow(
+                        elevation = 2.dp,
+                        shape = RoundedCornerShape(10.dp),
+                        spotColor = Color.Black.copy(alpha = 0.14f),
+                        ambientColor = Color.Black.copy(alpha = 0.14f),
+                    )
+                } else {
+                    Modifier
+                },
+            )
+            .background(
+                if (selected) scheme.surface else Color.Transparent,
+                RoundedCornerShape(10.dp),
+            )
+            .padding(horizontal = 6.dp, vertical = 9.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) scheme.onSurface else scheme.onSurfaceVariant,
+        )
     }
 }
