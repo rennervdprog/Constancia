@@ -41,6 +41,14 @@ data class Checkin(
     val quantity: Double,
 )
 
+/** Intervalo em que um hábito ficou pausado: dias perdoados no cálculo do streak. */
+data class PauseInterval(
+    val id: String,
+    val habitId: String,
+    val startDate: String, // yyyy-MM-dd (inclusive)
+    val endDate: String?, // yyyy-MM-dd (inclusive) ou null = pausa aberta
+)
+
 data class HabitStatus(
     val habit: Habit,
     val todayCheckin: Checkin?,
