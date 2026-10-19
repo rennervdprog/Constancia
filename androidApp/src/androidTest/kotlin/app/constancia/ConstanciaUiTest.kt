@@ -128,6 +128,7 @@ class ConstanciaUiTest {
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
+        composeRule.onNodeWithText("Tarde").performScrollTo()
         composeRule.onNodeWithText("Tarde").assertIsDisplayed()
         shot("02_habito_criado")
     }
@@ -195,6 +196,7 @@ class ConstanciaUiTest {
             composeRule.waitForIdle()
             tries++
         }
+        composeRule.onNodeWithText("Constância Pro").performScrollTo()
         composeRule.onNodeWithText("Constância Pro").assertIsDisplayed()
         shot("06_mais_banner_pro")
         composeRule.onNodeWithText("Constância Pro").performClick()
