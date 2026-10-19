@@ -1,10 +1,12 @@
 package app.constancia.ui.diary
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,8 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -72,8 +73,8 @@ fun DiaryScreen(deps: AppDeps, modifier: Modifier = Modifier) {
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(11.dp),
     ) {
         item {
             Column {
@@ -81,87 +82,81 @@ fun DiaryScreen(deps: AppDeps, modifier: Modifier = Modifier) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     "Um minuto por dia: como você está e como foi o dia",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(5.dp))
             }
         }
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "Como foi seu dia?",
-                            style = MaterialTheme.typography.titleMedium,
+            TileCard {
+                Text(
+                    "Como foi seu dia?",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    moodLabels.forEachIndexed { index, label ->
+                        val value = index + 1
+                        val selected = mood == value
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.weight(1f),
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                    ) {
-                        moodLabels.forEachIndexed { index, label ->
-                            val value = index + 1
-                            val selected = mood == value
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Box(
-                                    modifier = Modifier.size(48.dp)
-                                        .clip(CircleShape)
-                                        .background(
-                                            if (selected) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.surfaceVariant
-                                        )
-                                        .clickable { mood = value },
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    Text(
-                                        value.toString(),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = if (selected) MaterialTheme.colorScheme.onPrimary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        ) {
+                            Box(
+                                modifier = Modifier.size(48.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (selected) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.surfaceVariant
                                     )
-                                }
-                                Spacer(Modifier.height(4.dp))
+                                    .clickable { mood = value },
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 Text(
-                                    label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    value.toString(),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = note,
-                        onValueChange = { note = it },
-                        placeholder = { Text("Como foi seu dia? Uma ou duas linhas bastam.") },
-                        minLines = 3,
-                        modifier = Modifier.fillMaxWidth(),
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    placeholder = { Text("Como foi seu dia? Uma ou duas linhas bastam.") },
+                    minLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(12.dp))
+                CtaButton(
+                    text = if (todayEntry != null) "Atualizar diário" else "Salvar no diário",
+                    onClick = {
+                        scope.launch {
+                            deps.diary.save(today, mood, note.trim())
+                            savedMsg = "Diário salvo"
+                        }
+                    },
+                )
+                if (savedMsg != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        savedMsg ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
                     )
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                deps.diary.save(today, mood, note.trim())
-                                savedMsg = "Diário salvo"
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(if (todayEntry != null) "Atualizar diário" else "Salvar no diário")
-                    }
-                    if (savedMsg != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            savedMsg ?: "",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
                 }
             }
         }
@@ -180,39 +175,86 @@ fun DiaryScreen(deps: AppDeps, modifier: Modifier = Modifier) {
             }
         }
         items(history, key = { it.date }) { entry ->
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(modifier = Modifier.padding(16.dp)) {
-                    Box(
-                        modifier = Modifier.size(40.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.secondaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+                    .padding(horizontal = 16.dp, vertical = 15.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier.size(40.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        (entry.mood ?: 3).toString(),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                Column(modifier = Modifier.padding(start = 12.dp).weight(1f)) {
+                    Text(
+                        formatDdMm(entry.date) + " · " +
+                            (moodLabels.getOrNull((entry.mood ?: 3) - 1) ?: ""),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    if (entry.note.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
                         Text(
-                            (entry.mood ?: 3).toString(),
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            entry.note,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                    Column(modifier = Modifier.padding(start = 12.dp)) {
-                        Text(
-                            formatDdMm(entry.date) + " · " +
-                                (moodLabels.getOrNull((entry.mood ?: 3) - 1) ?: ""),
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        if (entry.note.isNotBlank()) {
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                entry.note,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** Card `.tile` do protótipo: surface, borda 1dp line, raio 20dp, padding 15/16dp. */
+@Composable
+private fun TileCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+        content = content,
+    )
+}
+
+/** Botão primário (cta): largura total, raio 18dp, padding vertical 16dp,
+ *  fundo primary, texto Sora 16/700. */
+@Composable
+private fun CtaButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(onClick = onClick)
+            .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
     }
 }
