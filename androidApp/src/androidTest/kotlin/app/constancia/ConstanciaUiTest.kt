@@ -126,8 +126,17 @@ class ConstanciaUiTest {
     @Test
     fun criarHabitoComSessao_apareceNaHoje() {
         composeRule.onNodeWithTag("fab_add_habit").performClick()
+        // Verifica estado inicial: Manhã selecionada (índice 0).
+        composeRule.onNodeWithTag("session_opt_sel_0").assertExists()
         // Seleciona a sessão ANTES de digitar (teclado aberto cobre os chips).
         composeRule.onNodeWithTag("session_opt_1").performClick()
+        composeRule.waitForIdle()
+        // Verifica se o clique mudou o estado: índice 1 (Tarde) selecionado?
+        val selAposClique = listOf(0, 1, 2).firstOrNull { i ->
+            composeRule.onAllNodesWithTag("session_opt_sel_$i")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        check(selAposClique == 1) { "UI_TEST_DIAG sel apos clique=$selAposClique" }
         composeRule.onNodeWithTag("habit_name_field").performTextInput("Beber água")
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
