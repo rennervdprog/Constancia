@@ -126,13 +126,9 @@ class ConstanciaUiTest {
     @Test
     fun criarHabitoComSessao_apareceNaHoje() {
         composeRule.onNodeWithTag("fab_add_habit").performClick()
+        // Seleciona a sessão ANTES de digitar (teclado aberto cobre os chips).
+        composeRule.onNodeWithTag("session_opt_1").performClick()
         composeRule.onNodeWithTag("habit_name_field").performTextInput("Beber água")
-        // Tap real por coordenadas (UiDevice) no chip "Tarde": distingue bug do app
-        // de limitação do performClick sintético.
-        val chipNode = composeRule.onNodeWithTag("session_opt_1").fetchSemanticsNode()
-        val chipBounds = chipNode.boundsInRoot
-        device.click(chipBounds.center.x.toInt(), chipBounds.center.y.toInt())
-        composeRule.waitForIdle()
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
