@@ -1,40 +1,46 @@
 package app.constancia.domain
 
 import app.constancia.model.FrequencyType
+import app.constancia.model.GoalType
 import app.constancia.model.Habit
+import app.constancia.model.PauseInterval
 import app.constancia.model.toLocalDate
 import app.constancia.model.isoDayNumberCompat
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
-import kotlinx.datetime.todayIn
 
 /**
  * Cálculo de sequências (streaks). Regras:
  * - DAILY / DAYS_OF_WEEK: dias consecutivos com check-in, contando de hoje
  *   para trás (se hoje ainda não foi feito, começa de ontem).
- * - WEEKLY_X: semanas consecutivas batendo a meta semanal.
+ * - WEEKLY_X: semanas consecutivas batendo a meta semanal. A semana atual,
+ *   se em andamento (algum dia feito, meta ainda não batida), não quebra
+ *   nem conta — as semanas anteriores seguem valendo.
  * - QUANTITY: o dia só conta se quantity >= targetQuantity.
+ * - PAUSA: dias dentro de um intervalo de pausa são "perdoados" — não contam
+ *   como feitos, mas também não quebram a sequência (streak congelado).
  */
 fun currentStreak(
     habit: Habit,
     doneDates: Set<String>, // yyyy-MM-dd em que o dia contou como feito
     todayYmd: String,
     timeZone: TimeZone = TimeZone.currentSystemDefault(),
+    forgivenDates: Set<String> = emptySet(), // yyyy-MM-dd perdoados (pausas)
 ): Int {
-    if (doneDates.isEmpty()) return 0
+    if (doneDates.isEmpty() && forgivenDates.isEmpty()) return 0
     return when (habit.frequencyType) {
-        FrequencyType.WEEKLY_X -> weeklyStreak(habit, doneDates, todayYmd, timeZone)
+        FrequencyType.WEEKLY_X -> weeklyStreak(habit, doneDates, forgivenDates, todayYmd)
         FrequencyType.DAILY, FrequencyType.DAYS_OF_WEEK ->
-            dailyStreak(doneDates, todayYmd, timeZone)
+            dailyStreak(doneDates, forgivenDates, todayYmd)
     }
 }
 
 private fun dailyStreak(
     doneDates: Set<String>,
+    forgivenDates: Set<String>,
     todayYmd: String,
-    timeZone: TimeZone,
 ): Int {
     var cursor = todayYmd.toLocalDate()
     // Se hoje ainda não foi feito, a sequência pode continuar de ontem.
@@ -42,8 +48,15 @@ private fun dailyStreak(
         cursor = cursor.minus(DatePeriod(days = 1))
     }
     var streak = 0
-    while (doneDates.contains(cursor.toString())) {
-        streak++
+    var guard = 0
+    while (guard++ < 3700) {
+        val key = cursor.toString()
+        if (doneDates.contains(key)) {
+            streak++
+        } else if (!forgivenDates.contains(key)) {
+            break
+        }
+        // Dia perdoado (pausa): pula sem contar e sem quebrar.
         cursor = cursor.minus(DatePeriod(days = 1))
     }
     return streak
@@ -52,31 +65,35 @@ private fun dailyStreak(
 private fun weeklyStreak(
     habit: Habit,
     doneDates: Set<String>,
+    forgivenDates: Set<String>,
     todayYmd: String,
-    timeZone: TimeZone,
 ): Int {
     val today = todayYmd.toLocalDate()
     // Segunda-feira da semana atual.
     val isoDow = today.isoDayNumberCompat() // 1=seg .. 7=dom
-    var weekStart = today.minus(DatePeriod(days = isoDow - 1))
+    val thisWeekStart = today.minus(DatePeriod(days = isoDow - 1))
+    var weekStart = thisWeekStart
     var streak = 0
-    while (true) {
+    var guard = 0
+    while (guard++ < 520) { // trava de segurança (~10 anos)
         val weekEnd = weekStart.plus(DatePeriod(days = 6))
-        val doneThisWeek = doneDates.count { d ->
-            val date = d.toLocalDate()
-            date >= weekStart && date <= weekEnd
+        fun inWeek(ymd: String): Boolean {
+            val date = ymd.toLocalDate()
+            return date >= weekStart && date <= weekEnd
         }
-        val isCurrentWeek = weekStart == today.minus(DatePeriod(days = isoDow - 1))
+        // Dias perdoados (pausa) contam como cumpridos para a meta semanal.
+        val doneThisWeek = doneDates.count(::inWeek) + forgivenDates.count(::inWeek)
+        val isCurrentWeek = weekStart == thisWeekStart
         if (doneThisWeek >= habit.weeklyTarget) {
             streak++
+            weekStart = weekStart.minus(DatePeriod(days = 7))
         } else if (isCurrentWeek && doneThisWeek > 0) {
-            // Semana atual ainda em andamento: não quebra, mas não conta.
-            break
+            // Semana atual ainda em andamento: não quebra nem conta —
+            // segue avaliando as semanas anteriores.
+            weekStart = weekStart.minus(DatePeriod(days = 7))
         } else {
             break
         }
-        weekStart = weekStart.minus(DatePeriod(days = 7))
-        if (streak > 520) break // trava de segurança (~10 anos)
     }
     return streak
 }
@@ -85,10 +102,29 @@ private fun weeklyStreak(
 fun doneDatesFor(habit: Habit, checkins: List<Pair<String, Double>>): Set<String> =
     checkins.filter { (_, qty) ->
         when (habit.goalType) {
-            app.constancia.model.GoalType.BINARY -> qty >= 1.0
-            app.constancia.model.GoalType.QUANTITY -> qty >= habit.targetQuantity
+            GoalType.BINARY -> qty >= 1.0
+            GoalType.QUANTITY -> qty >= habit.targetQuantity
         }
     }.map { (date, _) -> date }.toSet()
+
+/**
+ * Expande intervalos de pausa em um conjunto de datas "perdoadas" (yyyy-MM-dd).
+ * Intervalo aberto (endDate null) vai até hoje.
+ */
+fun forgivenDates(intervals: List<PauseInterval>, todayYmd: String): Set<String> {
+    val today = todayYmd.toLocalDate()
+    val out = mutableSetOf<String>()
+    for (iv in intervals) {
+        var d = iv.startDate.toLocalDate()
+        val end = iv.endDate?.toLocalDate() ?: today
+        var guard = 0
+        while (d <= end && guard++ < 3700) {
+            out.add(d.toString())
+            d = d.plus(DatePeriod(days = 1))
+        }
+    }
+    return out
+}
 
 /** Quantos check-ins o hábito tem na semana atual (para WEEKLY_X). */
 fun weekDoneCount(
