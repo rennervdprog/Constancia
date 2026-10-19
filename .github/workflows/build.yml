@@ -110,6 +110,8 @@ jobs:
           script: |
             ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace --max-workers=2 || echo FAILED > /tmp/uitest_failed
             mkdir -p uitest-screenshots
+            # Diagnóstico: o que existe em /data/local/tmp?
+            adb shell ls -la /data/local/tmp/ || true
             # Screenshots em /data/local/tmp/uitests (world-readable, sem root).
             adb pull /data/local/tmp/uitests ./uitest-screenshots || true
             ls -la ./uitest-screenshots || true
