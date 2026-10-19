@@ -110,10 +110,8 @@ jobs:
           script: |
             ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace --max-workers=2 || echo FAILED > /tmp/uitest_failed
             mkdir -p uitest-screenshots
-            # Copia screenshots do filesDir do app (via run-as, sem precisar de root)
-            # para o sdcard, de onde o adb pull consegue ler.
-            adb shell "run-as app.constancia cp -r files/uitests /sdcard/uitests" || true
-            adb pull /sdcard/uitests ./uitest-screenshots || true
+            # Screenshots no external filesDir: /sdcard/Android/data/app.constancia/files/uitests
+            adb pull /sdcard/Android/data/app.constancia/files/uitests ./uitest-screenshots || true
             ls -la ./uitest-screenshots || true
             if [ -f /tmp/uitest_failed ]; then exit 1; fi
 
