@@ -336,6 +336,7 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 options = listOf("Manhã", "Tarde", "Noite"),
                 selectedIndex = session.ordinal,
                 onSelect = { session = Session.entries[it] },
+                tagPrefix = "session_opt",
             )
 
             Spacer(Modifier.height(4.dp))
@@ -420,6 +421,7 @@ private fun SegmentedRow(
     options: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
+    tagPrefix: String? = null,
 ) {
     val scheme = MaterialTheme.colorScheme
     // Segmentado (DESIGN_TOKENS.md): botões flex-1, padding 9/6dp, raio 10dp,
@@ -437,6 +439,7 @@ private fun SegmentedRow(
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .let { m -> if (tagPrefix != null) m.testTag(tagPrefix + "_" + index) else m }
                     .then(
                         if (selected) {
                             Modifier.shadow(

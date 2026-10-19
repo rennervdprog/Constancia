@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.constancia.AppDeps
@@ -67,7 +68,7 @@ fun MoreScreen(deps: AppDeps, modifier: Modifier = Modifier, onOpenPaywall: () -
     }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().testTag("mais_list"),
         contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(11.dp),
     ) {

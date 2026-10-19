@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -77,10 +79,14 @@ class ConstanciaUiTest {
     private val device: UiDevice
         get() = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
-    /** Screenshot: UiDevice (tela cheia) em filesDir interno (sempre gravável); nunca falha o teste. */
+    /** Context do app sob teste (não o do APK de teste): é aqui que os arquivos vão parar. */
+    private val targetContext: Context
+        get() = InstrumentationRegistry.getInstrumentation().targetContext
+
+    /** Screenshot: UiDevice (tela cheia) no filesDir do app; nunca falha o teste. */
     private fun shot(name: String) {
         try {
-            val dir = File(appContext.filesDir, "uitests")
+            val dir = File(targetContext.filesDir, "uitests")
             dir.mkdirs()
             val file = File(dir, "$name.png")
             if (!device.takeScreenshot(file)) {
@@ -89,13 +95,6 @@ class ConstanciaUiTest {
         } catch (t: Throwable) {
             // screenshot é acessório: ignora
         }
-    }
-
-    /** Swipe pra cima de tela cheia (rola listas); mais confiável que gesto no nó. */
-    private fun swipeUpFull() {
-        val w = device.displayWidth
-        val h = device.displayHeight
-        device.swipe(w / 2, h * 3 / 4, w / 2, h / 4, 30)
     }
 
     private fun nodesWith(text: String) =
@@ -126,7 +125,7 @@ class ConstanciaUiTest {
     fun criarHabitoComSessao_apareceNaHoje() {
         composeRule.onNodeWithTag("fab_add_habit").performClick()
         composeRule.onNodeWithTag("habit_name_field").performTextInput("Beber água")
-        composeRule.onNodeWithText("Tarde").performClick()
+        composeRule.onNodeWithTag("session_opt_1").performClick()
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
@@ -190,11 +189,12 @@ class ConstanciaUiTest {
     fun paywall_abrePeloConstanciaPro() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         composeRule.waitForIdle()
-        // O banner "Constância Pro" é o 7º item da LazyColumn: rola até ele ser
-        // composto (itens fora da tela não existem na árvore de semântica).
+        // O banner "Constância Pro" é o 7º item da LazyColumn: rola a lista
+        // (gesto no próprio LazyColumn) até ele ser composto.
+        val listNode = composeRule.onNodeWithTag("mais_list")
         var tries = 0
         while (!nodesWith("Constância Pro") && tries < 8) {
-            swipeUpFull()
+            listNode.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
             tries++
         }
