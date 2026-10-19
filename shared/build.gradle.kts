@@ -7,6 +7,14 @@ plugins {
     alias(libs.plugins.android.library)
 }
 
+// Pacote determinístico para o Res gerado a partir de
+// commonMain/composeResources (fontes Sora/Manrope).
+compose {
+    resources {
+        packageOfResClass = "app.constancia.shared.generated.resources"
+    }
+}
+
 kotlin {
     androidTarget()
 
@@ -30,6 +38,8 @@ kotlin {
             implementation(libs.kotlinx.datetime)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.compose.material.icons.extended)
+            // Fontes e recursos via composeResources (Res.font.*).
+            implementation(compose.components.resources)
             // Banco local (fonte de verdade, offline-first).
             implementation(libs.sqldelight.runtime)
             // asFlow()/mapToList() das queries (usado nos repositórios).
