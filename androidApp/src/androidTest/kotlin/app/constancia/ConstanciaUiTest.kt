@@ -83,12 +83,11 @@ class ConstanciaUiTest {
     private val targetContext: Context
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
-    /** Screenshot: UiDevice (tela cheia) no external filesDir do app; nunca falha o teste. */
+    /** Screenshot: UiDevice (tela cheia) em /data/local/tmp/uitests; nunca falha o teste. */
     private fun shot(name: String) {
         try {
-            // getExternalFilesDir = /sdcard/Android/data/app.constancia/files — acessível
-            // via `adb pull` sem root nem run-as.
-            val dir = File(targetContext.getExternalFilesDir(null), "uitests")
+            // /data/local/tmp é world-writable e legível via `adb pull` sem root.
+            val dir = File("/data/local/tmp/uitests")
             dir.mkdirs()
             val file = File(dir, "$name.png")
             if (!device.takeScreenshot(file)) {
