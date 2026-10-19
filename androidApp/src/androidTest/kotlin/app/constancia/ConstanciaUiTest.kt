@@ -77,12 +77,17 @@ class ConstanciaUiTest {
     private val device: UiDevice
         get() = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
-    /** Screenshot de tela cheia via UiDevice (confiável no emulador); nunca falha o teste. */
+    /** Screenshot: UiDevice (tela cheia) em filesDir interno (sempre gravável); nunca falha o teste. */
     private fun shot(name: String) {
-        runCatching {
-            val dir = File(appContext.getExternalFilesDir("uitests"), "")
+        try {
+            val dir = File(appContext.filesDir, "uitests")
             dir.mkdirs()
-            device.takeScreenshot(File(dir, "$name.png"))
+            val file = File(dir, "$name.png")
+            if (!device.takeScreenshot(file)) {
+                throw IllegalStateException("takeScreenshot retornou false")
+            }
+        } catch (t: Throwable) {
+            // screenshot é acessório: ignora
         }
     }
 
@@ -125,12 +130,9 @@ class ConstanciaUiTest {
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
-        // diagnóstico (vai pro logcat/CI): qual cabeçalho de sessão foi renderizado?
+        // Diagnóstico no log do CI: qual cabeçalho de sessão foi renderizado?
         val sessaoVisivel = listOf("Manhã", "Tarde", "Noite").firstOrNull { nodesWith(it) }
-        println("UI_TEST sessao header apos salvar: $sessaoVisivel")
-        shot("02_habito_criado_diag")
-        composeRule.onNodeWithText("Tarde").performScrollTo()
-        composeRule.onNodeWithText("Tarde").assertIsDisplayed()
+        check(sessaoVisivel == "Tarde") { "UI_TEST_DIAG sessao header=$sessaoVisivel" }
         shot("02_habito_criado")
     }
 
@@ -196,6 +198,12 @@ class ConstanciaUiTest {
             composeRule.waitForIdle()
             tries++
         }
+        // Diagnóstico no log do CI: até onde a rolagem chegou?
+        val visiveis = listOf(
+            "Conta Constância", "Sincronização na nuvem", "Constância Pro",
+            "Aparência", "Exportar dados",
+        ).filter { nodesWith(it) }
+        check(visiveis.contains("Constância Pro")) { "UI_TEST_DIAG visiveis=$visiveis" }
         composeRule.onNodeWithText("Constância Pro").performScrollTo()
         composeRule.onNodeWithText("Constância Pro").assertIsDisplayed()
         shot("06_mais_banner_pro")

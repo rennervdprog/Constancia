@@ -110,7 +110,8 @@ jobs:
           script: |
             ./gradlew :androidApp:connectedDebugAndroidTest --stacktrace || echo FAILED > /tmp/uitest_failed
             mkdir -p uitest-screenshots
-            adb pull /sdcard/Android/data/app.constancia/files/uitests ./uitest-screenshots || true
+            adb root || true
+            adb pull /data/data/app.constancia/files/uitests ./uitest-screenshots || true
             ls -la ./uitest-screenshots || true
             if [ -f /tmp/uitest_failed ]; then exit 1; fi
 
