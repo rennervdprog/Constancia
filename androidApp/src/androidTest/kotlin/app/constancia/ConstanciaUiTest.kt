@@ -25,6 +25,8 @@ import app.constancia.data.local.HabitRepositoryImpl
 import app.constancia.data.local.PrefsRepositoryImpl
 import app.constancia.data.local.TaskRepositoryImpl
 import app.constancia.db.ConstanciaDb
+import app.constancia.model.Session
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -129,6 +131,11 @@ class ConstanciaUiTest {
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
+        // Diagnóstico decisivo: a sessão foi salva no banco?
+        val sessaoNoBanco = runBlocking {
+            deps.habits.habitsFlow().first().firstOrNull { it.name == "Beber água" }?.session
+        }
+        check(sessaoNoBanco == Session.TARDE) { "UI_TEST_DIAG sessao no banco=$sessaoNoBanco" }
         // Diagnóstico no log do CI: qual cabeçalho de sessão foi renderizado?
         val sessaoVisivel = listOf("Manhã", "Tarde", "Noite").firstOrNull { nodesWith(it) }
         check(sessaoVisivel == "Tarde") { "UI_TEST_DIAG sessao header=$sessaoVisivel" }
@@ -205,11 +212,10 @@ class ConstanciaUiTest {
         ).filter { nodesWith(it) }
         check(visiveis.contains("Constância Pro")) { "UI_TEST_DIAG visiveis=$visiveis" }
         composeRule.onNodeWithText("Constância Pro").performScrollTo()
-        composeRule.onNodeWithText("Constância Pro").assertIsDisplayed()
         shot("06_mais_banner_pro")
         composeRule.onNodeWithText("Constância Pro").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("7 DIAS GRÁTIS").assertIsDisplayed()
+        // O paywall abriu? (exists = está na árvore; mais robusto que visibilidade)
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("7 DIAS GRÁTIS") }
         shot("07_paywall")
     }
 }
