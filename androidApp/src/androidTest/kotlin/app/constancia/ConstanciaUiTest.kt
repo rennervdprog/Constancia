@@ -87,7 +87,7 @@ class ConstanciaUiTest {
             val dir = File(appContext.getExternalFilesDir("uitests"), "")
             dir.mkdirs()
             File(dir, "$name.png").outputStream().use { out ->
-                composeRule.onAllNodes(isRoot()).onFirst()
+                composeRule.onAllNodes(isRoot())[0]
                     .captureToImage().asAndroidBitmap()
                     .compress(Bitmap.CompressFormat.PNG, 100, out)
             }
@@ -190,7 +190,7 @@ class ConstanciaUiTest {
         // composto (itens fora da tela não existem na árvore de semântica).
         var tries = 0
         while (!nodesWith("Constância Pro") && tries < 6) {
-            composeRule.onAllNodes(isRoot()).onFirst()
+            composeRule.onAllNodes(isRoot())[0]
                 .performTouchInput { swipeUp() }
             composeRule.waitForIdle()
             tries++
