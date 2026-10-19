@@ -7,9 +7,12 @@ import app.constancia.data.HabitRepository
 import app.constancia.db.ConstanciaDb
 import app.constancia.domain.currentStreak
 import app.constancia.domain.doneDatesFor
+import app.constancia.domain.forgivenDates
 import app.constancia.domain.weekDoneCount
 import app.constancia.model.Habit
 import app.constancia.model.HabitStatus
+import app.constancia.model.PauseInterval
+import app.constancia.model.newId
 import app.constancia.model.todayYmd
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -81,7 +84,25 @@ class HabitRepositoryImpl(
 
     override suspend fun setPaused(id: String, paused: Boolean): Unit =
         withContext(Dispatchers.Default) {
+            val today = todayYmd()
             queries.setHabitPaused(paused.toFlag(), id)
+            if (paused) {
+                // Abre um intervalo de pausa: dias perdoados no streak até retomar.
+                queries.openPauseInterval(newId(), id, today)
+            } else {
+                // Fecha intervalos abertos — o período pausado fica perdoado.
+                queries.closeOpenPauseIntervals(today, id)
+            }
+        }
+
+    override suspend fun pauseIntervals(habitId: String): List<PauseInterval> =
+        withContext(Dispatchers.Default) {
+            queries.selectPauseIntervalsForHabit(habitId).executeAsList().map { it.toModel() }
+        }
+
+    override suspend fun allPauseIntervals(): Map<String, List<PauseInterval>> =
+        withContext(Dispatchers.Default) {
+            queries.selectAllPauseIntervals().executeAsList().map { it.toModel() }.groupBy { it.habitId }
         }
 
     override suspend fun archive(id: String): Unit = withContext(Dispatchers.Default) {
@@ -102,11 +123,12 @@ class HabitRepositoryImpl(
                         habit,
                         checkins.checkinsForHabit(habit.id).map { it.date to it.quantity },
                     )
+                    val forgiven = forgivenDates(pauseIntervals(habit.id), today)
                     HabitStatus(
                         habit = habit,
                         todayCheckin = todayCheckin,
                         isDoneToday = todayCheckin != null && doneDates.contains(today),
-                        currentStreak = currentStreak(habit, doneDates, today, timeZone),
+                        currentStreak = currentStreak(habit, doneDates, today, timeZone, forgiven),
                         weekDone = weekDoneCount(doneDates, today),
                     )
                 }
