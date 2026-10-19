@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import app.constancia.AppDeps
+import app.constancia.domain.dateLinePt
+import app.constancia.domain.greetingFor
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.HabitStatus
@@ -75,16 +77,6 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-
-// Nomes PT-BR para montar a linha de data sem java.time.
-private val WEEKDAYS_PT = listOf(
-    "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
-    "sexta-feira", "sábado", "domingo",
-)
-private val MONTHS_PT = listOf(
-    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
-    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
-)
 
 private fun sessionTitle(session: Session): String = when (session) {
     Session.MANHA -> "Manhã"
@@ -114,14 +106,9 @@ fun HomeScreen(deps: AppDeps, modifier: Modifier = Modifier) {
     var timerTarget by remember { mutableStateOf<HabitStatus?>(null) }
 
     val hour = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
-    val greeting = when {
-        hour < 12 -> "Bom dia"
-        hour < 18 -> "Boa tarde"
-        else -> "Boa noite"
-    }
+    val greeting = greetingFor(hour)
     val date = today.toLocalDate()
-    val dateLine = WEEKDAYS_PT[date.isoDayNumberCompat() - 1] +
-        ", " + date.dayOfMonth + " de " + MONTHS_PT[date.monthNumber - 1]
+    val dateLine = dateLinePt(date)
 
     val active = statuses.filter { !it.habit.paused }
     val paused = statuses.filter { it.habit.paused }
