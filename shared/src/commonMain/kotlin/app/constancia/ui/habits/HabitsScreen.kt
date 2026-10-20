@@ -107,7 +107,7 @@ fun HabitsScreen(
     val completion = completionRateLast30(habits, checkins, todayDate)
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().testTag("habits_list"),
         contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {

@@ -103,35 +103,29 @@ class ConstanciaUiTest {
     private fun nodesWithTag(tag: String) =
         composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
 
-    /** Rola a tela para cima (gesto do sistema) algumas vezes. */
-    private fun swipeUpScreen(times: Int = 1) {
+    /** Rola uma LazyColumn para cima com gesto no próprio nó da lista. */
+    private fun swipeList(listTag: String, times: Int = 1) {
         repeat(times) {
-            device.swipe(
-                device.displayWidth / 2,
-                device.displayHeight * 3 / 4,
-                device.displayWidth / 2,
-                device.displayHeight / 4,
-                20,
-            )
+            composeRule.onNodeWithTag(listTag).performTouchInput { swipeUp() }
             composeRule.waitForIdle()
         }
     }
 
-    /** Espera o texto existir, rolando a tela se ele estiver fora da viewport. */
-    private fun awaitText(text: String, maxSwipes: Int = 6) {
+    /** Espera o texto existir, rolando a lista se ele estiver fora da viewport. */
+    private fun awaitText(text: String, listTag: String, maxSwipes: Int = 6) {
         var tries = 0
         while (!nodesWith(text) && tries < maxSwipes) {
-            swipeUpScreen()
+            swipeList(listTag)
             tries++
         }
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith(text) }
     }
 
-    /** Espera uma tag existir, rolando a tela se necessário. */
-    private fun awaitTag(tag: String, maxSwipes: Int = 6) {
+    /** Espera uma tag existir, rolando a lista se necessário. */
+    private fun awaitTag(tag: String, listTag: String, maxSwipes: Int = 6) {
         var tries = 0
         while (!nodesWithTag(tag) && tries < maxSwipes) {
-            swipeUpScreen()
+            swipeList(listTag)
             tries++
         }
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag(tag) }
@@ -152,7 +146,7 @@ class ConstanciaUiTest {
     fun appAbre_eNavegaNasAbas() {
         shot("01_home")
         composeRule.onNodeWithText("Sua semana").assertIsDisplayed()
-        awaitText("Seu dia")
+        awaitText("Seu dia", "home_list")
         composeRule.onNodeWithText("Seu dia").assertExists()
         composeRule.onNodeWithTag("tab_TAREFAS").performClick()
         composeRule.onNodeWithText("Capture rápido, priorize e risque — no ritmo do Todoist")
@@ -193,7 +187,7 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
         // O cartão fica no fim do fluxo do dia: rola até ele ser composto.
-        awaitText("Beber água")
+        awaitText("Beber água", "home_list")
         composeRule.onNodeWithText("Beber água").assertExists()
         shot("02_habito_criado")
     }
@@ -201,7 +195,7 @@ class ConstanciaUiTest {
     @Test
     fun checkinNoCirculo_marcaHabito() {
         createHabit("Ler")
-        awaitText("0 de 1 feitos")
+        awaitText("0 de 1 feitos", "home_list")
         composeRule.onAllNodesWithTag("habit_check")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1 de 1 feitos") }
         shot("03_checkin_marcado")
@@ -210,7 +204,7 @@ class ConstanciaUiTest {
     @Test
     fun adicionarTarefaRapidaNaHoje_apareceNoFluxo() {
         // A captura rápida é o último bloco da Hoje: rola até ela existir.
-        awaitTag("task_input")
+        awaitTag("task_input", "home_list")
         composeRule.onNodeWithTag("task_input").performScrollTo().performTextInput("Comprar pão")
         shot("04_digitando_tarefa")
         composeRule.onNodeWithTag("task_add").performClick()
@@ -225,10 +219,20 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("tasks_quick_input").performTextInput("Estudar Kotlin")
         composeRule.onNodeWithTag("tasks_quick_add").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Estudar Kotlin") }
+        runCatching { device.pressBack() } // fecha o teclado virtual
+        composeRule.waitForIdle()
         shot("05_tarefas_hoje")
-        // Expande a linha: as ações estilo Todoist aparecem.
-        composeRule.onNodeWithText("Estudar Kotlin").performClick()
-        composeRule.waitUntil(timeoutMillis = 15000) { nodesWith("Prioridade: Média") }
+        // Expande a linha: as ações estilo Todoist aparecem. O clique pode
+        // não injetar de primeira no emulador lento — tenta de novo.
+        var expandTries = 0
+        while (!nodesWith("Prioridade: Média") && expandTries < 4) {
+            runCatching {
+                composeRule.onNodeWithText("Estudar Kotlin").performClick()
+            }
+            composeRule.waitForIdle()
+            expandTries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Prioridade: Média") }
         // Conclui pela bolinha da linha.
         composeRule.onAllNodesWithTag("task_check")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Feitas hoje") }
@@ -265,7 +269,7 @@ class ConstanciaUiTest {
             composeRule.onAllNodesWithText("Últimas 18 semanas", substring = true)
                 .fetchSemanticsNodes().isEmpty() && tries < 6
         ) {
-            swipeUpScreen()
+            swipeList("habits_list")
             tries++
         }
         composeRule.waitUntil(timeoutMillis = 8000) {
@@ -300,7 +304,7 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
         // O cartão do hábito fica no fim do fluxo: rola até o stepper existir.
-        awaitText("0/8 copos")
+        awaitText("0/8 copos", "home_list")
         composeRule.onNodeWithTag("qty_inc").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1/8 copos") }
         shot("09_stepper_1")

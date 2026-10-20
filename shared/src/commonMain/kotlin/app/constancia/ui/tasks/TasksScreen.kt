@@ -127,7 +127,7 @@ fun TasksScreen(
     }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().testTag("tasks_list"),
         contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp),
     ) {
