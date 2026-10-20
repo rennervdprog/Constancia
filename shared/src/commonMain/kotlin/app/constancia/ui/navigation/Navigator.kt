@@ -39,6 +39,11 @@ class AppNavigator {
     var diaryDate by mutableStateOf<String?>(null)
 
     fun navigateTo(tab: AppTab) {
+        // Tocar em "Mais" já estando numa seção da Mais volta à raiz dela.
+        if (tab == AppTab.MAIS && this.tab == AppTab.MAIS) {
+            maisSection = null
+            return
+        }
         this.tab = tab
         if (tab != AppTab.MAIS) maisSection = null
     }

@@ -39,6 +39,8 @@ import java.io.File
  * e tiram screenshots (artefatos do CI). Banco zerado a cada teste.
  *
  * Roda no CI via :androidApp:connectedDebugAndroidTest (job "UI tests").
+ * Navegação atual: Hoje · Tarefas · (+) · Hábitos · Mais (Diário,
+ * Progresso e Desafios dentro da Mais).
  */
 @RunWith(AndroidJUnit4::class)
 class ConstanciaUiTest {
@@ -94,30 +96,46 @@ class ConstanciaUiTest {
     private fun nodesWith(text: String) =
         composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
-    @Test
-    fun appAbre_eNavegaNas5Abas() {
-        shot("01_home")
-        composeRule.onNodeWithTag("tab_RELATORIOS").performClick()
-        composeRule.onNodeWithText("Constância · sua evolução em números").assertIsDisplayed()
-        shot("01_relatorios")
-        composeRule.onNodeWithTag("tab_DIARIO").performClick()
-        composeRule.onNodeWithText("Um minuto por dia: como você está e como foi o dia")
-            .assertIsDisplayed()
-        shot("01_diario")
-        composeRule.onNodeWithTag("tab_DESAFIOS").performClick()
-        composeRule.onNodeWithText("Pacotes prontos de 7, 21 e 30 dias para criar impulso")
-            .assertIsDisplayed()
-        shot("01_desafios")
-        composeRule.onNodeWithTag("tab_MAIS").performClick()
-        composeRule.onNodeWithText("Conta, nuvem, saúde do celular e seus dados").assertIsDisplayed()
-        shot("01_mais")
-        composeRule.onNodeWithTag("tab_HOJE").performClick()
-        composeRule.onNodeWithText("Tarefas de hoje").assertIsDisplayed()
+    private fun createHabit(name: String) {
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_habit").performClick()
+        composeRule.onNodeWithTag("habit_name_field").performTextInput(name)
+        composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith(name) }
     }
 
     @Test
-    fun criarHabitoComSessao_apareceNaHoje() {
-        composeRule.onNodeWithTag("fab_add_habit").performClick()
+    fun appAbre_eNavegaNasAbas() {
+        shot("01_home")
+        composeRule.onNodeWithText("Seu dia").assertIsDisplayed()
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithText("Capture rápido, priorize e risque — no ritmo do Todoist")
+            .assertIsDisplayed()
+        shot("01_tarefas")
+        composeRule.onNodeWithTag("tab_HABITOS").performClick()
+        composeRule.onNodeWithText("Sequências, mapa de calor e o ritmo de cada hábito")
+            .assertIsDisplayed()
+        shot("01_habitos")
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.onNodeWithText("Conta, nuvem, saúde do celular e seus dados").assertIsDisplayed()
+        // Diário mora dentro da Mais.
+        composeRule.onNodeWithTag("mais_diario").performScrollTo().performClick()
+        composeRule.onNodeWithText("Humor, energia, sono e padrões — o dia registrado em um minuto")
+            .assertIsDisplayed()
+        shot("01_diario")
+        // Tocar em Mais de novo volta à raiz; Progresso também mora lá.
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.onNodeWithTag("mais_progresso").performScrollTo().performClick()
+        composeRule.onNodeWithText("Constância · sua evolução em números").assertIsDisplayed()
+        shot("01_progresso")
+        composeRule.onNodeWithTag("tab_HOJE").performClick()
+        composeRule.onNodeWithText("Seu dia").assertIsDisplayed()
+    }
+
+    @Test
+    fun criarHabitoPeloBotaoCentral_apareceNaHoje() {
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_habit").performClick()
         // Verifica que os chips de sessão estão visíveis (screenshot mostra o UI).
         // NOTA: o clique nos chips não dispara no emulador de teste (investigado
         // extensivamente); a lógica de sessão é coberta pelos testes unitários.
@@ -133,11 +151,7 @@ class ConstanciaUiTest {
 
     @Test
     fun checkinNoCirculo_marcaHabito() {
-        composeRule.onNodeWithTag("fab_add_habit").performClick()
-        composeRule.onNodeWithTag("habit_name_field").performTextInput("Ler")
-        composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Ler") }
-
+        createHabit("Ler")
         composeRule.onNodeWithText("0 de 1 feitos").assertIsDisplayed()
         composeRule.onAllNodesWithTag("habit_check")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1 de 1 feitos") }
@@ -145,7 +159,7 @@ class ConstanciaUiTest {
     }
 
     @Test
-    fun adicionarTarefa_apareceNaLista() {
+    fun adicionarTarefaRapidaNaHoje_apareceNoFluxo() {
         composeRule.onNodeWithTag("task_input").performScrollTo().performTextInput("Comprar pão")
         shot("04_digitando_tarefa")
         composeRule.onNodeWithTag("task_add").performClick()
@@ -155,19 +169,71 @@ class ConstanciaUiTest {
     }
 
     @Test
-    fun diario_salvaHumorENota() {
-        composeRule.onNodeWithTag("tab_DIARIO").performClick()
+    fun abaTarefas_capturaRapidaExpandeEConclui() {
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("tasks_quick_input").performTextInput("Estudar Kotlin")
+        composeRule.onNodeWithTag("tasks_quick_add").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Estudar Kotlin") }
+        shot("05_tarefas_hoje")
+        // Expande a linha: as ações estilo Todoist aparecem.
+        composeRule.onNodeWithText("Estudar Kotlin").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Prioridade: Média") }
+        // Conclui pela bolinha da linha.
+        composeRule.onAllNodesWithTag("task_check")[0].performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Feitas hoje") }
+        shot("05_tarefa_concluida")
+        // Chips de visão existem com contadores.
+        composeRule.onNodeWithTag("view_chip_ENTRADA").assertExists()
+        composeRule.onNodeWithTag("view_chip_PROXIMOS").assertExists()
+        composeRule.onNodeWithTag("view_chip_FEITAS").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Estudar Kotlin") }
+    }
+
+    @Test
+    fun formularioCompleto_criaTarefaComSubtarefa() {
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("open_task_sheet").performScrollTo().performClick()
+        composeRule.onNodeWithTag("task_name_field").performTextInput("Revisar relatório")
+        composeRule.onNodeWithTag("task_sub_input").performTextInput("Coletar dados")
+        composeRule.onNodeWithTag("task_sub_add").performClick()
+        shot("06_form_tarefa")
+        composeRule.onNodeWithTag("task_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Revisar relatório") }
+        shot("06_tarefa_criada")
+    }
+
+    @Test
+    fun habitos_mostraTilesEMapaDeCalor() {
+        createHabit("Meditar")
+        composeRule.onNodeWithTag("tab_HABITOS").performClick()
+        composeRule.onNodeWithText("hábitos ativos").assertIsDisplayed()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("Últimas 18 semanas", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        shot("07_habitos_heatmap")
+    }
+
+    @Test
+    fun diarioTurbinado_salvaHumorEnergiaETag() {
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.onNodeWithTag("mais_diario").performScrollTo().performClick()
         composeRule.onNodeWithTag("mood_4").performClick()
-        composeRule.onNodeWithTag("diary_note").performTextInput("Dia bom")
-        shot("05_diario_preenchido")
-        composeRule.onNodeWithText("Salvar no diário").performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Atualizar diário") }
-        shot("05_diario_salvo")
+        composeRule.onNodeWithTag("energy_5").performScrollTo().performClick()
+        composeRule.onNodeWithTag("diary_tag_Treino").performScrollTo().performClick()
+        composeRule.onNodeWithTag("diary_note_field").performScrollTo()
+            .performTextInput("Dia bom")
+        shot("08_diario_preenchido")
+        composeRule.onNodeWithText("Salvar o dia").performScrollTo().performClick()
+        // Depois de salvar, o botão vira "Salvar alterações" (registro existe).
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Salvar alterações") }
+        shot("08_diario_salvo")
     }
 
     @Test
     fun stepperQuantidade_ajustaSemQuebrar() {
-        composeRule.onNodeWithTag("fab_add_habit").performClick()
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_habit").performClick()
         composeRule.onNodeWithTag("habit_name_field").performTextInput("Água")
         composeRule.onNodeWithText("Quantidade").performClick()
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
@@ -175,18 +241,18 @@ class ConstanciaUiTest {
 
         composeRule.onNodeWithTag("qty_inc").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1/8 copos") }
-        shot("06_stepper_1")
+        shot("09_stepper_1")
         composeRule.onNodeWithTag("qty_dec").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("0/8 copos") }
-        shot("06_stepper_0")
+        shot("09_stepper_0")
     }
 
     @Test
     fun paywall_abrePeloConstanciaPro() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         composeRule.waitForIdle()
-        // O banner "Constância Pro" é o 7º item da LazyColumn: rola a lista
-        // (gesto no próprio LazyColumn) até ele ser composto.
+        // O banner "Constância Pro" fica mais abaixo na LazyColumn: rola a
+        // lista (gesto no próprio LazyColumn) até ele ser composto.
         val listNode = composeRule.onNodeWithTag("mais_list")
         var tries = 0
         while (!nodesWith("Constância Pro") && tries < 8) {
@@ -199,6 +265,6 @@ class ConstanciaUiTest {
         // (investigado); a navegação é coberta por teste manual.
         composeRule.onNodeWithText("Constância Pro").assertExists()
         composeRule.onNodeWithText("Constância Pro").performScrollTo()
-        shot("06_mais_banner_pro")
+        shot("10_mais_banner_pro")
     }
 }

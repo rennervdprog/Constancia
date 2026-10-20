@@ -73,6 +73,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
 /**
@@ -95,7 +96,11 @@ fun DiaryScreen(
 
     val entries by deps.diary.allEntriesFlow().collectAsState(initial = emptyList())
     val habits by deps.habits.habitsFlow().collectAsState(initial = emptyList())
-    val checkins by deps.checkins.checkinsFlow().collectAsState(initial = emptyList())
+    val checkinRangeFrom = remember {
+        todayDate.minus(DatePeriod(days = 400)).toString()
+    }
+    val checkins by deps.checkins.checkinsInRangeFlow(checkinRangeFrom, today)
+        .collectAsState(initial = emptyList())
     val entryByDate = entries.associateBy { it.date }
 
     // Data exibida no editor (hoje por padrão; calendário/histórico abrem o dia).
@@ -412,7 +417,7 @@ fun DiaryScreen(
                         val m = mood.takeIf { it in 1..5 } ?: return@CtaButton
                         scope.launch {
                             deps.diary.save(
-                                date = formDate,
+                                dateYmd = formDate,
                                 mood = m,
                                 note = note.trim(),
                                 energy = energy,
@@ -556,9 +561,8 @@ fun DiaryScreen(
                 Spacer(Modifier.height(6.dp))
                 val firstDay = LocalDate(viewYear, viewMonth, 1)
                 val lead = firstDay.dayOfWeek.ordinal // segunda = 0
-                val daysInMonth = firstDay.daysUntil(
-                    firstDay.plus(DatePeriod(months = 1)),
-                )
+                val daysInMonth = firstDay.plus(DatePeriod(months = 1))
+                    .toEpochDays() - firstDay.toEpochDays()
                 val cells = List(lead) { 0 } + (1..daysInMonth).toList()
                 cells.chunked(7).forEach { week ->
                     Row(modifier = Modifier.fillMaxWidth()) {
@@ -793,7 +797,7 @@ private fun HistoryRow(
                 )
                 Text(
                     text = "Energia " + entry.energy + "/5 · Sono " +
-                        formatSleep(entry.sleepHours),
+                        formatSleep(entry.sleepHours ?: 0.0),
                     style = MaterialTheme.typography.labelSmall,
                     color = scheme.onSurfaceVariant,
                 )
