@@ -41,6 +41,10 @@ import java.io.File
  * Roda no CI via :androidApp:connectedDebugAndroidTest (job "UI tests").
  * Navegação atual: Hoje · Tarefas · (+) · Hábitos · Mais (Diário,
  * Progresso e Desafios dentro da Mais).
+ *
+ * NOTA: a tela Hoje ficou alta (progresso + semana + diário + fluxo), então
+ * vários elementos nascem fora da viewport e o LazyColumn nem os compõe.
+ * Os testes rolam a tela (swipe) até o texto existir antes de interagir.
  */
 @RunWith(AndroidJUnit4::class)
 class ConstanciaUiTest {
@@ -96,18 +100,60 @@ class ConstanciaUiTest {
     private fun nodesWith(text: String) =
         composeRule.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
+    private fun nodesWithTag(tag: String) =
+        composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+
+    /** Rola a tela para cima (gesto do sistema) algumas vezes. */
+    private fun swipeUpScreen(times: Int = 1) {
+        repeat(times) {
+            device.swipe(
+                device.displayWidth / 2,
+                device.displayHeight * 3 / 4,
+                device.displayWidth / 2,
+                device.displayHeight / 4,
+                20,
+            )
+            composeRule.waitForIdle()
+        }
+    }
+
+    /** Espera o texto existir, rolando a tela se ele estiver fora da viewport. */
+    private fun awaitText(text: String, maxSwipes: Int = 6) {
+        var tries = 0
+        while (!nodesWith(text) && tries < maxSwipes) {
+            swipeUpScreen()
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith(text) }
+    }
+
+    /** Espera uma tag existir, rolando a tela se necessário. */
+    private fun awaitTag(tag: String, maxSwipes: Int = 6) {
+        var tries = 0
+        while (!nodesWithTag(tag) && tries < maxSwipes) {
+            swipeUpScreen()
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag(tag) }
+    }
+
+    /** Cria um hábito pelo fluxo do botão central (+) e espera a folha fechar. */
     private fun createHabit(name: String) {
         composeRule.onNodeWithTag("fab_create").performClick()
         composeRule.onNodeWithTag("create_habit").performClick()
         composeRule.onNodeWithTag("habit_name_field").performTextInput(name)
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith(name) }
+        // A folha fechou = salvou (o cartão do hábito pode estar fora da tela).
+        composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
+        composeRule.waitForIdle()
     }
 
     @Test
     fun appAbre_eNavegaNasAbas() {
         shot("01_home")
-        composeRule.onNodeWithText("Seu dia").assertIsDisplayed()
+        composeRule.onNodeWithText("Sua semana").assertIsDisplayed()
+        awaitText("Seu dia")
+        composeRule.onNodeWithText("Seu dia").assertExists()
         composeRule.onNodeWithTag("tab_TAREFAS").performClick()
         composeRule.onNodeWithText("Capture rápido, priorize e risque — no ritmo do Todoist")
             .assertIsDisplayed()
@@ -129,7 +175,7 @@ class ConstanciaUiTest {
         composeRule.onNodeWithText("Constância · sua evolução em números").assertIsDisplayed()
         shot("01_progresso")
         composeRule.onNodeWithTag("tab_HOJE").performClick()
-        composeRule.onNodeWithText("Seu dia").assertIsDisplayed()
+        composeRule.onNodeWithText("Sua semana").assertIsDisplayed()
     }
 
     @Test
@@ -145,14 +191,17 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("habit_name_field").performTextInput("Beber água")
         shot("02_criando_habito")
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
+        composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
+        // O cartão fica no fim do fluxo do dia: rola até ele ser composto.
+        awaitText("Beber água")
+        composeRule.onNodeWithText("Beber água").assertExists()
         shot("02_habito_criado")
     }
 
     @Test
     fun checkinNoCirculo_marcaHabito() {
         createHabit("Ler")
-        composeRule.onNodeWithText("0 de 1 feitos").assertIsDisplayed()
+        awaitText("0 de 1 feitos")
         composeRule.onAllNodesWithTag("habit_check")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1 de 1 feitos") }
         shot("03_checkin_marcado")
@@ -160,11 +209,13 @@ class ConstanciaUiTest {
 
     @Test
     fun adicionarTarefaRapidaNaHoje_apareceNoFluxo() {
+        // A captura rápida é o último bloco da Hoje: rola até ela existir.
+        awaitTag("task_input")
         composeRule.onNodeWithTag("task_input").performScrollTo().performTextInput("Comprar pão")
         shot("04_digitando_tarefa")
         composeRule.onNodeWithTag("task_add").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Comprar pão") }
-        composeRule.onNodeWithText("Comprar pão").assertIsDisplayed()
+        composeRule.onNodeWithText("Comprar pão").assertExists()
         shot("04_tarefa_adicionada")
     }
 
@@ -177,7 +228,7 @@ class ConstanciaUiTest {
         shot("05_tarefas_hoje")
         // Expande a linha: as ações estilo Todoist aparecem.
         composeRule.onNodeWithText("Estudar Kotlin").performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Prioridade: Média") }
+        composeRule.waitUntil(timeoutMillis = 15000) { nodesWith("Prioridade: Média") }
         // Conclui pela bolinha da linha.
         composeRule.onAllNodesWithTag("task_check")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Feitas hoje") }
@@ -207,6 +258,16 @@ class ConstanciaUiTest {
         createHabit("Meditar")
         composeRule.onNodeWithTag("tab_HABITOS").performClick()
         composeRule.onNodeWithText("hábitos ativos").assertIsDisplayed()
+        // O rodapé do cartão (com o mapa de calor) fica mais abaixo: rola
+        // até o texto das 18 semanas ser composto.
+        var tries = 0
+        while (
+            composeRule.onAllNodesWithText("Últimas 18 semanas", substring = true)
+                .fetchSemanticsNodes().isEmpty() && tries < 6
+        ) {
+            swipeUpScreen()
+            tries++
+        }
         composeRule.waitUntil(timeoutMillis = 8000) {
             composeRule.onAllNodesWithText("Últimas 18 semanas", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
@@ -237,9 +298,10 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("habit_name_field").performTextInput("Água")
         composeRule.onNodeWithText("Quantidade").performClick()
         composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("0/8 copos") }
-
-        composeRule.onNodeWithTag("qty_inc").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
+        // O cartão do hábito fica no fim do fluxo: rola até o stepper existir.
+        awaitText("0/8 copos")
+        composeRule.onNodeWithTag("qty_inc").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1/8 copos") }
         shot("09_stepper_1")
         composeRule.onNodeWithTag("qty_dec").performClick()
