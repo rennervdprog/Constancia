@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -240,6 +241,9 @@ class ConstanciaUiTest {
         // Chips de visão existem com contadores.
         composeRule.onNodeWithTag("view_chip_ENTRADA").assertExists()
         composeRule.onNodeWithTag("view_chip_PROXIMOS").assertExists()
+        // O chip "Feitas" nasce fora da borda direita da LazyRow: rola os chips.
+        composeRule.onNodeWithTag("view_chips_row").performTouchInput { swipeLeft() }
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("view_chip_FEITAS").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Estudar Kotlin") }
     }

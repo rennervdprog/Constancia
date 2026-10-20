@@ -181,7 +181,10 @@ fun TasksScreen(
 
         // Chips de visão.
         item {
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.testTag("view_chips_row"),
+            ) {
                 item {
                     ViewChip(
                         label = "Entrada · " + counts.entrada,
