@@ -472,14 +472,14 @@ fun DiaryScreen(
                             Icon(
                                 Icons.Filled.Delete,
                                 contentDescription = null,
-                                tint = Color(0xFFC2402A),
+                                tint = Color(0xFFD92D20),
                                 modifier = Modifier.size(14.dp),
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = "Excluir registro",
                                 style = MaterialTheme.typography.labelLarge,
-                                color = Color(0xFFC2402A),
+                                color = Color(0xFFD92D20),
                             )
                         }
                     }

@@ -32,8 +32,8 @@ val DIARY_PROMPTS = listOf(
 
 val MOOD_LABELS = listOf("Péssimo", "Ruim", "Ok", "Bom", "Ótimo")
 
-/** Cores do humor 1..5 (iguais ao protótipo). */
-val MOOD_COLORS_HEX = listOf(0xFFC2402A, 0xFFE86A17, 0xFFB98A0C, 0xFF4C9A6C, 0xFF0B7A55)
+/** Cores do humor 1..5 (protótipo final: escala própria, NÃO a cor da marca). */
+val MOOD_COLORS_HEX = listOf(0xFFD64541, 0xFFE07B2A, 0xFFE9C46A, 0xFF43A673, 0xFF0B7A55)
 
 val ENERGY_LABELS = listOf("", "Esgotado", "Baixa", "Normal", "Boa", "A mil")
 

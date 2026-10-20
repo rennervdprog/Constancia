@@ -59,11 +59,11 @@ data class HabitStatus(
 
 /** Listas/projetos das tarefas (estilo Todoist), com a cor de cada um. */
 enum class TaskProject(val label: String, val colorHex: Long) {
-    ENTRADA("Entrada", 0xFF66766A),
+    ENTRADA("Entrada", 0xFF7A6B90),
     PESSOAL("Pessoal", 0xFF0B7A55),
     TRABALHO("Trabalho", 0xFF2563EB),
-    CASA("Casa", 0xFFE86A17),
-    SAUDE("Saúde", 0xFF0E7490),
+    CASA("Casa", 0xFFD97706),
+    SAUDE("Saúde", 0xFFDB2777),
 }
 
 /** Prioridades: 1 = alta (P1), 2 = média (P2), 3 = baixa (P3). */

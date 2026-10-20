@@ -268,7 +268,7 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 Text(
                     text = errorMsg ?: "",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFC2402A),
+                    color = Color(0xFFD92D20),
                 )
             }
 

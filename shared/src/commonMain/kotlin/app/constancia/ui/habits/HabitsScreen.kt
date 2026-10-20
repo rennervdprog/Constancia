@@ -403,7 +403,7 @@ private fun HabitCard(
                 Box(
                     modifier = Modifier.fillMaxWidth(frac.coerceIn(0f, 1f))
                         .height(8.dp)
-                        .background(scheme.primary, RoundedCornerShape(999.dp)),
+                        .background(Color(habit.color), RoundedCornerShape(999.dp)),
                 )
             }
             Spacer(Modifier.height(6.dp))
@@ -424,7 +424,8 @@ private fun HabitCard(
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     week.forEach { cell ->
                         val color = when (cell) {
-                            HeatCell.DONE -> scheme.primary
+                            // Cor do próprio hábito (semântica), não a da marca.
+                            HeatCell.DONE -> Color(habit.color)
                             HeatCell.MISSED -> extra.heat0
                             HeatCell.OFF -> extra.pageCard
                             HeatCell.FUTURE -> Color.Transparent

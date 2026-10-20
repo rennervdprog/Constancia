@@ -1,43 +1,59 @@
-# Constância — Design Tokens (fonte: protótipo HTML aprovado)
+# Constância — Design Tokens (fonte: protótipo final aprovado "Roxo Profundo")
 
-Extraído de `~/workspace/your_files/prot-tipo-habit-tracker/prot-tipo-habit-tracker.html`
-e `~/workspace/your_files/preview-relat-rios/preview-relat-rios.html`.
+Extraído de `~/workspace/ts-spaces/prot-tipo-const-ncia-roxo-profundo/index.html`.
 REGRA: aplicar literalmente. Nada de "parecido".
+Marca: **roxo profundo predominante** sobre off-white quente; chama do streak
+em âmbar (único acento quente). Cores com significado NÃO viram roxo: humor
+(5 cores), projetos, prioridades (P1/P2/P3) e a cor de cada hábito.
 
 ## Paleta — app (light / dark)
 
 | token | light | dark | uso |
 |---|---|---|---|
-| bg | #F5F3EC | #0D1511 | fundo das telas |
-| ink | #152419 | #ECF3ED | texto principal |
-| muted | #66766A | #93A69A | texto secundário |
-| line | #E6E1D2 | #26392D | bordas 1dp dos cards |
-| primary | #0B7A55 | #2FBF8F | botões, seleção, destaques |
-| primary-soft | #E2F2E9 | #143327 | fundo suave do primário |
-| surface | #FFFFFF | #17231C | cards |
-| surface-2 | #EFEADF | #1F2F25 | superfícies secundárias |
-| flame | #E86A17 | #FF8A3D | anel de progresso, streaks |
-| on-primary | #FFFFFF | #07130D | texto sobre o primário |
-| tab-bg | #FFFFFF 92% | #131E17 94% | fundo da bottom nav (translúcido) |
+| bg | #FBF8F3 | #160A2C | fundo das telas |
+| ink | #221238 | #F4EFFC | texto principal |
+| muted | #7A6B90 | #AB9AC6 | texto secundário |
+| line | #E2D8F0 | #3B2566 | bordas 1dp dos cards |
+| primary | #4B1D96 | #B79CFF | botões, seleção, destaques |
+| primary-soft | #EBE2FA | #2E1A56 | fundo suave do primário |
+| surface | #FFFFFF | #22123F | cards |
+| surface-2 | #FAF6FD | #2B1850 | superfícies secundárias |
+| flame | #E86A17 | #FF8A3D | streaks (chama), P2 |
+| on-primary | #FFFFFF | #1E0740 | texto sobre o primário |
+| tab-bg | #FFFFFF 92% | #1D0E38 94% | fundo da bottom nav (translúcido) |
 
-## Paleta — relatórios (extras do preview)
+Tema escuro refeito em roxo (não é inversão): fundo roxo-noite, superfícies
+violeta-escuras, primário lavanda.
+
+## Cores semânticas (nunca substituídas pela marca)
+
+| significado | cores |
+|---|---|
+| humor 1..5 | #D64541 · #E07B2A · #E9C46A · #43A673 · #0B7A55 |
+| projetos | Trabalho #2563EB · Casa #D97706 · Pessoal #0B7A55 · Saúde #DB2777 · Entrada #7A6B90 |
+| prioridades | P1 #D92D20 · P2 #E86A17 · P3 #2563EB |
+| perigo | #D92D20 (dark #F97066) |
+
+## Paleta — relatórios (extras)
 
 | token | light | dark |
 |---|---|---|
-| brand-strong | #5ED3AB | #095C40 |
-| heat-0 | #E4EAE5 | #1C2A22 |
+| brand-strong | #7C3AED | #A78BFA |
+| heat-0 | #EAE2F4 | #2E1C52 |
 | amber / amber-soft | #F0A840 / #FBEBD3 | #D97706 / #3A2A10 |
-| red / red-soft | #F08A5D / #FBE7DC | #C2410C / #3A2115 |
-| ink-2 | #A9BCB1 | #43564D |
-| ink-3 | #7A8B82 | #6E8277 |
-| page-bg | #E9ECE8 | #0B100E |
-| page-card | #FFFFFF | #16211B |
-| page-line | #E1E7E2 | #223129 |
+| red / red-soft | #D92D20 / #FDECEA | #F97066 / #3D1524 |
+| ink-2 | #4A3A63 | #C9BCE4 |
+| ink-3 | #7A6B90 | #8F7DB3 |
+| page-bg | #F1EAF8 | #120722 |
+| page-card | #FFFFFF | #22123F |
+| page-line | #E2D8F0 | #3B2566 |
 
-## Cartão de progresso (destaque do Hoje)
-- Fundo = **ink** (INVERTIDO: card escuro no modo claro, card claro no modo escuro)
-- Conteúdo = **bg**. Raio 24dp, padding 18dp, gap interno 16dp, margin-bottom 14dp.
-- Anel: 84dp, track com 16% de opacidade, frente na cor **flame**, stroke 9dp.
+## Cartão "Seu dia" (destaque do Hoje)
+- Fundo = **roxo-noite** #2A0A54 no claro (no escuro inverte: #EBE2FA com
+  conteúdo #2A0A54). Conteúdo = off-white. Raio 24dp, padding 18dp,
+  gap interno 16dp, margin-bottom 14dp.
+- Anel: 84dp, track com 16% de opacidade, frente na cor **flame**, stroke 9dp,
+  varredura animada reagindo aos checks. Conta hábitos + tarefas + diário.
 
 ## Tipografia
 - **Sora** (ExtraBold 800 / Bold 700): saudação 25sp/800, título de tela 23sp/800,

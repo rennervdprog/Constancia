@@ -55,12 +55,12 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
 
-/** Cor da prioridade na bolinha e na bandeira (P1 vermelha, P2 chama, P3 neutra). */
+/** Cor da prioridade (código semântico do protótipo): P1 vermelha, P2 âmbar/chama, P3 azul. */
 @Composable
 fun priorityColor(priority: Int): Color = when (priority) {
-    1 -> Color(0xFFC2402A)
-    2 -> MaterialTheme.colorScheme.secondary
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
+    1 -> Color(0xFFD92D20)
+    2 -> Color(0xFFE86A17)
+    else -> Color(0xFF2563EB)
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -388,7 +388,7 @@ private fun MiniAction(
     danger: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val color = if (danger) Color(0xFFC2402A) else scheme.onSurface
+    val color = if (danger) Color(0xFFD92D20) else scheme.onSurface
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
