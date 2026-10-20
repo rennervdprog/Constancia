@@ -132,6 +132,17 @@ class HabitRepositoryImpl(
         return combineTodayStatus(habitsFlow(), checkinsFlow, pausesFlow, timeZone)
             .flowOn(Dispatchers.Default)
     }
+
+    override fun statusForDateFlow(dateYmd: String, timeZone: TimeZone): Flow<List<HabitStatus>> {
+        val checkinsFlow = checkins.checkinsInRangeFlow(MIN_YMD, MAX_YMD)
+        val pausesFlow: Flow<List<PauseInterval>> = queries.selectAllPauseIntervals()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+        return combine(habitsFlow(), checkinsFlow, pausesFlow) { habits, checkins, pauses ->
+            computeTodayStatuses(habits, checkins, pauses, dateYmd, timeZone)
+        }.flowOn(Dispatchers.Default)
+    }
 }
 
 /**

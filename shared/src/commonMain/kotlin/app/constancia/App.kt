@@ -86,6 +86,9 @@ fun AppContent(deps: AppDeps) {
                     deps,
                     screenModifier,
                     onOpenDiary = { navigator.openDiary(todayYmd()) },
+                    onOpenReports = {
+                        navigator.openMaisSection(MaisSection.PROGRESSO)
+                    },
                 )
                 AppTab.TAREFAS -> TasksScreen(
                     deps,

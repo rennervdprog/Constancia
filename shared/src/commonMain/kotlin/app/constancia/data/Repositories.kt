@@ -32,6 +32,8 @@ interface HabitRepository {
     suspend fun allPauseIntervals(): Map<String, List<PauseInterval>>
     /** Hábitos com o status de hoje (check-in, streak, progresso semanal). */
     fun todayStatusFlow(timeZone: TimeZone = TimeZone.currentSystemDefault()): Flow<List<HabitStatus>>
+    /** Mesmo cálculo de [todayStatusFlow], mas para uma data qualquer (semana navegável). */
+    fun statusForDateFlow(dateYmd: String, timeZone: TimeZone = TimeZone.currentSystemDefault()): Flow<List<HabitStatus>>
 }
 
 interface CheckinRepository {

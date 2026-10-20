@@ -1,5 +1,12 @@
 package app.constancia.ui.home
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -25,7 +32,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -48,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -60,11 +70,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import app.constancia.AppDeps
 import app.constancia.domain.MOOD_LABELS
+import app.constancia.domain.SleepLagPattern
 import app.constancia.domain.dateLinePt
 import app.constancia.domain.dayFlowTasks
 import app.constancia.domain.diaryStreak
+import app.constancia.domain.fmt1
 import app.constancia.domain.greetingFor
 import app.constancia.domain.isDueOn
+import app.constancia.domain.sleepLagPattern
 import app.constancia.domain.timeSortKey
 import app.constancia.domain.weekFractions
 import app.constancia.model.FrequencyType
@@ -85,10 +98,12 @@ import app.constancia.ui.tasks.TodoRowWithActions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 
 private fun sessionTitle(session: Session): String = when (session) {
@@ -122,21 +137,29 @@ fun HomeScreen(
     deps: AppDeps,
     modifier: Modifier = Modifier,
     onOpenDiary: () -> Unit = {},
+    onOpenReports: () -> Unit = {},
 ) {
     val today = remember { todayYmd() }
     val todayDate = remember { today.toLocalDate() }
+    var selectedDate by remember { mutableStateOf(todayDate) }
+    val selYmd = selectedDate.toString()
+    val isToday = selectedDate == todayDate
     val scope = rememberCoroutineScope()
     var timerTarget by remember { mutableStateOf<HabitStatus?>(null) }
     var expandedTaskId by remember { mutableStateOf<String?>(null) }
     var quickText by remember { mutableStateOf("") }
 
-    val statuses by deps.habits.todayStatusFlow().collectAsState(initial = emptyList())
+    val statusFlow = remember(selectedDate) {
+        if (isToday) deps.habits.todayStatusFlow()
+        else deps.habits.statusForDateFlow(selYmd)
+    }
+    val statuses by statusFlow.collectAsState(initial = emptyList())
     val habits by deps.habits.habitsFlow().collectAsState(initial = emptyList())
     val allTasks by deps.tasks.allTasksFlow().collectAsState(initial = emptyList())
     val rangeFrom = remember { todayDate.minus(DatePeriod(days = 35)).toString() }
     val checkins by deps.checkins.checkinsInRangeFlow(rangeFrom, today)
         .collectAsState(initial = emptyList())
-    val todayEntry by deps.diary.entryForDateFlow(today)
+    val selEntry by remember(selectedDate) { deps.diary.entryForDateFlow(selYmd) }
         .collectAsState(initial = null)
     val diaryEntries by deps.diary.allEntriesFlow().collectAsState(initial = emptyList())
     val habitNames = habits.associate { it.id to it.name }
@@ -147,17 +170,18 @@ fun HomeScreen(
 
     val active = statuses.filter { !it.habit.paused }
     val paused = statuses.filter { it.habit.paused }
-    val dueToday = active.filter { isDueOn(it.habit, todayDate, createdFrom(it.habit)) }
+    val dueToday = active.filter { isDueOn(it.habit, selectedDate, createdFrom(it.habit)) }
     val doneCount = dueToday.count { it.isDoneToday }
     val bestStreak = statuses.maxOfOrNull { it.currentStreak } ?: 0
 
-    val dayTasks = dayFlowTasks(allTasks, todayDate)
+    val dayTasks = dayFlowTasks(allTasks, selectedDate)
     val tasksDone = dayTasks.count { it.done }
     val dayDone = doneCount + tasksDone
     val dayTotal = dueToday.size + dayTasks.size
 
     val fractions = weekFractions(habits, checkins, todayDate)
     val streakDays = diaryStreak(diaryEntries.map { it.date }.toSet(), todayDate)
+    val sleepPattern = sleepLagPattern(diaryEntries, allTasks, todayDate)
 
     fun quickAdd() {
         val title = quickText.trim()
@@ -175,33 +199,75 @@ fun HomeScreen(
             item {
                 Column(modifier = Modifier.padding(bottom = 16.dp)) {
                     Text(
-                        text = dateLine,
+                        text = if (isToday) dateLine else "Você está vendo outro dia",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(3.dp))
                     Text(
-                        text = greeting,
+                        text = if (isToday) greeting else dateLinePt(selectedDate),
                         style = MaterialTheme.typography.displaySmall,
                     )
                 }
             }
 
             item {
-                DayProgressCard(doneCount = doneCount, total = dueToday.size, bestStreak = bestStreak)
+                DayRingPanel(
+                    habitsDone = doneCount,
+                    habitsTotal = dueToday.size,
+                    tasksDone = tasksDone,
+                    tasksTotal = dayTasks.size,
+                    diaryDone = selEntry != null,
+                    bestStreak = bestStreak,
+                    isToday = isToday,
+                )
             }
 
             item {
-                WeekBarsCard(fractions = fractions, todayDate = todayDate)
+                WeekBarsCard(
+                    fractions = fractions,
+                    todayDate = todayDate,
+                    selectedDate = selectedDate,
+                    onSelectDate = { selectedDate = it },
+                )
+            }
+
+            if (!isToday) {
+                item(key = "back-today") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer)
+                            .clickable { selectedDate = todayDate }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Filled.ArrowBack,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(17.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Voltar para hoje",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
             }
 
             item {
                 DiaryCard(
-                    hasEntry = todayEntry != null,
-                    mood = todayEntry?.mood,
-                    energy = todayEntry?.energy,
-                    note = todayEntry?.note.orEmpty(),
-                    photoUri = todayEntry?.photoUri,
+                    title = if (isToday) "Diário de hoje" else "Diário do dia",
+                    hasEntry = selEntry != null,
+                    mood = selEntry?.mood,
+                    energy = selEntry?.energy,
+                    note = selEntry?.note.orEmpty(),
+                    photoUri = selEntry?.photoUri,
                     streak = streakDays,
                     onOpenDiary = onOpenDiary,
                 )
@@ -282,7 +348,7 @@ fun HomeScreen(
                             is FlowItem.HabitItem -> item(key = "habit-" + flowItem.status.habit.id) {
                                 HabitCard(
                                     status = flowItem.status,
-                                    today = today,
+                                    today = selYmd,
                                     deps = deps,
                                     scope = scope,
                                     onOpenTimer = { timerTarget = flowItem.status },
@@ -291,7 +357,7 @@ fun HomeScreen(
                             is FlowItem.TaskFlowItem -> item(key = "task-" + flowItem.task.id) {
                                 TodoRowWithActions(
                                     task = flowItem.task,
-                                    today = todayDate,
+                                    today = selectedDate,
                                     habitName = flowItem.task.habitId?.let { habitNames[it] },
                                     expanded = expandedTaskId == flowItem.task.id,
                                     onToggleExpand = {
@@ -358,12 +424,21 @@ fun HomeScreen(
                     PausedSection(paused = paused, deps = deps, scope = scope)
                 }
             }
+
+            if (sleepPattern != null) {
+                item(key = "pattern-detected") {
+                    PatternDetectedCard(
+                        pattern = sleepPattern,
+                        onOpenReports = onOpenReports,
+                    )
+                }
+            }
         }
 
         timerTarget?.let { target ->
             FocusTimerDialog(
                 status = target,
-                today = today,
+                today = selYmd,
                 deps = deps,
                 onDismiss = { timerTarget = null },
             )
@@ -392,10 +467,14 @@ private sealed interface FlowItem {
 private fun WeekBarsCard(
     fractions: List<Double>,
     todayDate: kotlinx.datetime.LocalDate,
+    selectedDate: kotlinx.datetime.LocalDate,
+    onSelectDate: (kotlinx.datetime.LocalDate) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val labels = listOf("S", "T", "Q", "Q", "S", "S", "D")
     val todayIdx = todayDate.isoDayNumberCompat() - 1 // seg=0
+    val monday = todayDate.minus(DatePeriod(days = todayIdx))
+    val selectedIdx = selectedDate.toEpochDays() - monday.toEpochDays()
     val valid = fractions.filter { it >= 0.0 }
     val pct = if (valid.isEmpty()) null else (valid.average() * 100).toInt()
 
@@ -434,11 +513,13 @@ private fun WeekBarsCard(
         ) {
             fractions.forEachIndexed { idx, frac ->
                 val isToday = idx == todayIdx
+                val isSelected = idx.toLong() == selectedIdx
+                val dayDate = monday.plus(DatePeriod(days = idx))
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
                         modifier = Modifier
                             .width(26.dp)
-                            .height(64.dp)
+                            .height(52.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(scheme.surfaceVariant),
                         contentAlignment = Alignment.BottomCenter,
@@ -447,7 +528,7 @@ private fun WeekBarsCard(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height((8 + frac * 52).dp)
+                                    .height((7 + frac * 41).dp)
                                     .background(
                                         if (isToday) scheme.secondary else scheme.primary,
                                         RoundedCornerShape(8.dp),
@@ -455,7 +536,38 @@ private fun WeekBarsCard(
                             )
                         }
                     }
-                    Spacer(Modifier.height(6.dp))
+                    Spacer(Modifier.height(7.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(
+                                if (isSelected) scheme.primary else Color.Transparent,
+                            )
+                            .border(
+                                BorderStroke(
+                                    1.5.dp,
+                                    when {
+                                        isSelected -> scheme.primary
+                                        isToday -> scheme.primary
+                                        else -> Color.Transparent
+                                    },
+                                ),
+                                CircleShape,
+                            )
+                            .clickable { onSelectDate(dayDate) },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = dayDate.dayOfMonth.toString(),
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = if (isSelected) scheme.onPrimary
+                            else scheme.onSurface,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         text = labels[idx],
                         style = MaterialTheme.typography.labelSmall.copy(
@@ -482,6 +594,7 @@ private fun WeekBarsCard(
 
 @Composable
 private fun DiaryCard(
+    title: String = "Diário de hoje",
     hasEntry: Boolean,
     mood: Int?,
     energy: Int?,
@@ -504,7 +617,7 @@ private fun DiaryCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Diário de hoje",
+                text = title,
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.ExtraBold,
                 ),
@@ -930,9 +1043,22 @@ private fun StepperButton(text: String, onClick: () -> Unit, tag: String? = null
 @Composable
 private fun CheckCircleButton(done: Boolean, onToggle: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    // Micro-interação: pulso rápido ao concluir (e ao desmarcar).
+    val pulse = remember { Animatable(1f) }
+    var firstRun by remember { mutableStateOf(true) }
+    LaunchedEffect(done) {
+        if (firstRun) {
+            firstRun = false
+            return@LaunchedEffect
+        }
+        pulse.snapTo(0.82f)
+        pulse.animateTo(1.12f, tween(durationMillis = 140))
+        pulse.animateTo(1f, tween(durationMillis = 200))
+    }
     Box(
         modifier = Modifier
             .size(46.dp)
+            .scale(pulse.value)
             .clip(CircleShape)
             .testTag("habit_check")
             .background(if (done) scheme.primary else Color.Transparent)
@@ -1223,6 +1349,266 @@ private fun FocusTimerDialog(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Painel "Seu dia" (UI/UX elevada do protótipo aprovado): anel animado que
+ * reage aos checks, contando hábitos devidos + tarefas do dia + diário.
+ * Ao fechar 100%, o cartão vira celebração (fundo roxo profundo, chama
+ * pulsando).
+ */
+@Composable
+private fun DayRingPanel(
+    habitsDone: Int,
+    habitsTotal: Int,
+    tasksDone: Int,
+    tasksTotal: Int,
+    diaryDone: Boolean,
+    bestStreak: Int,
+    isToday: Boolean,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val total = habitsTotal + tasksTotal + 1
+    val done = habitsDone + tasksDone + if (diaryDone) 1 else 0
+    val frac = if (total > 0) done.toFloat() / total else 0f
+    val celebrated = total > 0 && done >= total
+    val animFrac by animateFloatAsState(
+        targetValue = frac,
+        animationSpec = tween(durationMillis = 700),
+        label = "dayRing",
+    )
+    val title = when {
+        celebrated -> "Dia fechado. Constância pura."
+        frac >= 0.5f -> "Quase lá"
+        frac > 0f -> "Bom começo"
+        else -> "Vamos começar"
+    }
+    val missing = total - done
+    val subtitle = when {
+        celebrated ->
+            if (isToday) "Tudo feito por hoje. Descanse." else "Tudo feito naquele dia."
+        missing == 1 ->
+            if (isToday) "Falta 1 item pra fechar o dia" else "Faltou 1 item naquele dia"
+        else ->
+            if (isToday) "Faltam $missing itens pra fechar o dia"
+            else "Faltaram $missing itens naquele dia"
+    }
+    val content = if (celebrated) extra.onProgressCard else scheme.onSurface
+    val subContent = if (celebrated) extra.onProgressCard.copy(alpha = 0.75f)
+    else scheme.onSurfaceVariant
+    val trackColor = if (celebrated) extra.onProgressCard.copy(alpha = 0.22f)
+    else extra.heat0
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 14.dp)
+            .background(
+                if (celebrated) extra.progressCardBg else scheme.surface,
+                RoundedCornerShape(26.dp),
+            )
+            .border(
+                BorderStroke(1.dp, if (celebrated) extra.progressCardBg else scheme.outline),
+                RoundedCornerShape(26.dp),
+            )
+            .padding(horizontal = 18.dp, vertical = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.size(94.dp), contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.size(94.dp)) {
+                drawCircle(
+                    color = trackColor,
+                    style = Stroke(width = 9.dp.toPx()),
+                )
+                if (animFrac > 0f) {
+                    drawArc(
+                        color = if (celebrated) scheme.secondary else scheme.primary,
+                        startAngle = -90f,
+                        sweepAngle = 360f * animFrac,
+                        useCenter = false,
+                        style = Stroke(width = 9.dp.toPx(), cap = StrokeCap.Round),
+                    )
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = (animFrac * 100).roundToInt().toString() + "%",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = content,
+                )
+                Text(
+                    text = "do dia",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = subContent,
+                )
+            }
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp,
+                ),
+                color = content,
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = subContent,
+            )
+            Spacer(Modifier.height(9.dp))
+            Text(
+                text = "Hábitos $habitsDone de $habitsTotal · Tarefas $tasksDone de " +
+                    "$tasksTotal · Diário " + if (diaryDone) "feito" else "por fazer",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.SemiBold,
+                ),
+                color = content,
+            )
+            if (bestStreak > 0) {
+                Spacer(Modifier.height(9.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(
+                            if (celebrated) scheme.secondary.copy(alpha = 0.18f)
+                            else extra.amber.copy(alpha = 0.14f),
+                        )
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val flameScale = if (celebrated) {
+                        val transition = rememberInfiniteTransition(label = "flame")
+                        val s by transition.animateFloat(
+                            initialValue = 1f,
+                            targetValue = 1.22f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(durationMillis = 620),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                            label = "flameScale",
+                        )
+                        s
+                    } else {
+                        1f
+                    }
+                    Icon(
+                        Icons.Filled.Whatshot,
+                        contentDescription = null,
+                        tint = scheme.secondary,
+                        modifier = Modifier.size(15.dp).scale(flameScale),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        text = bestStreak.toString() +
+                            if (bestStreak == 1) " dia de sequência" else " dias de sequência",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                        color = if (celebrated) content else extra.amber,
+                    )
+                }
+            }
+            if (celebrated && isToday) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Você fechou tudo que se propôs hoje.",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = content,
+                )
+            }
+        }
+    }
+}
+
+/** Cartão "Padrão detectado" no fim da Hoje — ponte para os Relatórios. */
+@Composable
+private fun PatternDetectedCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp, bottom = 14.dp)
+            .background(scheme.surface, RoundedCornerShape(24.dp))
+            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(24.dp))
+            .padding(18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Filled.NightsStay,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                text = "Padrão detectado",
+                style = MaterialTheme.typography.labelLarge,
+                color = scheme.primary,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "Sono × dia seguinte",
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.ExtraBold,
+            ),
+        )
+        Spacer(Modifier.height(5.dp))
+        val body = buildString {
+            pattern.overdueRatio?.let { r ->
+                append("Em noites com menos de 6h30 de sono, você atrasa ")
+                append(fmt1(r) + "× mais tarefas no dia seguinte. ")
+            }
+            val ms = pattern.moodAfterShort
+            val me = pattern.moodAfterEnough
+            if (ms != null && me != null) {
+                append("Humor médio: " + fmt1(ms) + " após noite curta × ")
+                append(fmt1(me) + " após noite boa.")
+            }
+        }
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = extra.ink2,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "Base: ${pattern.shortNights} noites curtas × " +
+                "${pattern.enoughNights} noites boas · associação, não causa.",
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .clickable(onClick = onOpenReports)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "Ver relatórios",
+                style = MaterialTheme.typography.labelLarge,
+                color = scheme.primary,
+            )
+            Icon(
+                Icons.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
