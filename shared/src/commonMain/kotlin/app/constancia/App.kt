@@ -106,7 +106,11 @@ fun AppContent(deps: AppDeps) {
                         initialDate = navigator.diaryDate,
                         onConsumedInitialDate = { navigator.diaryDate = null },
                     )
-                    MaisSection.PROGRESSO -> ReportsScreen(deps, screenModifier)
+                    MaisSection.PROGRESSO -> ReportsScreen(
+                        deps = deps,
+                        modifier = screenModifier,
+                        onOpenPaywall = { navigator.showPaywall = true },
+                    )
                     MaisSection.DESAFIOS -> ChallengesScreen(deps, screenModifier)
                     null -> MoreScreen(
                         deps,
