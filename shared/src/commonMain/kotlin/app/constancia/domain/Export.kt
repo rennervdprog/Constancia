@@ -33,12 +33,22 @@ fun buildExportJson(
     sb.append("],\"tasks\":[")
     sb.append(tasks.joinToString(",") {
         "{\"title\":\"${esc(it.title)}\",\"date\":\"${it.date}\"," +
-            "\"done\":${it.done},\"dueTime\":${it.dueTime?.let { t -> "\"${esc(t)}\"" } ?: "null"}}"
+            "\"done\":${it.done},\"dueTime\":${it.dueTime?.let { t -> "\"${esc(t)}\"" } ?: "null"}," +
+            "\"project\":\"${it.project.name.lowercase()}\",\"priority\":${it.priority}," +
+            "\"dueDate\":${it.dueDate?.let { d -> "\"$d\"" } ?: "null"}," +
+            "\"session\":\"${it.session}\",\"repeat\":\"${esc(it.repeatRule)}\"," +
+            "\"note\":\"${esc(it.note)}\",\"habitId\":${it.habitId?.let { h -> "\"$h\"" } ?: "null"}," +
+            "\"subtasks\":[${it.subtasks.joinToString(",") { s ->
+                "{\"title\":\"${esc(s.title)}\",\"done\":${s.done}}"
+            }}]}"
     })
     sb.append("],\"diary\":[")
     sb.append(diary.joinToString(",") {
         "{\"date\":\"${it.date}\",\"mood\":${it.mood ?: "null"}," +
-            "\"note\":\"${esc(it.note)}\"}"
+            "\"note\":\"${esc(it.note)}\",\"energy\":${it.energy ?: "null"}," +
+            "\"sleepHours\":${it.sleepHours ?: "null"}," +
+            "\"tags\":\"${esc(it.tags.joinToString(","))}\"," +
+            "\"prompt\":${it.prompt?.let { p -> "\"${esc(p)}\"" } ?: "null"}}"
     })
     sb.append("]}")
     return sb.toString()

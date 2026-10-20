@@ -6,8 +6,11 @@ import app.constancia.model.Checkin
 import app.constancia.model.DiaryEntry
 import app.constancia.model.Habit
 import app.constancia.model.HabitStatus
+import app.constancia.model.NewTask
 import app.constancia.model.PauseInterval
+import app.constancia.model.Session
 import app.constancia.model.TaskItem
+import app.constancia.model.TaskProject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.TimeZone
 
@@ -42,15 +45,41 @@ interface CheckinRepository {
 
 interface TaskRepository {
     fun tasksForDateFlow(dateYmd: String): Flow<List<TaskItem>>
-    suspend fun add(title: String, dateYmd: String, dueTime: String?)
+    /** Todas as tarefas (com subtarefas) — base das visões estilo Todoist. */
+    fun allTasksFlow(): Flow<List<TaskItem>>
+    suspend fun getById(id: String): TaskItem?
+    /** Cria uma tarefa completa (com subtarefas). Retorna o id criado. */
+    suspend fun add(task: NewTask): String
+    /** Captura rápida: só o título; o resto assume os padrões da visão atual. */
+    suspend fun quickAdd(
+        title: String,
+        dueDate: String?,
+        project: TaskProject = TaskProject.ENTRADA,
+        session: Session = Session.TARDE,
+    ): String
     suspend fun setDone(id: String, done: Boolean)
+    suspend fun setPriority(id: String, priority: Int)
+    suspend fun setDueDate(id: String, dueDate: String?)
+    suspend fun addSubtask(taskId: String, title: String)
+    suspend fun setSubtaskDone(subtaskId: String, done: Boolean)
     suspend fun delete(id: String)
 }
 
 interface DiaryRepository {
     fun entryForDateFlow(dateYmd: String): Flow<DiaryEntry?>
-    suspend fun save(dateYmd: String, mood: Int?, note: String)
+    suspend fun save(
+        dateYmd: String,
+        mood: Int?,
+        note: String,
+        energy: Int? = null,
+        sleepHours: Double? = null,
+        tags: List<String> = emptyList(),
+        photoUri: String? = null,
+        prompt: String? = null,
+    )
     fun recentFlow(limit: Int): Flow<List<DiaryEntry>>
+    /** Todos os registros, do mais recente ao mais antigo. */
+    fun allEntriesFlow(): Flow<List<DiaryEntry>>
 }
 
 interface ChallengeRepository {

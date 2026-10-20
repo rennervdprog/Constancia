@@ -1,0 +1,29 @@
+-- Migração 2 -> 3: tarefas estilo Todoist (projeto, prioridade, prazo,
+-- sessão, recorrência, anotação, vínculo com hábito) + subtarefas,
+-- e diário turbinado (energia, sono, etiquetas, foto, pergunta do dia).
+ALTER TABLE task_item ADD COLUMN project TEXT NOT NULL DEFAULT 'entrada';
+ALTER TABLE task_item ADD COLUMN priority INTEGER NOT NULL DEFAULT 2;
+ALTER TABLE task_item ADD COLUMN due_date TEXT;
+ALTER TABLE task_item ADD COLUMN session TEXT NOT NULL DEFAULT 'TARDE';
+ALTER TABLE task_item ADD COLUMN repeat_rule TEXT NOT NULL DEFAULT '';
+ALTER TABLE task_item ADD COLUMN note TEXT NOT NULL DEFAULT '';
+ALTER TABLE task_item ADD COLUMN habit_id TEXT REFERENCES habit(id) ON DELETE SET NULL;
+-- Tarefas antigas: o prazo é o próprio dia a que elas pertenciam.
+UPDATE task_item SET due_date = date;
+CREATE INDEX task_due_date ON task_item(due_date);
+
+CREATE TABLE subtask(
+  id TEXT NOT NULL PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES task_item(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX subtask_task ON subtask(task_id);
+
+ALTER TABLE diary_entry ADD COLUMN energy INTEGER;
+ALTER TABLE diary_entry ADD COLUMN sleep_hours REAL;
+ALTER TABLE diary_entry ADD COLUMN tags TEXT NOT NULL DEFAULT '';
+ALTER TABLE diary_entry ADD COLUMN photo_uri TEXT;
+ALTER TABLE diary_entry ADD COLUMN prompt TEXT;

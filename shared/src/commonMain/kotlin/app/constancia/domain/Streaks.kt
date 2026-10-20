@@ -7,6 +7,7 @@ import app.constancia.model.PauseInterval
 import app.constancia.model.toLocalDate
 import app.constancia.model.isoDayNumberCompat
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
@@ -139,4 +140,80 @@ fun weekDoneCount(
         val date = d.toLocalDate()
         date >= weekStart && date <= weekEnd
     }
+}
+
+/**
+ * Maior sequência histórica (recorde), para os cartões da aba Hábitos.
+ * - DAILY / DAYS_OF_WEEK: maior corrida de dias consecutivos feitos
+ *   (dias perdoados por pausa não contam, mas também não quebram).
+ * - WEEKLY_X: maior corrida de semanas consecutivas batendo a meta.
+ */
+fun bestStreak(
+    habit: Habit,
+    doneDates: Set<String>,
+    forgivenDates: Set<String> = emptySet(),
+): Int {
+    if (doneDates.isEmpty()) return 0
+    return when (habit.frequencyType) {
+        FrequencyType.WEEKLY_X -> bestWeeklyStreak(habit, doneDates, forgivenDates)
+        FrequencyType.DAILY, FrequencyType.DAYS_OF_WEEK -> {
+            val sorted = doneDates.map { it.toLocalDate() }.sorted()
+            var best = 1
+            var run = 1
+            for (i in 1 until sorted.size) {
+                val prev = sorted[i - 1]
+                val cur = sorted[i]
+                val gap = cur.toEpochDays() - prev.toEpochDays()
+                if (gap == 1L) {
+                    run++
+                } else if (gap > 1L) {
+                    // O buraco só não quebra se TODOS os dias dele forem perdoados.
+                    var d = prev.plus(DatePeriod(days = 1))
+                    var allForgiven = true
+                    while (d < cur) {
+                        if (!forgivenDates.contains(d.toString())) {
+                            allForgiven = false
+                            break
+                        }
+                        d = d.plus(DatePeriod(days = 1))
+                    }
+                    run = if (allForgiven) run + 1 else 1
+                }
+                if (run > best) best = run
+            }
+            best
+        }
+    }
+}
+
+private fun bestWeeklyStreak(
+    habit: Habit,
+    doneDates: Set<String>,
+    forgivenDates: Set<String>,
+): Int {
+    val weeks = doneDates.map { weekStartOf(it.toLocalDate()) }.toSet().sorted()
+    if (weeks.isEmpty()) return 0
+    fun weekOk(ws: LocalDate): Boolean {
+        val we = ws.plus(DatePeriod(days = 6))
+        val count = (doneDates + forgivenDates).count { ymd ->
+            val d = ymd.toLocalDate()
+            d >= ws && d <= we
+        }
+        return count >= habit.weeklyTarget
+    }
+    var best = 0
+    var run = 0
+    var cursor = weeks.first()
+    val last = weeks.last()
+    var guard = 0
+    while (cursor <= last && guard++ < 520) {
+        if (weekOk(cursor)) {
+            run++
+            if (run > best) best = run
+        } else {
+            run = 0
+        }
+        cursor = cursor.plus(DatePeriod(days = 7))
+    }
+    return best
 }

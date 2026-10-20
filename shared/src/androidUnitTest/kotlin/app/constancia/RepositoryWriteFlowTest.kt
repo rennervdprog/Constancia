@@ -9,11 +9,17 @@ import app.constancia.db.ConstanciaDb
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
+import app.constancia.model.NewTask
 import app.constancia.model.Session
+import app.constancia.model.TaskProject
+import app.constancia.model.toLocalDate
+import app.constancia.model.toYmd
 import app.constancia.model.todayYmd
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -65,7 +71,7 @@ class RepositoryWriteFlowTest {
         val date = todayYmd(TimeZone.UTC)
         assertTrue(tasks.tasksForDateFlow(date).first().isEmpty())
 
-        tasks.add("Comprar pão", date, null)
+        tasks.quickAdd("Comprar pão", dueDate = date)
 
         val list = tasks.tasksForDateFlow(date).first()
         assertEquals(1, list.size)
@@ -77,12 +83,122 @@ class RepositoryWriteFlowTest {
     fun setTaskDoneUpdatesFlow() = runBlocking {
         val tasks = TaskRepositoryImpl(testDb())
         val date = todayYmd(TimeZone.UTC)
-        tasks.add("Ler 10 páginas", date, null)
+        tasks.quickAdd("Ler 10 páginas", dueDate = date)
 
         val id = tasks.tasksForDateFlow(date).first().single().id
         tasks.setDone(id, true)
 
         assertTrue(tasks.tasksForDateFlow(date).first().single().done)
+    }
+
+    @Test
+    fun addFullTaskWithSubtasksAppearsInAllFlow() = runBlocking {
+        val tasks = TaskRepositoryImpl(testDb())
+        val date = todayYmd(TimeZone.UTC)
+        tasks.add(
+            NewTask(
+                title = "Enviar a proposta",
+                project = TaskProject.TRABALHO,
+                priority = 1,
+                dueDate = date,
+                subtaskTitles = listOf("Rascunho", "Revisar", "Enviar"),
+            ),
+        )
+
+        val all = tasks.allTasksFlow().first()
+        assertEquals(1, all.size)
+        val created = all.single()
+        assertEquals(TaskProject.TRABALHO, created.project)
+        assertEquals(1, created.priority)
+        assertEquals(date, created.dueDate)
+        assertEquals(3, created.subtasks.size)
+        assertEquals("Rascunho", created.subtasks[0].title)
+    }
+
+    @Test
+    fun completingAllSubtasksCompletesTask() = runBlocking {
+        val tasks = TaskRepositoryImpl(testDb())
+        val date = todayYmd(TimeZone.UTC)
+        val id = tasks.add(
+            NewTask(
+                title = "Faxina",
+                dueDate = date,
+                subtaskTitles = listOf("Cozinha", "Banheiro"),
+            ),
+        )
+        val subs = tasks.allTasksFlow().first().single().subtasks
+        tasks.setSubtaskDone(subs[0].id, true)
+        assertFalse(tasks.allTasksFlow().first().single().done)
+        tasks.setSubtaskDone(subs[1].id, true)
+        assertTrue(tasks.allTasksFlow().first().single().done)
+        assertEquals(id, tasks.allTasksFlow().first().single().id)
+    }
+
+    @Test
+    fun completingRecurringTaskSpawnsNextOccurrence() = runBlocking {
+        val tasks = TaskRepositoryImpl(testDb())
+        val date = todayYmd(TimeZone.UTC)
+        val id = tasks.add(
+            NewTask(
+                title = "Regar as plantas",
+                dueDate = date,
+                repeatRule = "Todo dia",
+            ),
+        )
+        tasks.setDone(id, true)
+
+        val all = tasks.allTasksFlow().first()
+        assertEquals(2, all.size)
+        val next = all.first { !it.done }
+        val expected = date.toLocalDate().plus(DatePeriod(days = 1)).toYmd()
+        assertEquals(expected, next.dueDate)
+        assertEquals("Todo dia", next.repeatRule)
+    }
+
+    @Test
+    fun completingLinkedTaskMarksHabit() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        val tasks = TaskRepositoryImpl(db, checkins)
+        habits.save(habit())
+        val date = todayYmd(TimeZone.UTC)
+        val id = tasks.add(
+            NewTask(
+                title = "Beber água (tarefa)",
+                dueDate = date,
+                habitId = "h1",
+            ),
+        )
+        assertFalse(habits.todayStatusFlow(TimeZone.UTC).first().single().isDoneToday)
+
+        tasks.setDone(id, true)
+
+        assertTrue(habits.todayStatusFlow(TimeZone.UTC).first().single().isDoneToday)
+    }
+
+    @Test
+    fun togglingHabitSyncsLinkedTasks() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        val tasks = TaskRepositoryImpl(db, checkins)
+        habits.save(habit())
+        val date = todayYmd(TimeZone.UTC)
+        tasks.add(
+            NewTask(
+                title = "Beber água (tarefa)",
+                dueDate = date,
+                habitId = "h1",
+            ),
+        )
+        assertFalse(tasks.allTasksFlow().first().single().done)
+
+        checkins.toggle("h1", date)
+        assertTrue(tasks.allTasksFlow().first().single().done)
+
+        checkins.toggle("h1", date)
+        assertFalse(tasks.allTasksFlow().first().single().done)
     }
 
     // Bug #2: check do hábito — toggle persiste e o todayStatusFlow reemite.
@@ -150,5 +266,68 @@ class RepositoryWriteFlowTest {
         assertEquals(5, entry.mood)
         assertEquals("Melhorou", entry.note)
         assertEquals(1, diary.recentFlow(30).first().size)
+    }
+
+    @Test
+    fun saveDiaryTurboFieldsRoundTrip() = runBlocking {
+        val diary = DiaryRepositoryImpl(testDb())
+        val date = todayYmd(TimeZone.UTC)
+        diary.save(
+            dateYmd = date,
+            mood = 4,
+            note = "Corri de manhã",
+            energy = 5,
+            sleepHours = 7.5,
+            tags = listOf("Treino", "Praia"),
+            photoUri = "/data/fotos/hoje.jpg",
+            prompt = "Qual foi o melhor momento de hoje?",
+        )
+
+        val entry = diary.entryForDateFlow(date).first()
+        assertNotNull(entry)
+        assertEquals(5, entry.energy)
+        assertEquals(7.5, entry.sleepHours)
+        assertEquals(listOf("Treino", "Praia"), entry.tags)
+        assertEquals("/data/fotos/hoje.jpg", entry.photoUri)
+        assertEquals("Qual foi o melhor momento de hoje?", entry.prompt)
+        assertEquals(1, diary.allEntriesFlow().first().size)
+    }
+
+    // Migração 2 -> 3: banco antigo (sem as colunas novas) migra sem perder dados.
+    @Test
+    fun migrationToLatestAddsTaskAndDiaryColumns() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        // Schema antigo (v2): task_item e diary_entry sem as colunas turbinadas.
+        driver.execute(
+            null,
+            "CREATE TABLE task_item(" +
+                "id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, due_time TEXT, " +
+                "done INTEGER NOT NULL DEFAULT 0, date TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "CREATE TABLE diary_entry(" +
+                "id TEXT NOT NULL PRIMARY KEY, date TEXT NOT NULL UNIQUE, mood INTEGER, " +
+                "note TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO task_item(id, title, due_time, done, date, created_at, sort_order) " +
+                "VALUES('t1', 'Tarefa antiga', NULL, 0, '2026-10-20', 'agora', 0)",
+            0,
+        )
+
+        ConstanciaDb.Schema.migrate(driver, 1, ConstanciaDb.Schema.version)
+
+        val db = ConstanciaDb(driver)
+        val row = db.constanciaDbQueries.selectTaskById("t1").executeAsOne()
+        assertEquals("Tarefa antiga", row.title)
+        // A migração preenche o prazo com o dia da tarefa e usa os defaults.
+        assertEquals("2026-10-20", row.due_date)
+        assertEquals("entrada", row.project)
+        assertEquals(2L, row.priority)
     }
 }

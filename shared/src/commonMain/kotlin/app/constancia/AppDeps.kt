@@ -48,7 +48,7 @@ fun rememberAppDeps(driverFactory: DatabaseDriverFactory): AppDeps {
         val deps = AppDeps(
             habits = habits,
             checkins = checkins,
-            tasks = TaskRepositoryImpl(db),
+            tasks = TaskRepositoryImpl(db, checkins),
             diary = DiaryRepositoryImpl(db),
             challenges = ChallengeRepositoryImpl(db),
             sync = LocalSyncRepository(),

@@ -5,6 +5,7 @@ import app.constancia.db.Checkin as CheckinRow
 import app.constancia.db.Diary_entry as DiaryEntryRow
 import app.constancia.db.Habit as HabitRow
 import app.constancia.db.Pause_interval as PauseIntervalRow
+import app.constancia.db.Subtask as SubtaskRow
 import app.constancia.db.Task_item as TaskItemRow
 import app.constancia.model.Challenge
 import app.constancia.model.ChallengeStatus
@@ -15,7 +16,9 @@ import app.constancia.model.GoalType
 import app.constancia.model.Habit
 import app.constancia.model.PauseInterval
 import app.constancia.model.Session
+import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
+import app.constancia.model.TaskProject
 
 // Conversoes entidade SQLDelight -> modelo de dominio.
 // Colunas INTEGER do SQLite chegam como Long; flags 0/1 viram Boolean.
@@ -53,12 +56,28 @@ internal fun PauseIntervalRow.toModel(): PauseInterval = PauseInterval(
     endDate = end_date,
 )
 
-internal fun TaskItemRow.toModel(): TaskItem = TaskItem(
+internal fun TaskItemRow.toModel(subtasks: List<Subtask> = emptyList()): TaskItem = TaskItem(
     id = id,
     title = title,
     dueTime = due_time,
     done = done.isSet(),
     date = date,
+    project = project.toTaskProject(),
+    priority = priority.toInt(),
+    dueDate = due_date,
+    session = session.toSession(),
+    repeatRule = repeat_rule,
+    note = note,
+    habitId = habit_id,
+    subtasks = subtasks,
+)
+
+internal fun SubtaskRow.toModel(): Subtask = Subtask(
+    id = id,
+    taskId = task_id,
+    title = title,
+    done = done.isSet(),
+    sortOrder = sort_order.toInt(),
 )
 
 internal fun DiaryEntryRow.toModel(): DiaryEntry = DiaryEntry(
@@ -66,6 +85,11 @@ internal fun DiaryEntryRow.toModel(): DiaryEntry = DiaryEntry(
     date = date,
     mood = mood?.toInt(),
     note = note,
+    energy = energy?.toInt(),
+    sleepHours = sleep_hours,
+    tags = tags.toTagList(),
+    photoUri = photo_uri,
+    prompt = prompt,
 )
 
 internal fun ChallengeRow.toModel(): Challenge = Challenge(
@@ -99,6 +123,18 @@ internal fun String.toSession(): Session =
 
 internal fun String.toChallengeStatus(): ChallengeStatus =
     ChallengeStatus.entries.firstOrNull { it.name == this } ?: ChallengeStatus.AVAILABLE
+
+internal fun String.toTaskProject(): TaskProject =
+    TaskProject.entries.firstOrNull { it.name.lowercase() == this } ?: TaskProject.ENTRADA
+
+internal fun TaskProject.toDbValue(): String = name.lowercase()
+
+// tags do diário: csv "Trabalho,Treino" -> List<String>; vazio -> lista vazia.
+internal fun String.toTagList(): List<String> =
+    if (isBlank()) emptyList()
+    else split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
+internal fun List<String>.toTagCsv(): String = joinToString(",")
 
 // days_of_week: csv "1,3,5" (1=domingo) -> List<Int>; vazio -> lista vazia.
 internal fun String.toDayList(): List<Int> =

@@ -33,17 +33,40 @@ CREATE TABLE task_item(
   title TEXT NOT NULL,
   due_time TEXT, -- HH:mm ou null
   done INTEGER NOT NULL DEFAULT 0,
-  date TEXT NOT NULL, -- yyyy-MM-dd
+  date TEXT NOT NULL, -- yyyy-MM-dd (criação/pertencimento)
+  project TEXT NOT NULL DEFAULT 'entrada', -- entrada|pessoal|trabalho|casa|saude
+  priority INTEGER NOT NULL DEFAULT 2, -- 1=P1 alta, 2=P2 média, 3=P3 baixa
+  due_date TEXT, -- yyyy-MM-dd ou null = sem data (fica na Entrada)
+  session TEXT NOT NULL DEFAULT 'TARDE', -- MANHA | TARDE | NOITE
+  repeat_rule TEXT NOT NULL DEFAULT '', -- '' | 'Todo dia' | 'Seg a Sex' | 'Semanal'
+  note TEXT NOT NULL DEFAULT '',
+  habit_id TEXT REFERENCES habit(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX task_date ON task_item(date);
+CREATE INDEX task_due_date ON task_item(due_date);
+
+CREATE TABLE subtask(
+  id TEXT NOT NULL PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES task_item(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX subtask_task ON subtask(task_id);
 
 CREATE TABLE diary_entry(
   id TEXT NOT NULL PRIMARY KEY,
   date TEXT NOT NULL UNIQUE, -- yyyy-MM-dd
   mood INTEGER, -- 1..5 ou null
   note TEXT NOT NULL DEFAULT '',
+  energy INTEGER, -- 1..5 ou null
+  sleep_hours REAL, -- horas de sono ou null
+  tags TEXT NOT NULL DEFAULT '', -- csv de etiquetas do dia
+  photo_uri TEXT, -- caminho local da foto do dia ou null
+  prompt TEXT, -- pergunta do dia ou null
   updated_at TEXT NOT NULL
 );
 
@@ -132,17 +155,49 @@ DELETE FROM checkin WHERE habit_id = ? AND date = ?;
 
 -- Tarefas
 selectTasksForDate:
-SELECT * FROM task_item WHERE date = ? ORDER BY done ASC, sort_order ASC, created_at ASC;
+SELECT * FROM task_item
+WHERE due_date = ? OR (due_date IS NULL AND date = ?)
+ORDER BY done ASC, sort_order ASC, created_at ASC;
+
+selectAllTasks:
+SELECT * FROM task_item ORDER BY created_at ASC;
+
+selectTaskById:
+SELECT * FROM task_item WHERE id = ?;
 
 insertTask:
-INSERT INTO task_item(id, title, due_time, done, date, created_at, sort_order)
-VALUES(?, ?, ?, ?, ?, ?, ?);
+INSERT INTO task_item(id, title, due_time, done, date, project, priority, due_date,
+  session, repeat_rule, note, habit_id, created_at, sort_order)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 setTaskDone:
 UPDATE task_item SET done = ? WHERE id = ?;
 
+setTaskPriority:
+UPDATE task_item SET priority = ? WHERE id = ?;
+
+-- Ao mudar o prazo, o "date" acompanha (é o dia a que a tarefa pertence).
+setTaskDueDate:
+UPDATE task_item SET due_date = ?, date = ? WHERE id = ?;
+
+-- Sincronia do vínculo tarefa<->hábito: concluir o hábito marca as tarefas
+-- vinculadas com prazo em (hoje, ontem) — e desmarcar desmarca junto.
+setLinkedTasksDone:
+UPDATE task_item SET done = ? WHERE habit_id = ? AND due_date IN (?, ?);
+
 deleteTask:
 DELETE FROM task_item WHERE id = ?;
+
+-- Subtarefas
+selectAllSubtasks:
+SELECT * FROM subtask ORDER BY task_id ASC, sort_order ASC, created_at ASC;
+
+insertSubtask:
+INSERT INTO subtask(id, task_id, title, done, sort_order, created_at)
+VALUES(?, ?, ?, ?, ?, ?);
+
+setSubtaskDone:
+UPDATE subtask SET done = ? WHERE id = ?;
 
 -- Diário
 selectDiaryForDate:
@@ -151,9 +206,13 @@ SELECT * FROM diary_entry WHERE date = ?;
 selectDiaryRecent:
 SELECT * FROM diary_entry ORDER BY date DESC LIMIT ?;
 
+selectAllDiary:
+SELECT * FROM diary_entry ORDER BY date DESC;
+
 upsertDiary:
-INSERT OR REPLACE INTO diary_entry(id, date, mood, note, updated_at)
-VALUES(?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO diary_entry(id, date, mood, note, energy, sleep_hours,
+  tags, photo_uri, prompt, updated_at)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- Desafios
 selectChallenges:

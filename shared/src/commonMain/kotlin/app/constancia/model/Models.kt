@@ -57,12 +57,52 @@ data class HabitStatus(
     val weekDone: Int, // check-ins na semana atual (para WEEKLY_X)
 )
 
+/** Listas/projetos das tarefas (estilo Todoist), com a cor de cada um. */
+enum class TaskProject(val label: String, val colorHex: Long) {
+    ENTRADA("Entrada", 0xFF66766A),
+    PESSOAL("Pessoal", 0xFF0B7A55),
+    TRABALHO("Trabalho", 0xFF2563EB),
+    CASA("Casa", 0xFFE86A17),
+    SAUDE("Saúde", 0xFF0E7490),
+}
+
+/** Prioridades: 1 = alta (P1), 2 = média (P2), 3 = baixa (P3). */
+data class Subtask(
+    val id: String,
+    val taskId: String,
+    val title: String,
+    val done: Boolean,
+    val sortOrder: Int,
+)
+
 data class TaskItem(
     val id: String,
     val title: String,
     val dueTime: String?, // HH:mm ou null
     val done: Boolean,
-    val date: String, // yyyy-MM-dd
+    val date: String, // yyyy-MM-dd (dia de criação/pertencimento legado)
+    val project: TaskProject = TaskProject.ENTRADA,
+    val priority: Int = 2, // 1=P1 alta, 2=P2 média, 3=P3 baixa
+    val dueDate: String? = null, // yyyy-MM-dd ou null = sem data (Entrada)
+    val session: Session = Session.TARDE,
+    val repeatRule: String = "", // "" | "Todo dia" | "Seg a Sex" | "Semanal"
+    val note: String = "",
+    val habitId: String? = null, // tarefa vinculada a um hábito
+    val subtasks: List<Subtask> = emptyList(),
+)
+
+/** Dados para criar uma tarefa nova (formulário completo ou captura rápida). */
+data class NewTask(
+    val title: String,
+    val note: String = "",
+    val project: TaskProject = TaskProject.ENTRADA,
+    val priority: Int = 2,
+    val dueDate: String? = null,
+    val session: Session = Session.TARDE,
+    val dueTime: String? = null,
+    val repeatRule: String = "",
+    val habitId: String? = null,
+    val subtaskTitles: List<String> = emptyList(),
 )
 
 data class DiaryEntry(
@@ -70,6 +110,11 @@ data class DiaryEntry(
     val date: String, // yyyy-MM-dd
     val mood: Int?, // 1..5 ou null
     val note: String,
+    val energy: Int? = null, // 1..5 ou null
+    val sleepHours: Double? = null, // horas de sono da última noite
+    val tags: List<String> = emptyList(), // etiquetas do dia
+    val photoUri: String? = null, // caminho local da foto do dia
+    val prompt: String? = null, // pergunta do dia respondida
 )
 
 enum class ChallengeStatus { AVAILABLE, ACTIVE, DONE, GIVEN_UP }

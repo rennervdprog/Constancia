@@ -597,7 +597,7 @@ private fun TasksSection(
         val title = newTaskText.trim()
         if (title.isEmpty()) return
         newTaskText = ""
-        scope.launch { deps.tasks.add(title, today, null) }
+        scope.launch { deps.tasks.quickAdd(title, dueDate = today) }
     }
 
     Row(

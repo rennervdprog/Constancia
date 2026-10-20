@@ -22,19 +22,38 @@ class DiaryRepositoryImpl(private val db: ConstanciaDb) : DiaryRepository {
             .mapToList(Dispatchers.Default)
             .map { rows -> rows.firstOrNull()?.toModel() }
 
-    override suspend fun save(dateYmd: String, mood: Int?, note: String): Unit =
-        withContext(Dispatchers.Default) {
-            queries.upsertDiary(
-                newId(),
-                dateYmd,
-                mood?.toLong(),
-                note,
-                Clock.System.now().toString(),
-            )
-        }
+    override suspend fun save(
+        dateYmd: String,
+        mood: Int?,
+        note: String,
+        energy: Int?,
+        sleepHours: Double?,
+        tags: List<String>,
+        photoUri: String?,
+        prompt: String?,
+    ): Unit = withContext(Dispatchers.Default) {
+        queries.upsertDiary(
+            newId(),
+            dateYmd,
+            mood?.toLong(),
+            note,
+            energy?.toLong(),
+            sleepHours,
+            tags.toTagCsv(),
+            photoUri,
+            prompt,
+            Clock.System.now().toString(),
+        )
+    }
 
     override fun recentFlow(limit: Int): Flow<List<DiaryEntry>> =
         queries.selectDiaryRecent(limit.toLong())
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override fun allEntriesFlow(): Flow<List<DiaryEntry>> =
+        queries.selectAllDiary()
             .asFlow()
             .mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toModel() } }
