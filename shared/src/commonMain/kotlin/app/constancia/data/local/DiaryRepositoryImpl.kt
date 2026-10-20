@@ -57,4 +57,9 @@ class DiaryRepositoryImpl(private val db: ConstanciaDb) : DiaryRepository {
             .asFlow()
             .mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toModel() } }
+
+    override suspend fun delete(dateYmd: String): Unit =
+        withContext(Dispatchers.Default) {
+            queries.deleteDiaryForDate(dateYmd)
+        }
 }

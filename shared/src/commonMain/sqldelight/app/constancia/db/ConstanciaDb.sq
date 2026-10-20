@@ -214,6 +214,9 @@ INSERT OR REPLACE INTO diary_entry(id, date, mood, note, energy, sleep_hours,
   tags, photo_uri, prompt, updated_at)
 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
+deleteDiaryForDate:
+DELETE FROM diary_entry WHERE date = ?;
+
 -- Desafios
 selectChallenges:
 SELECT * FROM challenge ORDER BY status ASC;

@@ -80,6 +80,8 @@ interface DiaryRepository {
     fun recentFlow(limit: Int): Flow<List<DiaryEntry>>
     /** Todos os registros, do mais recente ao mais antigo. */
     fun allEntriesFlow(): Flow<List<DiaryEntry>>
+    /** Apaga o registro de um dia (botão "Excluir registro" do diário). */
+    suspend fun delete(dateYmd: String)
 }
 
 interface ChallengeRepository {

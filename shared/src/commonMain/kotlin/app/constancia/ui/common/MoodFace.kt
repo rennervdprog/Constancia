@@ -65,3 +65,6 @@ fun MoodFace(mood: Int, size: Dp, modifier: Modifier = Modifier) {
         drawPath(mouth, color = color, style = Stroke(width = 1.9f * s))
     }
 }
+
+/** Cor do humor (1..5) como [Color] — mesma paleta do protótipo. */
+fun moodColor(level: Int): Color = Color(MOOD_COLORS_HEX[level.coerceIn(1, 5) - 1])

@@ -26,6 +26,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
@@ -52,7 +55,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
-fun MoreScreen(deps: AppDeps, modifier: Modifier = Modifier, onOpenPaywall: () -> Unit = {}) {
+fun MoreScreen(
+    deps: AppDeps,
+    modifier: Modifier = Modifier,
+    onOpenPaywall: () -> Unit = {},
+    onOpenSection: (app.constancia.ui.navigation.MaisSection) -> Unit = {},
+) {
     val today = remember { todayYmd() }
     val scope = rememberCoroutineScope()
     val darkTheme by deps.prefs.darkThemeFlow().collectAsState(initial = false)
@@ -83,6 +91,39 @@ fun MoreScreen(deps: AppDeps, modifier: Modifier = Modifier, onOpenPaywall: () -
                 )
                 Spacer(Modifier.height(5.dp))
             }
+        }
+        item {
+            NavRow(
+                icon = Icons.Filled.MenuBook,
+                title = "Diário",
+                subtitle = "Humor, energia, sono e padrões",
+                tag = "mais_diario",
+                onClick = {
+                    onOpenSection(app.constancia.ui.navigation.MaisSection.DIARIO)
+                },
+            )
+        }
+        item {
+            NavRow(
+                icon = Icons.Filled.BarChart,
+                title = "Progresso",
+                subtitle = "Mapa de calor geral e relatórios",
+                tag = "mais_progresso",
+                onClick = {
+                    onOpenSection(app.constancia.ui.navigation.MaisSection.PROGRESSO)
+                },
+            )
+        }
+        item {
+            NavRow(
+                icon = Icons.Filled.EmojiEvents,
+                title = "Desafios",
+                subtitle = "Pacotes de 7, 21 e 30 dias",
+                tag = "mais_desafios",
+                onClick = {
+                    onOpenSection(app.constancia.ui.navigation.MaisSection.DESAFIOS)
+                },
+            )
         }
         item {
             SettingRow {
@@ -228,6 +269,49 @@ fun MoreScreen(deps: AppDeps, modifier: Modifier = Modifier, onOpenPaywall: () -
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+}
+
+/** Linha de navegação da aba Mais (Diário/Progresso/Desafios). */
+@Composable
+private fun NavRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    tag: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp))
+            .testTag(tag)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(
+            Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
