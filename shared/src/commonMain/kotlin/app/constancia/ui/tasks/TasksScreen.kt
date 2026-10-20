@@ -49,6 +49,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
 import app.constancia.domain.TaskView
 import app.constancia.domain.doneTasks
@@ -177,6 +178,42 @@ fun TasksScreen(
                 }
             }
             Spacer(Modifier.height(12.dp))
+        }
+
+        // Legenda compacta de prioridades e projetos (protótipo aprovado).
+        item {
+            Column(modifier = Modifier.padding(bottom = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Prioridades",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    LegendDot(priorityColor(1), "P1 · alta")
+                    Spacer(Modifier.width(12.dp))
+                    LegendDot(priorityColor(2), "P2 · média")
+                    Spacer(Modifier.width(12.dp))
+                    LegendDot(priorityColor(3), "P3 · baixa")
+                }
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Projetos",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    TaskProject.entries
+                        .filter { it != TaskProject.ENTRADA }
+                        .forEach { project ->
+                            LegendDot(Color(project.colorHex), project.label)
+                            Spacer(Modifier.width(12.dp))
+                        }
+                }
+            }
         }
 
         // Chips de visão.
@@ -380,6 +417,26 @@ fun TasksScreen(
                 tag = "open_task_sheet",
             )
         }
+    }
+}
+
+/** Bolinha + rótulo da legenda de prioridades/projetos. */
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(8.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
