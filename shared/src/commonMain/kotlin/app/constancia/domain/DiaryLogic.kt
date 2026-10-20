@@ -185,7 +185,7 @@ fun weekFractions(
             if (due.isEmpty()) {
                 -1.0
             } else {
-                val done = due.count { doneByHabit[it.habit.id].orEmpty().contains(day.toYmd()) }
+                val done = due.count { doneByHabit[it.id].orEmpty().contains(day.toYmd()) }
                 done.toDouble() / due.size
             }
         }

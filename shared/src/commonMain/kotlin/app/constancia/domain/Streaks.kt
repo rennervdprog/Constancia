@@ -164,9 +164,9 @@ fun bestStreak(
                 val prev = sorted[i - 1]
                 val cur = sorted[i]
                 val gap = cur.toEpochDays() - prev.toEpochDays()
-                if (gap == 1L) {
+                if (gap == 1) {
                     run++
-                } else if (gap > 1L) {
+                } else if (gap > 1) {
                     // O buraco só não quebra se TODOS os dias dele forem perdoados.
                     var d = prev.plus(DatePeriod(days = 1))
                     var allForgiven = true

@@ -52,6 +52,8 @@ import app.constancia.model.Session
 import app.constancia.model.newId
 import app.constancia.theme.HabitPalette
 import app.constancia.ui.common.HABIT_ICON_KEYS
+import app.constancia.ui.common.SegmentedRow
+import app.constancia.ui.common.SheetSectionLabel
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
 
@@ -408,80 +410,3 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
     }
 }
 
-@Composable
-private fun SheetSectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
-
-@Composable
-private fun SegmentedRow(
-    options: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    tagPrefix: String? = null,
-) {
-    val scheme = MaterialTheme.colorScheme
-    // Segmentado (DESIGN_TOKENS.md): botões flex-1, padding 9/6dp, raio 10dp,
-    // Manrope 13/700 (labelLarge) muted; selecionado fundo surface com sombra leve
-    // "0 1px 4px rgba(0,0,0,.14)" e texto ink.
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(scheme.surfaceVariant, RoundedCornerShape(12.dp))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        options.forEachIndexed { index, label ->
-            SegmentedChip(
-                label = label,
-                selected = index == selectedIndex,
-                onClick = { onSelect(index) },
-                tag = if (tagPrefix != null) tagPrefix + "_" + index else null,
-            )
-        }
-    }
-}
-
-@Composable
-private fun RowScope.SegmentedChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    tag: String?,
-) {
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .weight(1f)
-            .then(if (tag != null) Modifier.testTag(tag) else Modifier)
-            .then(
-                if (selected) {
-                    Modifier.shadow(
-                        elevation = 2.dp,
-                        shape = RoundedCornerShape(10.dp),
-                        spotColor = Color.Black.copy(alpha = 0.14f),
-                        ambientColor = Color.Black.copy(alpha = 0.14f),
-                    )
-                } else {
-                    Modifier
-                },
-            )
-            .background(
-                if (selected) scheme.surface else Color.Transparent,
-                RoundedCornerShape(10.dp),
-            )
-            .padding(horizontal = 6.dp, vertical = 9.dp)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) scheme.onSurface else scheme.onSurfaceVariant,
-        )
-    }
-}
