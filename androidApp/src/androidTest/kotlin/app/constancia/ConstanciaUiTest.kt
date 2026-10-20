@@ -167,7 +167,7 @@ class ConstanciaUiTest {
         // Tocar em Mais de novo volta à raiz; Progresso também mora lá.
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         composeRule.onNodeWithTag("mais_progresso").performScrollTo().performClick()
-        composeRule.onNodeWithText("Constância · sua evolução em números").assertIsDisplayed()
+        composeRule.onNodeWithText("tarefas × hábitos × diário, cruzados").assertIsDisplayed()
         shot("01_progresso")
         composeRule.onNodeWithTag("tab_HOJE").performClick()
         composeRule.onNodeWithText("Sua semana").assertIsDisplayed()
