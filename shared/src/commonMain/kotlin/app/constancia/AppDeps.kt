@@ -18,6 +18,7 @@ import app.constancia.data.local.DiaryRepositoryImpl
 import app.constancia.data.local.HabitRepositoryImpl
 import app.constancia.data.local.PrefsRepositoryImpl
 import app.constancia.data.local.TaskRepositoryImpl
+import app.constancia.notify.NotificationScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,7 +49,7 @@ fun rememberAppDeps(driverFactory: DatabaseDriverFactory): AppDeps {
         val deps = AppDeps(
             habits = habits,
             checkins = checkins,
-            tasks = TaskRepositoryImpl(db, checkins),
+            tasks = TaskRepositoryImpl(db, checkins, NotificationScheduler()),
             diary = DiaryRepositoryImpl(db),
             challenges = ChallengeRepositoryImpl(db),
             sync = LocalSyncRepository(),

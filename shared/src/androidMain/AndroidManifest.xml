@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Lembretes de tarefa com alarme exato quando o usuário permite
+         (o app cai para alarme inexato sem a concessão) e reagendamento
+         após reboot (itens 3 e 9 do backlog). -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application>
+        <receiver
+            android:name="app.constancia.notify.TaskReminderReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="app.constancia.notify.DailyReviewReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="app.constancia.notify.BootRescheduleReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

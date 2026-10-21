@@ -10,7 +10,9 @@ import app.constancia.domain.effectiveRepeatSpec
 import app.constancia.domain.nextOccurrence
 import app.constancia.domain.nextRepeatDate
 import app.constancia.domain.repeatLabel
+import app.constancia.domain.reminderInstantMillis
 import app.constancia.model.GoalPause
+import app.constancia.notify.NotificationScheduler
 import app.constancia.model.GoalType
 import app.constancia.model.NewTask
 import app.constancia.model.SavedView
@@ -36,9 +38,28 @@ import kotlinx.datetime.plus
 class TaskRepositoryImpl(
     private val db: ConstanciaDb,
     private val checkins: CheckinRepository? = null,
+    private val notifier: NotificationScheduler? = null,
 ) : TaskRepository {
 
     private val queries get() = db.constanciaDbQueries
+
+    /**
+     * Item 9: mantém o alarme da tarefa sincronizado com o estado dela
+     * (agenda quando há lembrete futuro; cancela quando conclui, apaga
+     * ou o instante já passou). Sem notifier (testes), não faz nada.
+     */
+    private suspend fun refreshReminder(id: String) {
+        val scheduler = notifier ?: return
+        val task = getById(id) ?: return
+        val trigger = reminderInstantMillis(task)
+        if (trigger != null &&
+            trigger > Clock.System.now().toEpochMilliseconds()
+        ) {
+            scheduler.scheduleTaskReminder(task.id, task.title, trigger)
+        } else {
+            scheduler.cancelTaskReminder(task.id)
+        }
+    }
 
     override fun tasksForDateFlow(dateYmd: String): Flow<List<TaskItem>> =
         combine(
@@ -95,6 +116,7 @@ class TaskRepositoryImpl(
         task.subtaskTitles.forEachIndexed { index, title ->
             queries.insertSubtask(newId(), id, title, 0, index.toLong(), now)
         }
+        refreshReminder(id)
         id
     }
 
@@ -120,6 +142,7 @@ class TaskRepositoryImpl(
                 id,
             )
         }
+        refreshReminder(id)
         if (done) {
             val task = getById(id) ?: return
             spawnNextOccurrence(task)
@@ -132,12 +155,14 @@ class TaskRepositoryImpl(
             queries.setTaskPriority(priority.toLong(), id)
         }
 
-    override suspend fun setDueDate(id: String, dueDate: String?): Unit =
+    override suspend fun setDueDate(id: String, dueDate: String?) {
         withContext(Dispatchers.Default) {
             val current = queries.selectTaskById(id).executeAsOneOrNull()
             // Sem prazo novo, o "date" mantém o dia atual da tarefa.
             queries.setTaskDueDate(dueDate, dueDate ?: (current?.date ?: todayYmd()), id)
         }
+        refreshReminder(id)
+    }
 
     override suspend fun addSubtask(taskId: String, title: String): Unit =
         withContext(Dispatchers.Default) {
@@ -174,10 +199,14 @@ class TaskRepositoryImpl(
         val task = getById(taskId) ?: return
         spawnNextOccurrence(task)
         markLinkedHabit(task)
+        refreshReminder(taskId)
     }
 
-    override suspend fun delete(id: String): Unit = withContext(Dispatchers.Default) {
-        queries.deleteTask(id)
+    override suspend fun delete(id: String) {
+        withContext(Dispatchers.Default) {
+            queries.deleteTask(id)
+        }
+        notifier?.cancelTaskReminder(id)
     }
 
     // -- Backlog Todoist Faixa 1/2 --
@@ -191,10 +220,12 @@ class TaskRepositoryImpl(
         count
     }
 
-    override suspend fun setReminder(id: String, minutesBefore: Int?): Unit =
+    override suspend fun setReminder(id: String, minutesBefore: Int?) {
         withContext(Dispatchers.Default) {
             queries.setTaskReminder(minutesBefore?.toLong(), id)
         }
+        refreshReminder(id)
+    }
 
     override fun savedViewsFlow(): Flow<List<SavedView>> =
         queries.selectSavedViews().asFlow().mapToList(Dispatchers.Default)
