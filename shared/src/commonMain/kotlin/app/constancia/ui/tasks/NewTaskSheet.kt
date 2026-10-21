@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,13 +44,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import app.constancia.AppDeps
-import app.constancia.domain.REPEAT_OPTIONS
+import app.constancia.domain.REMINDER_OPTIONS
+import app.constancia.domain.RepeatBase
+import app.constancia.domain.RepeatFreq
+import app.constancia.domain.RepeatRule
+import app.constancia.domain.WEEKDAYS_ISO_PT
+import app.constancia.domain.encodeRepeatSpec
+import app.constancia.domain.repeatLabel
 import app.constancia.model.NewTask
 import app.constancia.model.Session
 import app.constancia.model.TaskProject
+import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
 import app.constancia.model.todayYmd
 import app.constancia.ui.common.CtaButton
@@ -62,7 +72,7 @@ import kotlinx.datetime.plus
  * Formulário completo de nova tarefa (protótipo aprovado): nome, lista com
  * cor, prioridade, quando, sessão, horário, repetir, subtarefas e anotação.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -75,11 +85,66 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
     var dueChoice by remember { mutableStateOf(1) } // 0 sem data, 1 hoje, 2 amanhã
     var session by remember { mutableStateOf(Session.MANHA) }
     var timeText by remember { mutableStateOf("") }
-    var repeat by remember { mutableStateOf("") }
+    // Item 7: construtor de recorrência estruturada.
+    var repeatOn by remember { mutableStateOf(false) }
+    var freq by remember { mutableStateOf(RepeatFreq.DAILY) }
+    var interval by remember { mutableStateOf(1) }
+    var weekdays by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var monthlyMode by remember { mutableStateOf(0) } // 0 = no dia, 1 = na Nª semana
+    var monthWeek by remember { mutableStateOf(1) }
+    var repeatBase by remember { mutableStateOf(RepeatBase.DUE_DATE) }
+    var endsMonths by remember { mutableStateOf<Int?>(null) } // null = nunca
+    // Itens 8 e 9: prazo final, duração estimada e lembrete.
+    var deadlineChoice by remember { mutableStateOf(0) } // 0 sem, 1 hoje, 2 amanhã, 3 +7d, 4 +30d
+    var duration by remember { mutableStateOf<Int?>(null) }
+    var reminder by remember { mutableStateOf<Int?>(null) }
     var note by remember { mutableStateOf("") }
     var subs by remember { mutableStateOf<List<String>>(emptyList()) }
     var subText by remember { mutableStateOf("") }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val todayDate = remember { today.toLocalDate() }
+    val anchorDate = when (dueChoice) {
+        2 -> todayDate.plus(DatePeriod(days = 1))
+        else -> todayDate
+    }
+
+    fun currentRule(): RepeatRule? {
+        if (!repeatOn) return null
+        return RepeatRule(
+            freq = freq,
+            interval = interval.coerceIn(1, 12),
+            weekdays = if (freq == RepeatFreq.WEEKLY) {
+                weekdays.ifEmpty { setOf(anchorDate.isoDayNumberCompat()) }
+            } else {
+                emptySet()
+            },
+            monthDay = if (freq == RepeatFreq.MONTHLY && monthlyMode == 0) {
+                anchorDate.dayOfMonth
+            } else {
+                null
+            },
+            monthWeek = if (freq == RepeatFreq.MONTHLY && monthlyMode == 1) {
+                monthWeek
+            } else {
+                null
+            },
+            monthWeekday = if (freq == RepeatFreq.MONTHLY && monthlyMode == 1) {
+                anchorDate.isoDayNumberCompat()
+            } else {
+                null
+            },
+            month = if (freq == RepeatFreq.YEARLY) {
+                anchorDate.monthNumber
+            } else {
+                null
+            },
+            base = repeatBase,
+            endsOn = endsMonths?.let {
+                anchorDate.plus(DatePeriod(months = it))
+            },
+        )
+    }
 
     fun addSub() {
         val v = subText.trim()
@@ -196,11 +261,216 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
 
             SheetSectionLabel("Repetir")
             SegmentedRow(
-                options = listOf("Não repete", "Todo dia", "Seg a Sex", "Semanal"),
-                selectedIndex = REPEAT_OPTIONS.indexOf(repeat).coerceAtLeast(0),
-                onSelect = { repeat = REPEAT_OPTIONS[it] },
+                options = listOf("Não repete", "Repete"),
+                selectedIndex = if (repeatOn) 1 else 0,
+                onSelect = { repeatOn = it == 1 },
                 tagPrefix = "task_repeat",
             )
+            if (repeatOn) {
+                // Atalhos dos padrões mais usados (itens 5 e 7).
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PickChip("Todo dia", freq == RepeatFreq.DAILY && interval == 1) {
+                        freq = RepeatFreq.DAILY; interval = 1
+                    }
+                    PickChip(
+                        "Seg a Sex",
+                        freq == RepeatFreq.WEEKLY && weekdays == setOf(1, 2, 3, 4, 5),
+                    ) {
+                        freq = RepeatFreq.WEEKLY; interval = 1
+                        weekdays = setOf(1, 2, 3, 4, 5)
+                    }
+                    PickChip("Semanal", freq == RepeatFreq.WEEKLY && interval == 1 && weekdays.size <= 1) {
+                        freq = RepeatFreq.WEEKLY; interval = 1; weekdays = emptySet()
+                    }
+                    PickChip("A cada 2 semanas", freq == RepeatFreq.WEEKLY && interval == 2) {
+                        freq = RepeatFreq.WEEKLY; interval = 2; weekdays = emptySet()
+                    }
+                    PickChip("Mensal", freq == RepeatFreq.MONTHLY) {
+                        freq = RepeatFreq.MONTHLY; interval = 1
+                    }
+                    PickChip("Anual", freq == RepeatFreq.YEARLY) {
+                        freq = RepeatFreq.YEARLY; interval = 1
+                    }
+                }
+                SheetSectionLabel("Frequência")
+                SegmentedRow(
+                    options = listOf("Diária", "Semanal", "Mensal", "Anual"),
+                    selectedIndex = freq.ordinal,
+                    onSelect = { freq = RepeatFreq.entries[it] },
+                    tagPrefix = "task_freq",
+                )
+                // Intervalo: "a cada N".
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "A cada",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    StepperButton("−", enabled = interval > 1) {
+                        interval = (interval - 1).coerceAtLeast(1)
+                    }
+                    Text(
+                        text = interval.toString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 12.dp),
+                    )
+                    StepperButton("+", enabled = interval < 12) {
+                        interval = (interval + 1).coerceAtMost(12)
+                    }
+                    Text(
+                        text = when (freq) {
+                            RepeatFreq.DAILY -> if (interval == 1) "dia" else "dias"
+                            RepeatFreq.WEEKLY -> if (interval == 1) "semana" else "semanas"
+                            RepeatFreq.MONTHLY -> if (interval == 1) "mês" else "meses"
+                            RepeatFreq.YEARLY -> if (interval == 1) "ano" else "anos"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(start = 10.dp),
+                    )
+                }
+                if (freq == RepeatFreq.WEEKLY) {
+                    Text(
+                        text = "Nos dias",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        (1..7).forEach { day ->
+                            val short = WEEKDAYS_ISO_PT[day - 1].take(3)
+                            PickChip(
+                                short,
+                                day in weekdays ||
+                                    (weekdays.isEmpty() &&
+                                        day == anchorDate.isoDayNumberCompat()),
+                            ) {
+                                weekdays = if (day in weekdays) {
+                                    weekdays - day
+                                } else {
+                                    weekdays + day
+                                }
+                            }
+                        }
+                    }
+                }
+                if (freq == RepeatFreq.MONTHLY) {
+                    SegmentedRow(
+                        options = listOf(
+                            "No dia " + anchorDate.dayOfMonth.toString(),
+                            "Na semana do mês",
+                        ),
+                        selectedIndex = monthlyMode,
+                        onSelect = { monthlyMode = it },
+                        tagPrefix = "task_monthly_mode",
+                    )
+                    if (monthlyMode == 1) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf(
+                                1 to "1ª", 2 to "2ª", 3 to "3ª",
+                                4 to "4ª", -1 to "Última",
+                            ).forEach { (value, label) ->
+                                PickChip(label, monthWeek == value) {
+                                    monthWeek = value
+                                }
+                            }
+                        }
+                        Text(
+                            text = "Na " + when (monthWeek) {
+                                -1 -> "última"
+                                1 -> "1ª"
+                                2 -> "2ª"
+                                3 -> "3ª"
+                                else -> "4ª"
+                            } + " " + WEEKDAYS_ISO_PT[
+                                anchorDate.isoDayNumberCompat() - 1
+                            ].lowercase() + " do mês (o dia da semana " +
+                                "vem da data da tarefa).",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                SheetSectionLabel("Contar a próxima a partir de")
+                SegmentedRow(
+                    options = listOf("Data marcada", "Ao concluir"),
+                    selectedIndex = if (repeatBase == RepeatBase.DUE_DATE) 0 else 1,
+                    onSelect = {
+                        repeatBase = if (it == 0) {
+                            RepeatBase.DUE_DATE
+                        } else {
+                            RepeatBase.COMPLETION
+                        }
+                    },
+                    tagPrefix = "task_repeat_base",
+                )
+                SheetSectionLabel("Termina")
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PickChip("Nunca", endsMonths == null) { endsMonths = null }
+                    listOf(1 to "+1 mês", 3 to "+3 meses", 6 to "+6 meses", 12 to "+1 ano")
+                        .forEach { (value, label) ->
+                            PickChip(label, endsMonths == value) {
+                                endsMonths = value
+                            }
+                        }
+                }
+                currentRule()?.let { rule ->
+                    Text(
+                        text = repeatLabel(rule),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                if (dueChoice == 0) {
+                    Text(
+                        text = "Sem data escolhida: a série começa hoje.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            SheetSectionLabel("Prazo final")
+            SegmentedRow(
+                options = listOf("Sem prazo", "Hoje", "Amanhã", "+7 dias", "+30 dias"),
+                selectedIndex = deadlineChoice,
+                onSelect = { deadlineChoice = it },
+                tagPrefix = "task_deadline",
+            )
+
+            SheetSectionLabel("Duração estimada")
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PickChip("Nenhuma", duration == null) { duration = null }
+                listOf(15, 30, 45, 60, 90, 120).forEach { minutes ->
+                    PickChip(
+                        app.constancia.domain.durationLabel(minutes),
+                        duration == minutes,
+                    ) { duration = minutes }
+                }
+            }
+
+            SheetSectionLabel("Lembrete")
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                REMINDER_OPTIONS.forEach { (label, value) ->
+                    PickChip(label, reminder == value) { reminder = value }
+                }
+            }
 
             SheetSectionLabel("Subtarefas")
             subs.forEachIndexed { index, sub ->
@@ -281,12 +551,21 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                         errorMsg = "Dê um nome à tarefa"
                         return@CtaButton
                     }
+                    val rule = currentRule()
                     val dueDate = when (dueChoice) {
-                        0 -> null
+                        // Repetição sem data: a série ancora em hoje.
+                        0 -> if (rule != null) today else null
                         1 -> today
                         else -> today.toLocalDate()
                             .plus(DatePeriod(days = 1))
                             .toString()
+                    }
+                    val deadline = when (deadlineChoice) {
+                        1 -> today
+                        2 -> todayDate.plus(DatePeriod(days = 1)).toString()
+                        3 -> todayDate.plus(DatePeriod(days = 7)).toString()
+                        4 -> todayDate.plus(DatePeriod(days = 30)).toString()
+                        else -> null
                     }
                     val time = timeText.trim().takeIf {
                         it.matches(Regex("^\\d{1,2}:\\d{2}$"))
@@ -301,7 +580,13 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                                 dueDate = dueDate,
                                 session = session,
                                 dueTime = time,
-                                repeatRule = repeat,
+                                repeatRule = rule?.let { repeatLabel(it) } ?: "",
+                                repeatSpec = rule?.let {
+                                    encodeRepeatSpec(it)
+                                } ?: "",
+                                deadlineDate = deadline,
+                                durationMinutes = duration,
+                                reminderMinutesBefore = reminder,
                                 subtaskTitles = subs,
                             ),
                         )
@@ -358,6 +643,32 @@ private fun ProjectChip(
             text = project.label,
             style = MaterialTheme.typography.labelLarge,
             color = if (selected) scheme.primary else scheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Botão − / + do stepper de intervalo da recorrência. */
+@Composable
+private fun StepperButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(
+                if (enabled) scheme.primaryContainer else scheme.surfaceVariant,
+            )
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (enabled) {
+                scheme.onPrimaryContainer
+            } else {
+                scheme.onSurfaceVariant
+            },
         )
     }
 }

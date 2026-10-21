@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -59,6 +61,8 @@ import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
 import app.constancia.data.SyncState
 import app.constancia.domain.buildExportCsv
+import app.constancia.domain.goalForgivenDates
+import app.constancia.notify.NotificationScheduler
 import app.constancia.domain.buildExportJson
 import app.constancia.export.shareTextFile
 import app.constancia.model.todayYmd
@@ -90,6 +94,17 @@ fun MoreScreen(
     var syncMsg by remember { mutableStateOf<String?>(null) }
     var exportMsg by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(true) }
+    // Itens 2 e 3: metas de tarefas e Daily Review.
+    val dailyGoal by deps.prefs.taskDailyGoalFlow().collectAsState(initial = 0)
+    val weeklyGoal by deps.prefs.taskWeeklyGoalFlow().collectAsState(initial = 0)
+    val goalPauses by deps.tasks.goalPausesFlow()
+        .collectAsState(initial = emptyList())
+    val goalPausedToday = goalForgivenDates(goalPauses, today).contains(today)
+    val reviewEnabled by deps.prefs.dailyReviewEnabledFlow()
+        .collectAsState(initial = false)
+    val reviewTime by deps.prefs.dailyReviewTimeFlow()
+        .collectAsState(initial = "08:00")
+    var reviewTimeText by remember { mutableStateOf<String?>(null) }
 
     val bestStreak = statuses.maxOfOrNull { it.currentStreak } ?: 0
     val syncSubtitle = if (syncStatus?.state == SyncState.CLOUD_SOON) {
@@ -298,6 +313,165 @@ fun MoreScreen(
                             scope.launch { deps.prefs.setDarkTheme(it) }
                         },
                     )
+                }
+            }
+            item {
+                StackCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconTile(
+                            icon = Icons.Filled.Whatshot,
+                            tint = extra.tintFlame,
+                            iconColor = scheme.secondary,
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Metas de tarefas",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "Quantos itens concluir por dia e por " +
+                                    "semana — sem pontos, só a sua sequência.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    GoalStepperRow(
+                        label = "Meta diária",
+                        value = dailyGoal,
+                        suffix = if (dailyGoal == 0) {
+                            "desligada"
+                        } else if (dailyGoal == 1) {
+                            "tarefa/dia"
+                        } else {
+                            "tarefas/dia"
+                        },
+                        onChange = { value ->
+                            scope.launch { deps.prefs.setTaskDailyGoal(value) }
+                        },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    GoalStepperRow(
+                        label = "Meta semanal",
+                        value = weeklyGoal,
+                        suffix = if (weeklyGoal == 0) {
+                            "desligada"
+                        } else if (weeklyGoal == 1) {
+                            "tarefa/semana"
+                        } else {
+                            "tarefas/semana"
+                        },
+                        onChange = { value ->
+                            scope.launch { deps.prefs.setTaskWeeklyGoal(value) }
+                        },
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Pausar a meta",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                "Dias de pausa não quebram a sequência.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = goalPausedToday,
+                            onCheckedChange = { paused ->
+                                scope.launch {
+                                    deps.tasks.setGoalPaused(paused, today)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+            item {
+                StackCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconTile(
+                            icon = Icons.Filled.Notifications,
+                            tint = extra.tintSun,
+                            iconColor = extra.sunColor,
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Daily Review",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "Um resumo do seu dia, todo dia, no " +
+                                    "horário que você escolher.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = reviewEnabled,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    deps.prefs.setDailyReviewEnabled(enabled)
+                                    if (enabled) {
+                                        NotificationScheduler()
+                                            .scheduleDailyReview(reviewTime)
+                                    } else {
+                                        NotificationScheduler()
+                                            .cancelDailyReview()
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    if (reviewEnabled) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Horário",
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = reviewTimeText ?: reviewTime,
+                                onValueChange = { value ->
+                                    val clean = value.filter { c ->
+                                        c.isDigit() || c == ':'
+                                    }.take(5)
+                                    reviewTimeText = clean
+                                    if (clean.matches(
+                                            Regex("^\\d{1,2}:\\d{2}$"),
+                                        )
+                                    ) {
+                                        val parts = clean.split(":")
+                                        val hour = parts[0].toIntOrNull()
+                                        val minute = parts[1].toIntOrNull()
+                                        if (hour != null && minute != null &&
+                                            hour in 0..23 && minute in 0..59
+                                        ) {
+                                            val hhmm = hour.toString()
+                                                .padStart(2, '0') + ":" +
+                                                minute.toString()
+                                                    .padStart(2, '0')
+                                            scope.launch {
+                                                deps.prefs
+                                                    .setDailyReviewTime(hhmm)
+                                                NotificationScheduler()
+                                                    .scheduleDailyReview(hhmm)
+                                            }
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                modifier = Modifier.width(100.dp),
+                                shape = RoundedCornerShape(12.dp),
+                            )
+                        }
+                    }
                 }
             }
             item {
@@ -619,6 +793,61 @@ private fun SecondaryButton(
             text,
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/** Linha de ajuste com stepper − / + (metas de tarefas, item 2). */
+@Composable
+private fun GoalStepperRow(
+    label: String,
+    value: Int,
+    suffix: String,
+    onChange: (Int) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(99.dp))
+                .background(scheme.surfaceVariant)
+                .clickable(enabled = value > 0) {
+                    onChange((value - 1).coerceAtLeast(0))
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("−", style = MaterialTheme.typography.titleMedium)
+        }
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(horizontal = 11.dp),
+        )
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(99.dp))
+                .background(scheme.primaryContainer)
+                .clickable { onChange(value + 1) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                "+",
+                style = MaterialTheme.typography.titleMedium,
+                color = scheme.onPrimaryContainer,
+            )
+        }
+        Text(
+            text = suffix,
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 10.dp).widthIn(min = 74.dp),
         )
     }
 }

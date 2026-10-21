@@ -192,6 +192,11 @@ fun HomeScreen(
         .collectAsState(initial = null)
     val diaryEntries by deps.diary.allEntriesFlow().collectAsState(initial = emptyList())
     val habitNames = habits.associate { it.id to it.name }
+    // Item 2: meta diária de tarefas + pausas (cartão sob o herói).
+    val dailyGoal by deps.prefs.taskDailyGoalFlow()
+        .collectAsState(initial = 0)
+    val goalPauses by deps.tasks.goalPausesFlow()
+        .collectAsState(initial = emptyList())
 
     val hour = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
     val greeting = greetingFor(hour)
@@ -244,6 +249,23 @@ fun HomeScreen(
                     isToday = isToday,
                     onOpenDiary = { onOpenDiary(selYmd) },
                 )
+            }
+
+            if (isToday && dailyGoal > 0) {
+                item {
+                    TaskGoalCard(
+                        doneToday = app.constancia.domain.completionCountsByDay(
+                            allTasks,
+                        )[today] ?: 0,
+                        goal = dailyGoal,
+                        streak = app.constancia.domain.dailyGoalStreak(
+                            allTasks, dailyGoal, goalPauses, todayDate,
+                        ),
+                        pausedToday = app.constancia.domain.goalForgivenDates(
+                            goalPauses, today,
+                        ).contains(today),
+                    )
+                }
             }
 
             item {
@@ -1934,6 +1956,112 @@ private fun InsightCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
                     ),
                     color = Color(0xFFDCCFFB),
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Item 2 — cartão da meta diária de tarefas (sem pontos/Karma): quanto
+ * já foi concluído hoje, a barra de progresso, a sequência de dias com
+ * a meta batida e o aviso de pausa (pausar não quebra a sequência).
+ * Some quando a meta está desligada (ajuste em Mais → Ajustes).
+ */
+@Composable
+private fun TaskGoalCard(
+    doneToday: Int,
+    goal: Int,
+    streak: Int,
+    pausedToday: Boolean,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val met = doneToday >= goal
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                if (met && !pausedToday) {
+                    scheme.primaryContainer
+                } else {
+                    scheme.surface
+                },
+            )
+            .border(
+                1.dp,
+                if (met && !pausedToday) {
+                    scheme.primaryContainer
+                } else {
+                    scheme.outline
+                },
+                RoundedCornerShape(20.dp),
+            )
+            .padding(16.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Filled.Whatshot,
+                contentDescription = null,
+                tint = extra.amber,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                text = "Meta de tarefas",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontSize = 15.sp,
+                ),
+                modifier = Modifier.weight(1f),
+            )
+            if (streak > 0) {
+                Text(
+                    text = streak.toString() +
+                        if (streak == 1) " dia" else " dias",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = extra.amber,
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        when {
+            pausedToday -> Text(
+                text = "Meta em pausa hoje — a sequência está protegida.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant,
+            )
+            met -> Text(
+                text = "Meta do dia batida: " + doneToday.toString() +
+                    " de " + goal.toString() + " tarefas. Mandou bem!",
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onPrimaryContainer,
+            )
+            else -> {
+                Text(
+                    text = doneToday.toString() + " de " + goal.toString() +
+                        " tarefas concluídas hoje",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(9.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(7.dp)
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(scheme.outline),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(
+                                (doneToday.toFloat() / goal)
+                                    .coerceIn(0f, 1f),
+                            )
+                            .height(7.dp)
+                            .background(scheme.primary, RoundedCornerShape(99.dp)),
+                    )
+                }
             }
         }
     }

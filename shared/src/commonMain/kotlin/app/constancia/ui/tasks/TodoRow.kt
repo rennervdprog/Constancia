@@ -36,8 +36,14 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import app.constancia.domain.RescheduleTarget
+import app.constancia.domain.dueDateLabel
 import app.constancia.domain.dueLabel
+import app.constancia.domain.durationLabel
 import app.constancia.domain.prioName
+import app.constancia.domain.reminderLabel
+import app.constancia.domain.rescheduleDate
+import app.constancia.domain.rescheduleLabel
 import app.constancia.domain.subtaskProgress
 import app.constancia.model.TaskItem
 import app.constancia.model.toLocalDate
@@ -76,6 +82,7 @@ fun TodoRow(
     onPostpone: () -> Unit,
     onCyclePriority: () -> Unit,
     onDelete: () -> Unit,
+    onReschedule: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -83,6 +90,9 @@ fun TodoRow(
     val prioColor = priorityColor(task.priority)
     val progress = subtaskProgress(task.subtasks)
     val dueText = dueLabel(task, today)
+    val deadline = task.deadlineDate
+    val duration = task.durationMinutes
+    val reminder = task.reminderMinutesBefore
     val isOverdue = !task.done && task.dueDate != null &&
         task.dueDate < today.toString()
     val isDueToday = task.dueDate == today.toString()
@@ -219,6 +229,44 @@ fun TodoRow(
                                 color = scheme.onSurfaceVariant,
                             )
                         }
+                    }
+                    // Prazo final (item 8): separado da data agendada.
+                    if (deadline != null) {
+                        Text(
+                            text = "prazo final: " + dueDateLabel(
+                                deadline.toLocalDate(), today,
+                            ).lowercase(),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.5.sp,
+                            ),
+                            color = if (
+                                !task.done && deadline < today.toString()
+                            ) {
+                                extra.red
+                            } else {
+                                scheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    if (duration != null) {
+                        Text(
+                            text = "~" + durationLabel(duration),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.5.sp,
+                            ),
+                            color = scheme.onSurfaceVariant,
+                        )
+                    }
+                    if (reminder != null) {
+                        Text(
+                            text = "lembrete: " + reminderLabel(
+                                reminder,
+                            ).lowercase(),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.5.sp,
+                            ),
+                            color = scheme.onSurfaceVariant,
+                        )
                     }
                     if (habitName != null) {
                         Row(
@@ -366,6 +414,20 @@ fun TodoRow(
                             onClick = onPostpone,
                         )
                     }
+                    // Item 1: chips de reagendamento rápido.
+                    if (!task.done) {
+                        RescheduleTarget.entries.forEach { target ->
+                            TagAction(
+                                text = rescheduleLabel(target),
+                                onClick = {
+                                    onReschedule(
+                                        rescheduleDate(target, today)
+                                            .toString(),
+                                    )
+                                },
+                            )
+                        }
+                    }
                     TagAction(
                         text = "Prioridade: " + prioName(task.priority),
                         onClick = onCyclePriority,
@@ -425,6 +487,9 @@ fun TodoRowWithActions(
         },
         onDelete = {
             scope.launch { deps.tasks.delete(task.id) }
+        },
+        onReschedule = { ymd ->
+            scope.launch { deps.tasks.setDueDate(task.id, ymd) }
         },
         modifier = modifier,
     )

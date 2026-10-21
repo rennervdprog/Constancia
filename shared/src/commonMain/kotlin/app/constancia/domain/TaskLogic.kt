@@ -237,6 +237,13 @@ enum class TaskGroupBy { NONE, PROJECT, PRIORITY, DATE }
 
 data class TaskGroup(val title: String, val tasks: List<TaskItem>)
 
+/** Rótulo curto da duração estimada (item 8): "15 min", "1 h", "1 h 30". */
+fun durationLabel(minutes: Int): String = when {
+    minutes < 60 -> "$minutes min"
+    minutes % 60 == 0 -> "${minutes / 60} h"
+    else -> "${minutes / 60} h ${minutes % 60}"
+}
+
 /**
  * Ordenação "inteligente" (padrão do Todoist): pendentes antes das
  * feitas; entre as pendentes, atrasadas -> hoje -> futuras -> sem data;

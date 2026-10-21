@@ -23,9 +23,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Schedule
@@ -44,29 +41,37 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
 import app.constancia.domain.MONTHS
+import app.constancia.domain.QuickAddParse
+import app.constancia.domain.TaskGroupBy
+import app.constancia.domain.TaskSortMode
 import app.constancia.domain.TaskView
 import app.constancia.domain.WEEKDAYS_ISO_PT
+import app.constancia.domain.applySort
 import app.constancia.domain.doneTasks
 import app.constancia.domain.doneTodayTasks
+import app.constancia.domain.encodeRepeatSpec
 import app.constancia.domain.entradaTasks
+import app.constancia.domain.groupByOf
+import app.constancia.domain.groupTasks
 import app.constancia.domain.overdueTasks
+import app.constancia.domain.repeatLabel
+import app.constancia.domain.savedViewTasks
 import app.constancia.domain.taskCounts
 import app.constancia.domain.todayTasks
 import app.constancia.domain.upcomingGroupTitle
 import app.constancia.domain.upcomingGroups
+import app.constancia.model.SavedView
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
+import app.constancia.model.toYmd
 import app.constancia.model.todayYmd
 import app.constancia.theme.constanciaExtra
 import kotlinx.coroutines.launch
@@ -90,6 +95,7 @@ private fun todayGroupLabel(today: LocalDate): String =
  * únicos por seção — Atrasadas em vermelho, Hoje, Feitas hoje, grupos de
  * Próximos e a Caixa de entrada.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TasksScreen(
     deps: AppDeps,
@@ -105,6 +111,16 @@ fun TasksScreen(
     var view by remember { mutableStateOf(TaskView.HOJE) }
     var expandedId by remember { mutableStateOf<String?>(null) }
     var quickText by remember { mutableStateOf("") }
+    // Item 4: ordenação/agrupamento das listas.
+    var sortMode by remember { mutableStateOf(TaskSortMode.SMART) }
+    var groupBy by remember { mutableStateOf(TaskGroupBy.NONE) }
+    // Itens 10/11: vistas salvas e modelos.
+    var savedViewId by remember { mutableStateOf<String?>(null) }
+    var showNewView by remember { mutableStateOf(false) }
+    var showTemplates by remember { mutableStateOf(false) }
+    val savedViews by deps.tasks.savedViewsFlow().collectAsState(initial = emptyList())
+    val templates by deps.tasks.templatesFlow().collectAsState(initial = emptyList())
+    val activeView = savedViews.firstOrNull { it.id == savedViewId }
 
     val counts = taskCounts(tasks, todayDate)
     val overdue = overdueTasks(tasks, todayDate)
@@ -112,17 +128,29 @@ fun TasksScreen(
         !it.done && it.dueDate == today
     }
 
-    fun quickAdd() {
-        val title = quickText.trim()
+    /** Captura rápida com o mini-Dateist (item 6): o que o parser
+     *  reconheceu vira campo da tarefa; o resto segue o padrão da visão. */
+    fun quickAddParsed(parse: QuickAddParse) {
+        val title = parse.title.trim()
         if (title.isEmpty()) return
         quickText = ""
-        val due = when (view) {
+        val defaultDue = when (view) {
             TaskView.ENTRADA -> null
             TaskView.PROXIMOS -> todayDate.plus(DatePeriod(days = 1)).toString()
             else -> today
         }
         scope.launch {
-            deps.tasks.quickAdd(title, dueDate = due, project = TaskProject.ENTRADA)
+            deps.tasks.add(
+                app.constancia.model.NewTask(
+                    title = title,
+                    project = parse.project ?: TaskProject.ENTRADA,
+                    priority = parse.priority ?: 2,
+                    dueDate = parse.dueDate?.toYmd() ?: defaultDue,
+                    dueTime = parse.dueTime,
+                    repeatRule = parse.repeat?.let { repeatLabel(it) } ?: "",
+                    repeatSpec = parse.repeat?.let { encodeRepeatSpec(it) } ?: "",
+                ),
+            )
         }
     }
 
@@ -170,11 +198,30 @@ fun TasksScreen(
         }
 
         item {
-            QuickAddBar(
-                text = quickText,
-                onTextChange = { if (it.length <= 80) quickText = it },
-                onAdd = { quickAdd() },
-            )
+            // Captura rápida em pílula (item 6: com destaque dos
+            // trechos reconhecidos e chips de desfazer).
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(
+                        1.5.dp,
+                        MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(16.dp),
+                    )
+                    .padding(start = 15.dp, top = 10.dp, end = 6.dp, bottom = 10.dp),
+            ) {
+                QuickAddField(
+                    text = quickText,
+                    onTextChange = { if (it.length <= 80) quickText = it },
+                    onAdd = { quickAddParsed(it) },
+                    today = todayDate,
+                    inputTag = "tasks_quick_input",
+                    addTag = "tasks_quick_add",
+                    placeholder = "Capturar uma tarefa…",
+                )
+            }
         }
 
         item { Legend() }
@@ -191,44 +238,170 @@ fun TasksScreen(
                     ViewChip(
                         label = "Entrada",
                         count = counts.entrada,
-                        selected = view == TaskView.ENTRADA,
+                        selected = savedViewId == null && view == TaskView.ENTRADA,
                         tag = "view_chip_ENTRADA",
-                        onClick = { view = TaskView.ENTRADA },
+                        onClick = { savedViewId = null; view = TaskView.ENTRADA },
                     )
                 }
                 item {
                     ViewChip(
                         label = "Hoje",
                         count = counts.hoje,
-                        selected = view == TaskView.HOJE,
+                        selected = savedViewId == null && view == TaskView.HOJE,
                         tag = "view_chip_HOJE",
-                        onClick = { view = TaskView.HOJE },
+                        onClick = { savedViewId = null; view = TaskView.HOJE },
                     )
                 }
                 item {
                     ViewChip(
                         label = "Próximos",
                         count = counts.proximos,
-                        selected = view == TaskView.PROXIMOS,
+                        selected = savedViewId == null && view == TaskView.PROXIMOS,
                         tag = "view_chip_PROXIMOS",
-                        onClick = { view = TaskView.PROXIMOS },
+                        onClick = { savedViewId = null; view = TaskView.PROXIMOS },
                     )
                 }
                 item {
                     ViewChip(
                         label = "Feitas",
                         count = counts.feitas,
-                        selected = view == TaskView.FEITAS,
+                        selected = savedViewId == null && view == TaskView.FEITAS,
                         tag = "view_chip_FEITAS",
-                        onClick = { view = TaskView.FEITAS },
+                        onClick = { savedViewId = null; view = TaskView.FEITAS },
                     )
+                }
+                savedViews.forEach { saved ->
+                    item(key = "saved_chip_" + saved.id) {
+                        SavedViewChip(
+                            view = saved,
+                            selected = savedViewId == saved.id,
+                            onClick = { savedViewId = saved.id },
+                        )
+                    }
+                }
+                item {
+                    NewViewChip(onClick = { showNewView = true })
                 }
             }
         }
 
-        when (view) {
+        // Barra de opções (item 4 + atalho dos modelos, item 11).
+        item {
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OptionChip(
+                    label = "Ordenar: " + when (sortMode) {
+                        TaskSortMode.SMART -> "Inteligente"
+                        TaskSortMode.PRIORITY -> "Prioridade"
+                        TaskSortMode.DUE -> "Prazo"
+                    },
+                    onClick = {
+                        sortMode = when (sortMode) {
+                            TaskSortMode.SMART -> TaskSortMode.PRIORITY
+                            TaskSortMode.PRIORITY -> TaskSortMode.DUE
+                            TaskSortMode.DUE -> TaskSortMode.SMART
+                        }
+                    },
+                )
+                OptionChip(
+                    label = "Agrupar: " + when (groupBy) {
+                        TaskGroupBy.NONE -> "Nenhum"
+                        TaskGroupBy.PROJECT -> "Projeto"
+                        TaskGroupBy.PRIORITY -> "Prioridade"
+                        TaskGroupBy.DATE -> "Data"
+                    },
+                    onClick = {
+                        groupBy = when (groupBy) {
+                            TaskGroupBy.NONE -> TaskGroupBy.PROJECT
+                            TaskGroupBy.PROJECT -> TaskGroupBy.PRIORITY
+                            TaskGroupBy.PRIORITY -> TaskGroupBy.DATE
+                            TaskGroupBy.DATE -> TaskGroupBy.NONE
+                        }
+                    },
+                )
+                OptionChip(
+                    label = "Modelos de lista",
+                    onClick = { showTemplates = true },
+                )
+            }
+        }
+
+        if (activeView != null) {
+            val viewTasks = applySort(
+                savedViewTasks(tasks, activeView, todayDate), sortMode, todayDate,
+            )
+            val viewGroups = groupTasks(
+                viewTasks, groupByOf(activeView.groupBy), todayDate,
+            )
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 2.dp, top = 20.dp, end = 2.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Color(activeView.colorHex)),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = activeView.name,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 15.sp,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(99.dp))
+                            .clickable {
+                                scope.launch {
+                                    deps.tasks.deleteSavedView(activeView.id)
+                                }
+                                savedViewId = null
+                            }
+                            .padding(horizontal = 10.dp, vertical = 5.dp),
+                    ) {
+                        Text(
+                            text = "Excluir vista",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.constanciaExtra.red,
+                        )
+                    }
+                }
+            }
+            if (viewTasks.isEmpty()) {
+                item {
+                    EmptyNote("Nada nesta vista com os filtros atuais.")
+                }
+            } else {
+                viewGroups.forEach { group ->
+                    if (group.title.isNotBlank()) {
+                        item(key = "sv-head-" + group.title) {
+                            GroupLabel(label = group.title, count = group.tasks.size)
+                        }
+                    }
+                    item(key = "sv-" + group.title + "-" + group.tasks.size) {
+                        RowsCard {
+                            group.tasks.forEachIndexed { index, task ->
+                                if (index > 0) RowDivider()
+                                rowFor(task)
+                            }
+                        }
+                    }
+                }
+            }
+        } else when (view) {
             TaskView.ENTRADA -> {
-                val list = entradaTasks(tasks)
+                val list = applySort(entradaTasks(tasks), sortMode, todayDate)
                 item {
                     GroupLabel(
                         label = "Caixa de entrada",
@@ -242,7 +415,7 @@ fun TasksScreen(
                                 "sem pressa.",
                         )
                     }
-                } else {
+                } else if (groupBy == TaskGroupBy.NONE) {
                     item {
                         RowsCard {
                             list.forEachIndexed { index, task ->
@@ -251,12 +424,27 @@ fun TasksScreen(
                             }
                         }
                     }
+                } else {
+                    groupTasks(list, groupBy, todayDate).forEach { group ->
+                        item(key = "ent-head-" + group.title) {
+                            GroupLabel(label = group.title, count = group.tasks.size)
+                        }
+                        item(key = "ent-" + group.title) {
+                            RowsCard {
+                                group.tasks.forEachIndexed { index, task ->
+                                    if (index > 0) RowDivider()
+                                    rowFor(task)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
             TaskView.HOJE -> {
-                val tod = todayTasks(tasks, todayDate)
+                val tod = applySort(todayTasks(tasks, todayDate), sortMode, todayDate)
                 val doneT = doneTodayTasks(tasks, todayDate)
+                val overdueSorted = applySort(overdue, sortMode, todayDate)
                 if (overdue.isNotEmpty()) {
                     item {
                         GroupLabel(
@@ -265,9 +453,43 @@ fun TasksScreen(
                             danger = true,
                         )
                     }
+                    // Item 1: empurra todas as atrasadas para hoje.
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                )
+                                .testTag("reschedule_overdue")
+                                .clickable {
+                                    scope.launch {
+                                        deps.tasks.rescheduleAllOverdue(
+                                            today, today,
+                                        )
+                                    }
+                                }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "Reagendar " +
+                                    if (overdue.size == 1) {
+                                        "1 atrasada"
+                                    } else {
+                                        overdue.size.toString() + " atrasadas"
+                                    } + " para hoje",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme
+                                    .onPrimaryContainer,
+                            )
+                        }
+                    }
                     item {
                         RowsCard {
-                            overdue.forEachIndexed { index, task ->
+                            overdueSorted.forEachIndexed { index, task ->
                                 if (index > 0) RowDivider()
                                 rowFor(task)
                             }
@@ -337,10 +559,11 @@ fun TasksScreen(
                         }
                         item(key = "prox-" + day.toString()) {
                             RowsCard {
-                                dayTasks.forEachIndexed { index, task ->
-                                    if (index > 0) RowDivider()
-                                    rowFor(task)
-                                }
+                                applySort(dayTasks, sortMode, todayDate)
+                                    .forEachIndexed { index, task ->
+                                        if (index > 0) RowDivider()
+                                        rowFor(task)
+                                    }
                             }
                         }
                     }
@@ -348,7 +571,7 @@ fun TasksScreen(
             }
 
             TaskView.FEITAS -> {
-                val list = doneTasks(tasks)
+                val list = applySort(doneTasks(tasks), sortMode, todayDate)
                 item {
                     GroupLabel(label = "Feitas", count = list.size)
                 }
@@ -356,12 +579,26 @@ fun TasksScreen(
                     item {
                         EmptyNote("Ainda nada por aqui — conclua a primeira tarefa do dia.")
                     }
-                } else {
+                } else if (groupBy == TaskGroupBy.NONE) {
                     item {
                         RowsCard {
                             list.forEachIndexed { index, task ->
                                 if (index > 0) RowDivider()
                                 rowFor(task)
+                            }
+                        }
+                    }
+                } else {
+                    groupTasks(list, groupBy, todayDate).forEach { group ->
+                        item(key = "done-head-" + group.title) {
+                            GroupLabel(label = group.title, count = group.tasks.size)
+                        }
+                        item(key = "done-" + group.title) {
+                            RowsCard {
+                                group.tasks.forEachIndexed { index, task ->
+                                    if (index > 0) RowDivider()
+                                    rowFor(task)
+                                }
                             }
                         }
                     }
@@ -377,84 +614,33 @@ fun TasksScreen(
             }
         }
     }
-}
 
-/**
- * Captura rápida do protótipo: pílula surface com borda 1.5dp, "+" em
- * chama, campo sem caixa e o botão roxo "Adicionar".
- */
-@Composable
-private fun QuickAddBar(
-    text: String,
-    onTextChange: (String) -> Unit,
-    onAdd: () -> Unit,
-) {
-    val scheme = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(scheme.surface)
-            .border(1.5.dp, scheme.outline, RoundedCornerShape(16.dp))
-            .padding(start = 15.dp, top = 6.dp, end = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            Icons.Filled.Add,
-            contentDescription = null,
-            tint = scheme.secondary,
-            modifier = Modifier.size(19.dp),
-        )
-        Spacer(Modifier.width(9.dp))
-        BasicTextField(
-            value = text,
-            onValueChange = onTextChange,
-            singleLine = true,
-            textStyle = TextStyle(
-                fontFamily = MaterialTheme.typography.bodyLarge.fontFamily,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 14.5.sp,
-                color = scheme.onSurface,
-            ),
-            cursorBrush = SolidColor(scheme.primary),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onAdd() }),
-            decorationBox = { inner ->
-                Box {
-                    if (text.isEmpty()) {
-                        Text(
-                            text = "Capturar uma tarefa…",
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.5.sp,
-                            ),
-                            color = extra.placeholder,
-                        )
-                    }
-                    inner()
-                }
+    if (showNewView) {
+        NewSavedViewSheet(
+            onDismiss = { showNewView = false },
+            onSave = { saved ->
+                scope.launch { deps.tasks.addSavedView(saved) }
+                savedViewId = saved.id
+                showNewView = false
             },
-            modifier = Modifier.weight(1f).testTag("tasks_quick_input"),
         )
-        Spacer(Modifier.width(8.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(11.dp))
-                .background(scheme.primary)
-                .testTag("tasks_quick_add")
-                .clickable(onClick = onAdd)
-                .padding(horizontal = 14.dp, vertical = 9.dp),
-        ) {
-            Text(
-                text = "Adicionar",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                ),
-                color = scheme.onPrimary,
-            )
-        }
+    }
+    if (showTemplates) {
+        TemplatesSheet(
+            templates = templates,
+            tasks = tasks,
+            onDismiss = { showTemplates = false },
+            onInstantiate = { templateId ->
+                scope.launch { deps.tasks.instantiateTemplate(templateId, today) }
+                showTemplates = false
+            },
+            onSaveFromProject = { name, items ->
+                scope.launch { deps.tasks.saveTemplate(name, items) }
+            },
+            onDelete = { templateId ->
+                scope.launch { deps.tasks.deleteTemplate(templateId) }
+            },
+        )
     }
 }
 
@@ -650,4 +836,77 @@ private fun EmptyNote(text: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 2.dp, top = 2.dp, end = 2.dp),
     )
+}
+
+/** Chip de vista salva (item 10): pílula com o ponto da cor da vista. */
+@Composable
+private fun SavedViewChip(view: SavedView, selected: Boolean, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(if (selected) extra.chipInk else scheme.surface)
+            .border(
+                1.5.dp,
+                if (selected) extra.chipInk else scheme.outline,
+                RoundedCornerShape(99.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(9.dp)
+                .clip(CircleShape)
+                .background(Color(view.colorHex)),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = view.name,
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+            color = if (selected) scheme.surface else scheme.onSurface,
+        )
+    }
+}
+
+/** Chip "+ Vista" (item 10): contorno tracejado pelo fundo suave. */
+@Composable
+private fun NewViewChip(onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(scheme.primaryContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "+ Vista",
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+            color = scheme.onPrimaryContainer,
+        )
+    }
+}
+
+/** Chip pequeno da barra de opções (itens 4 e 11). */
+@Composable
+private fun OptionChip(label: String, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(scheme.surface)
+            .border(1.5.dp, scheme.outline, RoundedCornerShape(99.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.5.sp),
+            color = scheme.onSurfaceVariant,
+        )
+    }
 }
