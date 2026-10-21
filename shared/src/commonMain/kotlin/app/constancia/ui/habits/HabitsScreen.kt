@@ -202,8 +202,9 @@ fun HabitsScreen(
             ) {
                 Text(
                     text = "Seus hábitos",
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 17.sp),
                     modifier = Modifier.weight(1f),
+                    maxLines = 1,
                 )
                 Text(
                     text = activeCount.toString() + " ativos · mapa de 18 semanas",
