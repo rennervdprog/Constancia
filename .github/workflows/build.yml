@@ -121,16 +121,10 @@ jobs:
             # Espera o device ficar LEGÍVEL p/ o Gradle antes dos testes:
             # sem isso, boots lentos falham com "No compatible devices
             # connected" / "API level 1" sem rodar teste nenhum.
+            # ATENÇÃO: esta action roda o script LINHA A LINHA (um sh -c
+            # por linha) — loops e ifs precisam caber numa linha só.
             adb wait-for-device
-            for i in $(seq 1 60); do
-              boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-              sdk=$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')
-              if [ "$boot" = "1" ] && [ -n "$sdk" ] && [ "$sdk" != "1" ]; then
-                echo "Device pronto: boot_completed=$boot sdk=$sdk"
-                break
-              fi
-              sleep 5
-            done
+            for i in $(seq 1 60); do boot=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r'); sdk=$(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r'); if [ "$boot" = "1" ] && [ -n "$sdk" ] && [ "$sdk" != "1" ]; then echo "Device pronto: boot=$boot sdk=$sdk"; break; fi; sleep 5; done
             mkdir -p uitest-screenshots
             # Monitora o logcat por marcadores UITEST_SHOT e tira screenshot via adb
             # a cada marcador. Roda em background durante os testes.
