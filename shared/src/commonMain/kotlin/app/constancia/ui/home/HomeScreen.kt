@@ -253,17 +253,23 @@ fun HomeScreen(
 
             if (isToday && dailyGoal > 0) {
                 item {
+                    val goalCounts =
+                        app.constancia.domain.completionCountsByDay(allTasks)
+                    val forgiven =
+                        app.constancia.domain.goalForgivenDates(
+                            goalPauses, today,
+                        )
                     TaskGoalCard(
-                        doneToday = app.constancia.domain.completionCountsByDay(
-                            allTasks,
-                        )[today] ?: 0,
+                        doneToday = goalCounts[today] ?: 0,
                         goal = dailyGoal,
                         streak = app.constancia.domain.dailyGoalStreak(
-                            allTasks, dailyGoal, goalPauses, todayDate,
+                            app.constancia.domain.dailyGoalMetDates(
+                                goalCounts, dailyGoal,
+                            ),
+                            forgiven,
+                            today,
                         ),
-                        pausedToday = app.constancia.domain.goalForgivenDates(
-                            goalPauses, today,
-                        ).contains(today),
+                        pausedToday = forgiven.contains(today),
                     )
                 }
             }

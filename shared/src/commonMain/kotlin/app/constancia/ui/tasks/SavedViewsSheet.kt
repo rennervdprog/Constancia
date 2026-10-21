@@ -38,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.constancia.model.SavedView
 import app.constancia.model.TaskProject
-import app.constancia.ui.theme.constanciaExtra
+import app.constancia.theme.constanciaExtra
 import kotlinx.datetime.Clock
 
 /**
