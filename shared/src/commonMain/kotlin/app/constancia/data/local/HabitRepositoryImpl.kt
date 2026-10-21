@@ -5,10 +5,10 @@ import app.cash.sqldelight.coroutines.mapToList
 import app.constancia.data.CheckinRepository
 import app.constancia.data.HabitRepository
 import app.constancia.db.ConstanciaDb
-import app.constancia.domain.currentStreak
 import app.constancia.domain.doneDatesFor
 import app.constancia.domain.donePairs
 import app.constancia.domain.forgivenDates
+import app.constancia.domain.habitStreakInfo
 import app.constancia.domain.nextCycleWindow
 import app.constancia.domain.skippedDatesFor
 import app.constancia.domain.weekDoneCount
@@ -318,12 +318,16 @@ internal fun computeTodayStatuses(
         // Pausas E dias pulados (TickTick item 4) perdoam o streak.
         val forgiven = forgivenDates(pausesByHabit[habit.id].orEmpty(), today) +
             skippedDatesFor(hcs)
+        // R13.2 (Fase D): a sequência como objeto (início/fim/recorde);
+        // o descanso planejado (R13.1) entra pelo próprio hábito.
+        val info = habitStreakInfo(habit, doneDates, forgiven, today)
         HabitStatus(
             habit = habit,
             todayCheckin = todayCheckin,
             isDoneToday = todayCheckin != null && doneDates.contains(today),
-            currentStreak = currentStreak(habit, doneDates, today, timeZone, forgiven),
+            currentStreak = info.count,
             weekDone = weekDoneCount(doneDates, today),
+            streakInfo = info,
         )
     }
 }

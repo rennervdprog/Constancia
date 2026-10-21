@@ -1,6 +1,7 @@
 package app.constancia.domain
 
 import app.constancia.model.GoalPause
+import app.constancia.model.StreakInfo
 import app.constancia.model.TaskItem
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
@@ -28,8 +29,22 @@ fun completionCountsByDay(tasks: List<TaskItem>): Map<String, Int> =
         .groupingBy { task -> task.completedAt?.take(10) ?: task.date }
         .eachCount()
 
-/** Expande as pausas da meta em dias "perdoados" (yyyy-MM-dd). */
-fun goalForgivenDates(pauses: List<GoalPause>, todayYmd: String): Set<String> {
+/**
+ * Expande as pausas da meta em dias "perdoados" (yyyy-MM-dd).
+ *
+ * R10.1 (Fase D): [ignoreWeekdays] (ISO 1=seg..7=dom) são os dias de
+ * descanso FIXOS da meta — entram como perdoados em toda a janela que
+ * o streak pode atravessar (a mesma trava de 3700 dias das pausas),
+ * então o fim de semana fora da meta não exige abrir pausa toda
+ * sexta-feira. Sem o parâmetro, o comportamento é o de sempre (só
+ * pausas) — é assim que a tela de ajustes lê o estado do interruptor
+ * "Pausar a meta".
+ */
+fun goalForgivenDates(
+    pauses: List<GoalPause>,
+    todayYmd: String,
+    ignoreWeekdays: Set<Int> = emptySet(),
+): Set<String> {
     val today = todayYmd.toLocalDate()
     val out = mutableSetOf<String>()
     for (pause in pauses) {
@@ -38,6 +53,15 @@ fun goalForgivenDates(pauses: List<GoalPause>, todayYmd: String): Set<String> {
         var guard = 0
         while (d <= end && guard++ < 3700) {
             out.add(d.toYmd())
+            d = d.plus(DatePeriod(days = 1))
+        }
+    }
+    if (ignoreWeekdays.isNotEmpty()) {
+        var d = today.minus(DatePeriod(days = 3700))
+        while (d <= today) {
+            if (d.isoDayNumberCompat() in ignoreWeekdays) {
+                out.add(d.toYmd())
+            }
             d = d.plus(DatePeriod(days = 1))
         }
     }
@@ -128,6 +152,172 @@ fun weeklyGoalStreak(
         weekStart = weekStart.minus(DatePeriod(days = 7))
     }
     return streak
+}
+
+// ---------------------------------------------------------------------
+// R10.2 (Fase D) — as sequências da meta como OBJETO (StreakInfo):
+// a corrida atual com início/fim + o recorde histórico, nos mesmos
+// moldes dos hábitos (domain/Streaks.kt habitStreakInfo).
+// ---------------------------------------------------------------------
+
+/** Maior corrida histórica de dias batendo a meta (buracos só de dias
+ *  perdoados não quebram a corrida, como no bestStreak dos hábitos). */
+private fun bestDailyGoalRun(
+    metDates: Set<String>,
+    forgivenDates: Set<String>,
+): Int {
+    if (metDates.isEmpty()) return 0
+    val sorted = metDates.map { it.toLocalDate() }.sorted()
+    var best = 1
+    var run = 1
+    for (i in 1 until sorted.size) {
+        val prev = sorted[i - 1]
+        val cur = sorted[i]
+        val gap = cur.toEpochDays() - prev.toEpochDays()
+        if (gap == 1) {
+            run++
+        } else if (gap > 1) {
+            var d = prev.plus(DatePeriod(days = 1))
+            var allForgiven = true
+            while (d < cur) {
+                if (!forgivenDates.contains(d.toYmd())) {
+                    allForgiven = false
+                    break
+                }
+                d = d.plus(DatePeriod(days = 1))
+            }
+            run = if (allForgiven) run + 1 else 1
+        }
+        if (run > best) best = run
+    }
+    return best
+}
+
+/**
+ * Sequência diária da meta como objeto: a caminhada é a de
+ * [dailyGoalStreak] (hoje em andamento não quebra; perdoados são
+ * atravessados sem contar), anotando o primeiro/último dia CONTADO.
+ */
+fun dailyGoalStreakInfo(
+    metDates: Set<String>,
+    forgivenDates: Set<String>,
+    todayYmd: String,
+): StreakInfo {
+    var count = 0
+    var start: LocalDate? = null
+    var end: LocalDate? = null
+    if (metDates.isNotEmpty() || forgivenDates.isNotEmpty()) {
+        var cursor = todayYmd.toLocalDate()
+        if (!metDates.contains(cursor.toYmd())) {
+            cursor = cursor.minus(DatePeriod(days = 1))
+        }
+        var guard = 0
+        while (guard++ < 3700) {
+            val key = cursor.toYmd()
+            if (metDates.contains(key)) {
+                count++
+                if (end == null) end = cursor
+                start = cursor
+            } else if (!forgivenDates.contains(key)) {
+                break
+            }
+            cursor = cursor.minus(DatePeriod(days = 1))
+        }
+    }
+    return StreakInfo(
+        count = count,
+        start = start,
+        end = end,
+        best = bestDailyGoalRun(metDates, forgivenDates),
+    )
+}
+
+/** Maior corrida histórica de semanas batendo a meta semanal; semana
+ *  congelada (4+ dias perdoados) não conta nem quebra, como em
+ *  [weeklyGoalStreak]. */
+private fun bestWeeklyGoalRun(
+    counts: Map<String, Int>,
+    weeklyGoal: Int,
+    forgivenDates: Set<String>,
+    today: LocalDate,
+): Int {
+    if (weeklyGoal <= 0 || counts.isEmpty()) return 0
+    val firstDay = counts.keys.minOf { it.toLocalDate() }
+    var weekStart = mondayOf(firstDay)
+    val thisWeek = mondayOf(today)
+    var best = 0
+    var run = 0
+    var guard = 0
+    while (weekStart <= thisWeek && guard++ < 520) {
+        val total = weekCompletionCount(counts, weekStart)
+        val weekEnd = weekStart.plus(DatePeriod(days = 6))
+        val forgivenInWeek = forgivenDates.count { ymd ->
+            val d = ymd.toLocalDate()
+            d >= weekStart && d <= weekEnd
+        }
+        when {
+            total >= weeklyGoal -> {
+                run++
+                if (run > best) best = run
+            }
+            forgivenInWeek >= 4 -> Unit // congelada: atravessa
+            else -> run = 0
+        }
+        weekStart = weekStart.plus(DatePeriod(days = 7))
+    }
+    return best
+}
+
+/**
+ * Sequência semanal da meta como objeto: a caminhada é a de
+ * [weeklyGoalStreak]; start/end são a segunda/o domingo das semanas
+ * extremas da corrida contada.
+ */
+fun weeklyGoalStreakInfo(
+    counts: Map<String, Int>,
+    weeklyGoal: Int,
+    forgivenDates: Set<String>,
+    today: LocalDate,
+): StreakInfo {
+    var count = 0
+    var start: LocalDate? = null
+    var end: LocalDate? = null
+    if (weeklyGoal > 0) {
+        val thisWeek = mondayOf(today)
+        var weekStart = thisWeek
+        var guard = 0
+        while (guard++ < 520) {
+            val total = weekCompletionCount(counts, weekStart)
+            val weekEnd = weekStart.plus(DatePeriod(days = 6))
+            val forgivenInWeek = forgivenDates.count { ymd ->
+                val d = ymd.toLocalDate()
+                d >= weekStart && d <= weekEnd
+            }
+            val isCurrent = weekStart == thisWeek
+            when {
+                total >= weeklyGoal -> {
+                    count++
+                    if (end == null) end = weekEnd
+                    start = weekStart
+                }
+                isCurrent && total > 0 -> Unit // em andamento: não quebra
+                forgivenInWeek >= 4 -> Unit // congelada: não quebra
+                else -> break
+            }
+            weekStart = weekStart.minus(DatePeriod(days = 7))
+        }
+        // A caminhada parou sem contar nada? Sai do laço com count 0.
+        if (count == 0) {
+            start = null
+            end = null
+        }
+    }
+    return StreakInfo(
+        count = count,
+        start = start,
+        end = end,
+        best = bestWeeklyGoalRun(counts, weeklyGoal, forgivenDates, today),
+    )
 }
 
 // ---------------------------------------------------------------------

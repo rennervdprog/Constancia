@@ -306,6 +306,14 @@ data class PeriodReview(
     val totalDeltaLabel: String?,
     val victory: String?,
     val lesson: String?,
+    // R10.3 (Fase D) — a SEGUNDA série: conclusões pelo dia em que
+    // foram FEITAS (completedAt), não pelo dia do prazo.
+    /** Concluídas por dia da semana da CONCLUSÃO, seg..dom. */
+    val doneByCompletionWeekday: List<Int> = List(7) { 0 },
+    /** Total de conclusões dentro do período (pela data de conclusão). */
+    val completionTotal: Int = 0,
+    /** Das conclusões do período, quantas foram DEPOIS do dia do prazo. */
+    val lateCompletions: Int = 0,
 )
 
 private fun weekdayIndex(date: LocalDate): Int = date.isoDayNumberCompat() - 1 // 0=seg
@@ -352,12 +360,30 @@ fun periodReview(
         null
     }
 
+    // R10.3 (Fase D): a série pela CONCLUSÃO — a tarefa entra no dia
+    // em que foi feita de fato (completedAt; sem ele, o dia a que a
+    // tarefa pertencia, mesma convenção de completionCountsByDay),
+    // qualquer que seja o prazo dela. "Tardia" = concluída depois do
+    // dia planejado (data efetiva = prazo ou dia de pertencimento).
+    val byCompletion = MutableList(7) { 0 }
+    var lateCompletions = 0
+    tasks.filter { it.done }.forEach { t ->
+        val completed = (t.completedAt?.take(10) ?: t.date).toLocalDate()
+        if (completed >= report.from && completed <= report.to) {
+            byCompletion[weekdayIndex(completed)]++
+            if (completed.toYmd() > taskEffDate(t)) lateCompletions++
+        }
+    }
+
     return PeriodReview(
         doneByWeekday = cur,
         prevDoneByWeekday = prev,
         totalDeltaLabel = totalDelta,
         victory = victory,
         lesson = lesson,
+        doneByCompletionWeekday = byCompletion,
+        completionTotal = byCompletion.sum(),
+        lateCompletions = lateCompletions,
     )
 }
 
@@ -479,7 +505,7 @@ fun periodHighlights(
             h,
             donePairs(checkins.filter { it.habitId == h.id }),
         )
-        val b = bestStreak(h, done, emptySet())
+        val b = bestStreak(h, done, emptySet(), h.ignoreWeekdays)
         if (b > best) {
             best = b
             bestName = h.name

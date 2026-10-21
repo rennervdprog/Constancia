@@ -96,6 +96,14 @@ fun weekStartOf(d: LocalDate): LocalDate =
 fun isDueOn(habit: Habit, date: LocalDate, activeFrom: LocalDate?): Boolean {
     if (habit.paused) return false
     if (activeFrom != null && date < activeFrom) return false
+    // R13.1 (Fase D): dia de descanso planejado NÃO é devido — o hábito
+    // some do dia e a sequência fica protegida (ver domain/Streaks.kt).
+    // WEEKLY_X não usa: a meta dele é semanal, não por dia.
+    if (habit.frequencyType != FrequencyType.WEEKLY_X &&
+        date.isoDayNumberCompat() in habit.ignoreWeekdays
+    ) {
+        return false
+    }
     return when (habit.frequencyType) {
         FrequencyType.DAILY -> true
         FrequencyType.WEEKLY_X -> true
@@ -182,7 +190,7 @@ fun computeReport(
         val hcis = checkinsByHabit[h.id].orEmpty()
         HabitReport(
             habit = h,
-            streak = currentStreak(h, doneDates, today.toYmd(), timeZone, forgivenByHabit[h.id].orEmpty()),
+            streak = currentStreak(h, doneDates, today.toYmd(), timeZone, forgivenByHabit[h.id].orEmpty(), h.ignoreWeekdays),
             dueDays = due,
             doneDays = done,
             checkinCount = hcis.size,
