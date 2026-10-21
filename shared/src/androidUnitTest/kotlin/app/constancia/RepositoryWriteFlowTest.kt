@@ -329,7 +329,9 @@ class RepositoryWriteFlowTest {
         )
         driver.execute(
             null,
-            "CREATE TABLE habit(id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL DEFAULT '')",
+            "CREATE TABLE habit(id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL DEFAULT '', " +
+                "reminder_enabled INTEGER NOT NULL DEFAULT 0, " +
+                "reminder_time TEXT NOT NULL DEFAULT '')",
             0,
         )
         driver.execute(
@@ -585,7 +587,9 @@ class RepositoryWriteFlowTest {
         // habit/checkin mínimos: a 6.sqm faz ALTER TABLE neles.
         driver.execute(
             null,
-            "CREATE TABLE habit(id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL DEFAULT '')",
+            "CREATE TABLE habit(id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL DEFAULT '', " +
+                "reminder_enabled INTEGER NOT NULL DEFAULT 0, " +
+                "reminder_time TEXT NOT NULL DEFAULT '')",
             0,
         )
         driver.execute(
@@ -851,7 +855,7 @@ class RepositoryWriteFlowTest {
     }
 
     @Test
-    fun migration6To7SeedsReminderTables() {
+    fun migration7To8SeedsReminderTables() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         // Base no formato v6 (task_item e habit completos, sem as
         // tabelas de lembrete): a 7.sqm roda sozinha sobre ela.
@@ -919,8 +923,8 @@ class RepositoryWriteFlowTest {
             0,
         )
 
-        assertEquals(7L, ConstanciaDb.Schema.version)
-        ConstanciaDb.Schema.migrate(driver, 6, ConstanciaDb.Schema.version)
+        assertEquals(8L, ConstanciaDb.Schema.version)
+        ConstanciaDb.Schema.migrate(driver, 7, ConstanciaDb.Schema.version)
 
         val q = ConstanciaDb(driver).constanciaDbQueries
         // O lembrete único da tarefa virou linha RELATIVE da lista.

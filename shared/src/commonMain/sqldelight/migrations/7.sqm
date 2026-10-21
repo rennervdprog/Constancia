@@ -1,4 +1,4 @@
--- Migração 6 -> 7: Fase C do Plano de Elevação (lembretes de verdade).
+-- Migração 7 -> 8: Fase C do Plano de Elevação (lembretes de verdade).
 -- R6.1: o lembrete único da tarefa (coluna reminder_minutes_before)
 -- vira uma LISTA em tabela própria: cada linha é um lembrete relativo
 -- (minutos antes da base = prazo + horário, ou 09:00) ou absoluto
