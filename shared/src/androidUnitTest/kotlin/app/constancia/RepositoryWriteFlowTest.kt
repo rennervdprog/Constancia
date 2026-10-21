@@ -1,6 +1,7 @@
 package app.constancia
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import app.constancia.data.PrefsRepository
 import app.constancia.data.local.CheckinRepositoryImpl
 import app.constancia.data.local.DiaryRepositoryImpl
 import app.constancia.data.local.HabitRepositoryImpl
@@ -11,11 +12,15 @@ import app.constancia.model.GoalType
 import app.constancia.model.CheckinStatus
 import app.constancia.model.Habit
 import app.constancia.model.NewTask
+import app.constancia.model.ReminderSpec
+import app.constancia.model.ReminderType
 import app.constancia.model.Session
 import app.constancia.model.TaskProject
 import app.constancia.model.toLocalDate
 import app.constancia.model.toYmd
 import app.constancia.model.todayYmd
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DatePeriod
@@ -815,5 +820,195 @@ class RepositoryWriteFlowTest {
         )
         q.insertCycle("cy1", "h1", "2026-10-20", "2026-11-10", 21L, null, "agora")
         assertEquals(1, q.selectCyclesForHabit("h1").executeAsList().size)
+    }
+
+    // ---- Fase C: lembretes de verdade ----
+
+    /** Prefs mínimo para os testes: só o lembrete automático interessa. */
+    private class FakePrefs(autoMinutes: Int? = null) : PrefsRepository {
+        private val auto = MutableStateFlow(autoMinutes)
+        override fun darkThemeFlow(): Flow<Boolean> = MutableStateFlow(false)
+        override suspend fun setDarkTheme(dark: Boolean) {}
+        override fun isProFlow(): Flow<Boolean> = MutableStateFlow(false)
+        override suspend fun setPro(pro: Boolean) {}
+        override fun onboardingDoneFlow(): Flow<Boolean> =
+            MutableStateFlow(true)
+        override suspend fun setOnboardingDone() {}
+        override fun taskDailyGoalFlow(): Flow<Int> = MutableStateFlow(0)
+        override suspend fun setTaskDailyGoal(goal: Int) {}
+        override fun taskWeeklyGoalFlow(): Flow<Int> = MutableStateFlow(0)
+        override suspend fun setTaskWeeklyGoal(goal: Int) {}
+        override fun dailyReviewEnabledFlow(): Flow<Boolean> =
+            MutableStateFlow(false)
+        override suspend fun setDailyReviewEnabled(enabled: Boolean) {}
+        override fun dailyReviewTimeFlow(): Flow<String> =
+            MutableStateFlow("08:00")
+        override suspend fun setDailyReviewTime(time: String) {}
+        override fun autoReminderMinutesFlow(): Flow<Int?> = auto
+        override suspend fun setAutoReminderMinutes(minutes: Int?) {
+            auto.value = minutes
+        }
+    }
+
+    @Test
+    fun migration6To7SeedsReminderTables() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        // Base no formato v6 (task_item e habit completos, sem as
+        // tabelas de lembrete): a 7.sqm roda sozinha sobre ela.
+        driver.execute(
+            null,
+            "CREATE TABLE task_item(" +
+                "id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, due_time TEXT, " +
+                "done INTEGER NOT NULL DEFAULT 0, date TEXT NOT NULL, " +
+                "project TEXT NOT NULL DEFAULT 'entrada', " +
+                "priority INTEGER NOT NULL DEFAULT 2, due_date TEXT, " +
+                "session TEXT NOT NULL DEFAULT 'TARDE', " +
+                "repeat_rule TEXT NOT NULL DEFAULT '', deadline_date TEXT, " +
+                "duration_minutes INTEGER, completed_at TEXT, " +
+                "reminder_minutes_before INTEGER, " +
+                "repeat_spec TEXT NOT NULL DEFAULT '', " +
+                "note TEXT NOT NULL DEFAULT '', habit_id TEXT, " +
+                "created_at TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "CREATE TABLE habit(" +
+                "id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, icon TEXT NOT NULL, " +
+                "color INTEGER NOT NULL, goal_type TEXT NOT NULL, " +
+                "target_quantity REAL NOT NULL DEFAULT 1.0, " +
+                "quantity_unit TEXT NOT NULL DEFAULT '', " +
+                "quantity_step REAL NOT NULL DEFAULT 1.0, " +
+                "show_in_today INTEGER NOT NULL DEFAULT 0, " +
+                "show_in_calendar INTEGER NOT NULL DEFAULT 0, " +
+                "frequency_type TEXT NOT NULL, " +
+                "days_of_week TEXT NOT NULL DEFAULT '', " +
+                "weekly_target INTEGER NOT NULL DEFAULT 7, session TEXT NOT NULL, " +
+                "reminder_enabled INTEGER NOT NULL DEFAULT 0, " +
+                "reminder_time TEXT NOT NULL DEFAULT '', " +
+                "paused INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0, " +
+                "created_at TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO task_item(id, title, date, reminder_minutes_before, created_at) " +
+                "VALUES('t1', 'Com lembrete', '2026-10-20', 30, 'agora')",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO task_item(id, title, date, created_at) " +
+                "VALUES('t2', 'Sem lembrete', '2026-10-20', 'agora')",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO habit(id, name, icon, color, goal_type, frequency_type, session, " +
+                "reminder_enabled, reminder_time, created_at) " +
+                "VALUES('h1', 'Beber água', 'water', 1, 'BINARY', 'DAILY', 'MANHA', " +
+                "1, '07:30', 'agora')",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO habit(id, name, icon, color, goal_type, frequency_type, session, " +
+                "reminder_enabled, reminder_time, created_at) " +
+                "VALUES('h2', 'Ler', 'book', 1, 'BINARY', 'DAILY', 'NOITE', " +
+                "0, '', 'agora')",
+            0,
+        )
+
+        assertEquals(7L, ConstanciaDb.Schema.version)
+        ConstanciaDb.Schema.migrate(driver, 6, ConstanciaDb.Schema.version)
+
+        val q = ConstanciaDb(driver).constanciaDbQueries
+        // O lembrete único da tarefa virou linha RELATIVE da lista.
+        val t1 = q.selectRemindersForTask("t1").executeAsList()
+        assertEquals(1, t1.size)
+        assertEquals("RELATIVE", t1.single().type)
+        assertEquals(30L, t1.single().minute_offset)
+        assertEquals(0L, t1.single().auto)
+        assertEquals(0, q.selectRemindersForTask("t2").executeAsList().size)
+        // O horário único do hábito virou a primeira linha dele.
+        val h1 = q.selectRemindersForHabit("h1").executeAsList()
+        assertEquals(1, h1.size)
+        assertEquals("07:30", h1.single().time)
+        assertEquals(0, q.selectRemindersForHabit("h2").executeAsList().size)
+    }
+
+    @Test
+    fun taskRemindersListAndAutoMaterialization() = runBlocking {
+        val db = testDb()
+        val tasks = TaskRepositoryImpl(db, prefs = FakePrefs(autoMinutes = 30))
+        val date = todayYmd(TimeZone.UTC)
+
+        // R6.2: com data E horário e lista vazia, o automático nasce.
+        val idAuto = tasks.add(
+            NewTask(title = "Com horário", dueDate = date, dueTime = "15:30"),
+        )
+        val autoTask = assertNotNull(tasks.getById(idAuto))
+        assertEquals(1, autoTask.reminders.size)
+        assertTrue(autoTask.reminders.single().auto)
+        assertEquals(30, autoTask.reminders.single().minuteOffset)
+        assertEquals(30, autoTask.reminderMinutesBefore) // espelho legado
+
+        // Sem horário: nada de automático.
+        val idNoTime = tasks.add(NewTask(title = "Sem horário", dueDate = date))
+        assertEquals(0, tasks.getById(idNoTime)?.reminders?.size)
+
+        // Lista explícita vence: dois lembretes, nenhum automático.
+        val idList = tasks.add(
+            NewTask(
+                title = "Com lista", dueDate = date, dueTime = "10:00",
+                reminders = listOf(
+                    ReminderSpec(ReminderType.RELATIVE, minuteOffset = 10),
+                    ReminderSpec(ReminderType.ABSOLUTE, atMillis = 1792400400000L),
+                ),
+            ),
+        )
+        val listed = assertNotNull(tasks.getById(idList))
+        assertEquals(2, listed.reminders.size)
+        assertTrue(listed.reminders.none { it.auto })
+
+        // setTaskReminders substitui a lista inteira (e o espelho).
+        tasks.setTaskReminders(
+            idList,
+            listOf(ReminderSpec(ReminderType.RELATIVE, minuteOffset = 60)),
+        )
+        val replaced = assertNotNull(tasks.getById(idList))
+        assertEquals(1, replaced.reminders.size)
+        assertEquals(60, replaced.reminders.single().minuteOffset)
+        assertEquals(60, replaced.reminderMinutesBefore)
+
+        // O atalho legado continua funcionando sobre a lista.
+        tasks.setReminder(idList, null)
+        assertEquals(0, tasks.getById(idList)?.reminders?.size)
+        assertNull(tasks.getById(idList)?.reminderMinutesBefore)
+
+        // Os Flows carregam a lista junto da tarefa.
+        val fromFlow = tasks.allTasksFlow().first()
+            .first { it.id == idAuto }
+        assertEquals(1, fromFlow.reminders.size)
+    }
+
+    @Test
+    fun habitRemindersReplaceListAndMirror() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        habits.save(habit())
+
+        // Vários horários por hábito; duplicado e inválido são filtrados.
+        habits.setHabitReminders("h1", listOf("21:00", "07:30", "07:30", "abc"))
+        val list = habits.habitRemindersFlow("h1").first()
+        assertEquals(listOf("07:30", "21:00"), list.map { it.time })
+        val saved = assertNotNull(habits.getById("h1"))
+        assertTrue(saved.reminderEnabled)
+        assertEquals("07:30", saved.reminderTime) // espelho = 1º horário
+
+        habits.setHabitReminders("h1", emptyList())
+        assertEquals(0, habits.habitRemindersFlow("h1").first().size)
+        assertFalse(assertNotNull(habits.getById("h1")).reminderEnabled)
     }
 }

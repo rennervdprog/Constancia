@@ -8,10 +8,12 @@ import app.constancia.model.DiaryEntry
 import app.constancia.model.Habit
 import app.constancia.model.HabitCycle
 import app.constancia.model.HabitRecord
+import app.constancia.model.HabitReminder
 import app.constancia.model.HabitStatus
 import app.constancia.model.GoalPause
 import app.constancia.model.NewTask
 import app.constancia.model.PauseInterval
+import app.constancia.model.ReminderSpec
 import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.TaskItem
@@ -55,6 +57,18 @@ interface HabitRepository {
      * TickTick). Retorna o ciclo criado.
      */
     suspend fun startCycle(habitId: String, targetDays: Int, startYmd: String): HabitCycle
+
+    // -- Fase C (absorvido do TickTick §9.4) --
+    /** Lembretes (horários diários "HH:mm") de um hábito — vários por hábito. */
+    fun habitRemindersFlow(habitId: String): Flow<List<HabitReminder>>
+    /** Todos os lembretes de hábito (base das telas e do reagendamento). */
+    fun allHabitRemindersFlow(): Flow<List<HabitReminder>>
+    /**
+     * Substitui os horários de lembrete do hábito: grava a lista,
+     * atualiza o espelho (reminderEnabled/reminderTime) e agenda os
+     * alarmes diários (hábito pausado não apita).
+     */
+    suspend fun setHabitReminders(habitId: String, times: List<String>)
 }
 
 interface CheckinRepository {
@@ -141,6 +155,12 @@ interface TaskRepository {
     /** Item 9: define/remove o lembrete da tarefa (null = sem lembrete). */
     suspend fun setReminder(id: String, minutesBefore: Int?)
 
+    /**
+     * R6.1 (Fase C): substitui a LISTA de lembretes da tarefa (vários,
+     * relativos e absolutos) e reagenda todos. Lista vazia = nenhum.
+     */
+    suspend fun setTaskReminders(id: String, specs: List<ReminderSpec>)
+
     /** Item 10: vistas salvas nomeadas com cor. */
     fun savedViewsFlow(): Flow<List<SavedView>>
     suspend fun addSavedView(view: SavedView): String
@@ -211,4 +231,13 @@ interface PrefsRepository {
     /** Item 3: horário do Daily Review, "HH:mm" (padrão "08:00"). */
     fun dailyReviewTimeFlow(): Flow<String>
     suspend fun setDailyReviewTime(time: String)
+
+    // -- Fase C --
+    /**
+     * R6.2: lembrete automático de tarefa, em minutos antes do horário
+     * (null = desligado). Tarefa nova com data e horário ganha esse
+     * lembrete materializado, sem tocar no campo de lembrete.
+     */
+    fun autoReminderMinutesFlow(): Flow<Int?>
+    suspend fun setAutoReminderMinutes(minutes: Int?)
 }

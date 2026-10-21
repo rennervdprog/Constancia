@@ -45,15 +45,18 @@ fun rememberAppDeps(driverFactory: DatabaseDriverFactory): AppDeps {
         val db = appDatabase(driverFactory)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val checkins = CheckinRepositoryImpl(db)
-        val habits = HabitRepositoryImpl(db, checkins)
+        val prefs = PrefsRepositoryImpl()
+        val habits = HabitRepositoryImpl(db, checkins, NotificationScheduler())
         val deps = AppDeps(
             habits = habits,
             checkins = checkins,
-            tasks = TaskRepositoryImpl(db, checkins, NotificationScheduler()),
+            tasks = TaskRepositoryImpl(
+                db, checkins, NotificationScheduler(), prefs,
+            ),
             diary = DiaryRepositoryImpl(db),
             challenges = ChallengeRepositoryImpl(db),
             sync = LocalSyncRepository(),
-            prefs = PrefsRepositoryImpl(),
+            prefs = prefs,
         )
         scope.launch { deps.challenges.ensureSeed() }
         scope.launch { deps.tasks.ensureFactoryTemplates() }

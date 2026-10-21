@@ -15,10 +15,13 @@ import app.constancia.domain.weekDoneCount
 import app.constancia.model.Checkin
 import app.constancia.model.Habit
 import app.constancia.model.HabitCycle
+import app.constancia.model.HabitReminder
 import app.constancia.model.HabitStatus
 import app.constancia.model.PauseInterval
 import app.constancia.model.newId
 import app.constancia.model.todayYmd
+import app.constancia.domain.parseTimeOrNull
+import app.constancia.notify.NotificationScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -35,6 +38,7 @@ private const val MAX_YMD = "9999-12-31"
 class HabitRepositoryImpl(
     private val db: ConstanciaDb,
     private val checkins: CheckinRepository,
+    private val notifier: NotificationScheduler? = null,
 ) : HabitRepository {
 
     private val queries get() = db.constanciaDbQueries
@@ -75,6 +79,16 @@ class HabitRepositoryImpl(
                 createdAt,
                 habit.sortOrder.toLong(),
             )
+            // Fase C: hábito que já nasce com o horário legado ligado
+            // ganha a primeira linha da lista de lembretes.
+            if (habit.reminderEnabled &&
+                parseTimeOrNull(habit.reminderTime) != null
+            ) {
+                queries.insertHabitReminder(
+                    newId(), habit.id, habit.reminderTime,
+                    Clock.System.now().toString(),
+                )
+            }
         } else {
             // updateHabit nao toca paused/archived/created_at (vias proprias).
             queries.updateHabit(
@@ -97,9 +111,11 @@ class HabitRepositoryImpl(
                 habit.id,
             )
         }
+        // O nome pode ter mudado: os alarmes são repostos com o nome atual.
+        refreshHabitReminderAlarms(habit.id)
     }
 
-    override suspend fun setPaused(id: String, paused: Boolean): Unit =
+    override suspend fun setPaused(id: String, paused: Boolean) {
         withContext(Dispatchers.Default) {
             val today = todayYmd()
             queries.setHabitPaused(paused.toFlag(), id)
@@ -111,6 +127,9 @@ class HabitRepositoryImpl(
                 queries.closeOpenPauseIntervals(today, id)
             }
         }
+        // Hábito pausado não apita; ao retomar, os alarmes voltam.
+        refreshHabitReminderAlarms(id)
+    }
 
     override suspend fun pauseIntervals(habitId: String): List<PauseInterval> =
         withContext(Dispatchers.Default) {
@@ -159,8 +178,83 @@ class HabitRepositoryImpl(
         cycle
     }
 
-    override suspend fun delete(id: String): Unit = withContext(Dispatchers.Default) {
-        queries.deleteHabit(id)
+    override suspend fun delete(id: String) {
+        // Os alarmes saem pelo id antes de as linhas sumirem (CASCADE).
+        val scheduler = notifier
+        if (scheduler != null) {
+            remindersOf(id).forEach { scheduler.cancelHabitReminder(it.id) }
+        }
+        withContext(Dispatchers.Default) {
+            queries.deleteHabit(id)
+        }
+    }
+
+    // -- Fase C: lembretes múltiplos de hábito --
+
+    override fun habitRemindersFlow(habitId: String): Flow<List<HabitReminder>> =
+        queries.selectRemindersForHabit(habitId)
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override fun allHabitRemindersFlow(): Flow<List<HabitReminder>> =
+        queries.selectAllHabitReminders()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override suspend fun setHabitReminders(habitId: String, times: List<String>) {
+        val scheduler = notifier
+        if (scheduler != null) {
+            remindersOf(habitId).forEach { scheduler.cancelHabitReminder(it.id) }
+        }
+        val clean = times
+            .mapNotNull { parseTimeOrNull(it.trim()) }
+            .map {
+                it.hour.toString().padStart(2, '0') + ":" +
+                    it.minute.toString().padStart(2, '0')
+            }
+            .distinct()
+            .sorted()
+        val now = Clock.System.now().toString()
+        withContext(Dispatchers.Default) {
+            queries.deleteRemindersForHabit(habitId)
+            clean.forEach { time ->
+                queries.insertHabitReminder(newId(), habitId, time, now)
+            }
+            // Espelho: ligado + primeiro horário (ordenação/exibição).
+            queries.setHabitReminderMirror(
+                if (clean.isEmpty()) 0L else 1L,
+                clean.firstOrNull() ?: "",
+                habitId,
+            )
+        }
+        refreshHabitReminderAlarms(habitId)
+    }
+
+    private suspend fun remindersOf(habitId: String): List<HabitReminder> =
+        withContext(Dispatchers.Default) {
+            queries.selectRemindersForHabit(habitId).executeAsList()
+                .map { it.toModel() }
+        }
+
+    /**
+     * Repõe os alarmes diários do hábito a partir das linhas atuais
+     * (cancela todos e agenda de novo). Hábito pausado/arquivado ou
+     * inexistente fica sem alarme. Sem notifier (testes), nada faz.
+     */
+    private suspend fun refreshHabitReminderAlarms(habitId: String) {
+        val scheduler = notifier ?: return
+        val rows = remindersOf(habitId)
+        rows.forEach { scheduler.cancelHabitReminder(it.id) }
+        val habit = getById(habitId) ?: return
+        if (habit.paused) return
+        rows.forEach { row ->
+            val time = parseTimeOrNull(row.time) ?: return@forEach
+            scheduler.scheduleHabitReminder(
+                row.id, habit.name, time.hour, time.minute,
+            )
+        }
     }
 
     override fun todayStatusFlow(timeZone: TimeZone): Flow<List<HabitStatus>> {

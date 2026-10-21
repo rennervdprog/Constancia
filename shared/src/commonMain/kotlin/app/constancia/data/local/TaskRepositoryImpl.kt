@@ -3,14 +3,16 @@ package app.constancia.data.local
 import app.cash.sqldelight.coroutines.asFlow
 import app.cash.sqldelight.coroutines.mapToList
 import app.constancia.data.CheckinRepository
+import app.constancia.data.PrefsRepository
 import app.constancia.data.TaskRepository
 import app.constancia.db.ConstanciaDb
+import app.constancia.domain.autoReminderSpec
 import app.constancia.domain.encodeRepeatSpec
 import app.constancia.domain.effectiveRepeatSpec
 import app.constancia.domain.nextOccurrence
 import app.constancia.domain.nextRepeatDate
 import app.constancia.domain.repeatLabel
-import app.constancia.domain.reminderInstantMillis
+import app.constancia.domain.taskReminderInstantMillis
 import app.constancia.model.CompletionReversal
 import app.constancia.model.GoalPause
 import app.constancia.model.HabitCheckinReversal
@@ -18,11 +20,14 @@ import app.constancia.model.SubtaskState
 import app.constancia.notify.NotificationScheduler
 import app.constancia.model.GoalType
 import app.constancia.model.NewTask
+import app.constancia.model.ReminderSpec
+import app.constancia.model.ReminderType
 import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskOccurrence
+import app.constancia.model.TaskReminder
 import app.constancia.model.TaskViewOptions
 import app.constancia.model.TaskProject
 import app.constancia.model.TaskTemplate
@@ -33,6 +38,7 @@ import app.constancia.model.todayYmd
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -51,6 +57,7 @@ class TaskRepositoryImpl(
     private val db: ConstanciaDb,
     private val checkins: CheckinRepository? = null,
     private val notifier: NotificationScheduler? = null,
+    private val prefs: PrefsRepository? = null,
 ) : TaskRepository {
 
     private val queries get() = db.constanciaDbQueries
@@ -65,20 +72,66 @@ class TaskRepositoryImpl(
     private val pendingReversals = mutableMapOf<String, CompletionReversal>()
 
     /**
-     * Item 9: mantém o alarme da tarefa sincronizado com o estado dela
-     * (agenda quando há lembrete futuro; cancela quando conclui, apaga
-     * ou o instante já passou). Sem notifier (testes), não faz nada.
+     * Fase C (R6.1): mantém os alarmes da tarefa sincronizados com a
+     * LISTA de lembretes dela — cada lembrete tem o próprio alarme
+     * (id da linha). Cancela e reagenda todos: futuro agenda; passado,
+     * concluída ou sem instante, fica só cancelado. Sem notifier
+     * (testes), não faz nada.
      */
-    private suspend fun refreshReminder(id: String) {
+    private suspend fun refreshReminders(id: String) {
         val scheduler = notifier ?: return
         val task = getById(id) ?: return
-        val trigger = reminderInstantMillis(task)
-        if (trigger != null &&
-            trigger > Clock.System.now().toEpochMilliseconds()
-        ) {
-            scheduler.scheduleTaskReminder(task.id, task.title, trigger)
-        } else {
-            scheduler.cancelTaskReminder(task.id)
+        val now = Clock.System.now().toEpochMilliseconds()
+        task.reminders.forEach { reminder ->
+            scheduler.cancelTaskReminder(reminder.id)
+            val instant = taskReminderInstantMillis(task, reminder)
+            if (instant != null && instant > now) {
+                scheduler.scheduleTaskReminder(reminder.id, task.title, instant)
+            }
+        }
+    }
+
+    /** Cancela os alarmes de todos os lembretes atuais da tarefa. */
+    private suspend fun cancelReminderAlarms(id: String) {
+        val scheduler = notifier ?: return
+        remindersForTask(id).forEach { scheduler.cancelTaskReminder(it.id) }
+    }
+
+    private fun remindersByTaskFlow(): Flow<Map<String, List<TaskReminder>>> =
+        queries.selectAllTaskReminders()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() }.groupBy { it.taskId } }
+
+    private suspend fun remindersForTask(id: String): List<TaskReminder> =
+        withContext(Dispatchers.Default) {
+            queries.selectRemindersForTask(id).executeAsList()
+                .map { it.toModel() }
+        }
+
+    private suspend fun insertReminderRows(
+        taskId: String,
+        specs: List<ReminderSpec>,
+        auto: Boolean = false,
+    ) {
+        val now = Clock.System.now().toString()
+        withContext(Dispatchers.Default) {
+            specs.forEach { spec ->
+                queries.insertTaskReminder(
+                    newId(), taskId, spec.type.name,
+                    spec.minuteOffset?.toLong(), spec.atMillis,
+                    if (auto) 1L else 0L, now,
+                )
+            }
+        }
+    }
+
+    /** A coluna legada segue como espelho do 1º lembrete RELATIVE. */
+    private suspend fun syncLegacyReminderColumn(taskId: String) {
+        val firstRelative = remindersForTask(taskId)
+            .firstOrNull { it.type == ReminderType.RELATIVE }?.minuteOffset
+        withContext(Dispatchers.Default) {
+            queries.setTaskReminder(firstRelative?.toLong(), taskId)
         }
     }
 
@@ -86,13 +139,19 @@ class TaskRepositoryImpl(
         combine(
             queries.selectTasksForDate(dateYmd, dateYmd).asFlow().mapToList(Dispatchers.Default),
             allSubtasksFlow(),
-        ) { rows, subs -> rows.map { it.toModel(subs[it.id].orEmpty()) } }
+            remindersByTaskFlow(),
+        ) { rows, subs, reminders ->
+            rows.map { it.toModel(subs[it.id].orEmpty(), reminders[it.id].orEmpty()) }
+        }
 
     override fun allTasksFlow(): Flow<List<TaskItem>> =
         combine(
             queries.selectAllTasks().asFlow().mapToList(Dispatchers.Default),
             allSubtasksFlow(),
-        ) { rows, subs -> rows.map { it.toModel(subs[it.id].orEmpty()) } }
+            remindersByTaskFlow(),
+        ) { rows, subs, reminders ->
+            rows.map { it.toModel(subs[it.id].orEmpty(), reminders[it.id].orEmpty()) }
+        }
 
     private fun allSubtasksFlow(): Flow<Map<String, List<Subtask>>> =
         queries.selectAllSubtasks()
@@ -105,7 +164,9 @@ class TaskRepositoryImpl(
         val subs = queries.selectAllSubtasks().executeAsList()
             .map { it.toModel() }
             .filter { it.taskId == id }
-        row.toModel(subs)
+        val reminders = queries.selectRemindersForTask(id).executeAsList()
+            .map { it.toModel() }
+        row.toModel(subs, reminders)
     }
 
     override suspend fun add(task: NewTask): String = withContext(Dispatchers.Default) {
@@ -137,7 +198,26 @@ class TaskRepositoryImpl(
         task.subtaskTitles.forEachIndexed { index, title ->
             queries.insertSubtask(newId(), id, title, 0, index.toLong(), now)
         }
-        refreshReminder(id)
+        // Fase C (R6.1): a LISTA de lembretes nasce com a tarefa. Sem
+        // lista explícita, o atalho legado (reminderMinutesBefore) vira
+        // um lembrete relativo único — o mesmo comportamento de antes.
+        val specs = task.reminders.ifEmpty {
+            task.reminderMinutesBefore?.let {
+                listOf(
+                    ReminderSpec(ReminderType.RELATIVE, minuteOffset = it),
+                )
+            } ?: emptyList()
+        }
+        if (specs.isNotEmpty()) insertReminderRows(id, specs)
+        // R6.2: lembrete automático materializado — tarefa com data e
+        // horário e lista vazia ganha o lembrete da preferência.
+        val auto = autoReminderSpec(
+            prefs?.autoReminderMinutesFlow()?.first(),
+            task.dueDate, task.dueTime, specs.size,
+        )
+        if (auto != null) insertReminderRows(id, listOf(auto), auto = true)
+        if (specs.isNotEmpty() || auto != null) syncLegacyReminderColumn(id)
+        refreshReminders(id)
         id
     }
 
@@ -173,7 +253,7 @@ class TaskRepositoryImpl(
             withContext(Dispatchers.Default) {
                 queries.setTaskDone(false.toFlag(), null, id)
             }
-            refreshReminder(id)
+            refreshReminders(id)
             return null
         }
         val before = getById(id) ?: return null
@@ -188,7 +268,7 @@ class TaskRepositoryImpl(
                 id,
             )
         }
-        refreshReminder(id)
+        refreshReminders(id)
         val task = getById(id) ?: return null
         return recordCompletion(task, subtaskStates)
     }
@@ -259,14 +339,14 @@ class TaskRepositoryImpl(
      * histórico e check-in de hábito).
      */
     private suspend fun applyReversal(reversal: CompletionReversal) {
-        // 1) Ocorrência gerada: apaga (subtarefas primeiro) + lembrete.
+        // 1) Ocorrência gerada: apaga (subtarefas primeiro) + lembretes.
         val spawnedId = reversal.spawnedTaskId
         if (spawnedId != null) {
+            cancelReminderAlarms(spawnedId)
             withContext(Dispatchers.Default) {
                 queries.deleteSubtasksForTask(spawnedId)
                 queries.deleteTask(spawnedId)
             }
-            notifier?.cancelTaskReminder(spawnedId)
         }
         // 2) O snapshot do histórico sai junto com a conclusão.
         val historyId = reversal.historyId
@@ -299,7 +379,7 @@ class TaskRepositoryImpl(
             }
             queries.setTaskDone(false.toFlag(), null, reversal.taskId)
         }
-        refreshReminder(reversal.taskId)
+        refreshReminders(reversal.taskId)
     }
 
     override fun occurrenceHistoryFlow(): Flow<List<TaskOccurrence>> =
@@ -350,7 +430,7 @@ class TaskRepositoryImpl(
             // Sem prazo novo, o "date" mantém o dia atual da tarefa.
             queries.setTaskDueDate(dueDate, dueDate ?: (current?.date ?: todayYmd()), id)
         }
-        refreshReminder(id)
+        refreshReminders(id)
     }
 
     override suspend fun addSubtask(taskId: String, title: String): Unit =
@@ -394,15 +474,15 @@ class TaskRepositoryImpl(
         val taskId = completedTaskId ?: return
         val task = getById(taskId) ?: return
         recordCompletion(task, statesBefore)
-        refreshReminder(taskId)
+        refreshReminders(taskId)
     }
 
     override suspend fun delete(id: String) {
         reversalsMutex.withLock { pendingReversals.remove(id) }
+        cancelReminderAlarms(id)
         withContext(Dispatchers.Default) {
             queries.deleteTask(id)
         }
-        notifier?.cancelTaskReminder(id)
     }
 
     // -- Backlog Todoist Faixa 1/2 --
@@ -417,10 +497,27 @@ class TaskRepositoryImpl(
     }
 
     override suspend fun setReminder(id: String, minutesBefore: Int?) {
+        // Atalho legado de 1 lembrete: hoje ele escreve na LISTA (R6.1).
+        setTaskReminders(
+            id,
+            minutesBefore?.let {
+                listOf(ReminderSpec(ReminderType.RELATIVE, minuteOffset = it))
+            } ?: emptyList(),
+        )
+    }
+
+    override suspend fun setTaskReminders(
+        id: String,
+        specs: List<ReminderSpec>,
+    ) {
+        // Os alarmes das linhas antigas saem pelo id antes da troca.
+        cancelReminderAlarms(id)
         withContext(Dispatchers.Default) {
-            queries.setTaskReminder(minutesBefore?.toLong(), id)
+            queries.deleteRemindersForTask(id)
         }
-        refreshReminder(id)
+        if (specs.isNotEmpty()) insertReminderRows(id, specs)
+        syncLegacyReminderColumn(id)
+        refreshReminders(id)
     }
 
     override fun savedViewsFlow(): Flow<List<SavedView>> =
@@ -675,7 +772,15 @@ class TaskRepositoryImpl(
                 subtaskTitles = task.subtasks.map { it.title },
                 deadlineDate = nextDeadline,
                 durationMinutes = task.durationMinutes,
-                reminderMinutesBefore = task.reminderMinutesBefore,
+                // Fase C: a próxima ocorrência herda os lembretes
+                // RELATIVOS explícitos; o automático (auto = 1) não é
+                // copiado — ele se materializa de novo no add() — e o
+                // absoluto é do dia, não da série.
+                reminders = task.reminders
+                    .filter { !it.auto && it.type == ReminderType.RELATIVE }
+                    .map {
+                        ReminderSpec(it.type, it.minuteOffset, it.atMillis)
+                    },
                 repeatSpec = if (spec != null) encodeRepeatSpec(spec) else "",
             ),
         )

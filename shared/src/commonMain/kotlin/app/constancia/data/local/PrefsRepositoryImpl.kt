@@ -28,6 +28,11 @@ class PrefsRepositoryImpl : PrefsRepository {
         MutableStateFlow(settings.getBoolean(KEY_DAILY_REVIEW_ENABLED, false))
     private val dailyReviewTimeState =
         MutableStateFlow(settings.getString(KEY_DAILY_REVIEW_TIME, "08:00"))
+    private val autoReminderMinutesState =
+        MutableStateFlow(
+            settings.getInt(KEY_AUTO_REMINDER_MINUTES, AUTO_REMINDER_OFF)
+                .takeIf { it >= 0 },
+        )
 
     override fun darkThemeFlow(): Flow<Boolean> = darkThemeState
 
@@ -78,7 +83,19 @@ class PrefsRepositoryImpl : PrefsRepository {
         dailyReviewTimeState.value = time
     }
 
+    override fun autoReminderMinutesFlow(): Flow<Int?> =
+        autoReminderMinutesState
+
+    override suspend fun setAutoReminderMinutes(minutes: Int?) {
+        settings.putInt(
+            KEY_AUTO_REMINDER_MINUTES, minutes ?: AUTO_REMINDER_OFF,
+        )
+        autoReminderMinutesState.value = minutes
+    }
+
     private companion object {
+        // -1 = lembrete automático desligado (a chave guarda minutos >= 0).
+        const val AUTO_REMINDER_OFF = -1
         const val KEY_DARK_THEME = "dark_theme"
         const val KEY_IS_PRO = "is_pro"
         const val KEY_ONBOARDING_DONE = "onboarding_done"
@@ -86,5 +103,6 @@ class PrefsRepositoryImpl : PrefsRepository {
         const val KEY_TASK_WEEKLY_GOAL = "task_weekly_goal"
         const val KEY_DAILY_REVIEW_ENABLED = "daily_review_enabled"
         const val KEY_DAILY_REVIEW_TIME = "daily_review_time"
+        const val KEY_AUTO_REMINDER_MINUTES = "auto_reminder_minutes"
     }
 }
