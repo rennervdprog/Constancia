@@ -33,6 +33,22 @@ class PrefsRepositoryImpl : PrefsRepository {
             settings.getInt(KEY_AUTO_REMINDER_MINUTES, AUTO_REMINDER_OFF)
                 .takeIf { it >= 0 },
         )
+    private val goalIgnoreWeekdaysState =
+        MutableStateFlow(
+            settings.getString(KEY_GOAL_IGNORE_WEEKDAYS, "").toIsoDaySet(),
+        )
+    private val vacationModeState =
+        MutableStateFlow(settings.getBoolean(KEY_VACATION_MODE, false))
+    private val vacationHabitIdsState =
+        MutableStateFlow(
+            settings.getString(KEY_VACATION_HABIT_IDS, "")
+                .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                .toSet(),
+        )
+    private val vacationGoalPauseOpenedState =
+        MutableStateFlow(
+            settings.getBoolean(KEY_VACATION_GOAL_PAUSE_OPENED, false),
+        )
 
     override fun darkThemeFlow(): Flow<Boolean> = darkThemeState
 
@@ -93,6 +109,40 @@ class PrefsRepositoryImpl : PrefsRepository {
         autoReminderMinutesState.value = minutes
     }
 
+    override fun goalIgnoreWeekdaysFlow(): Flow<Set<Int>> =
+        goalIgnoreWeekdaysState
+
+    override suspend fun setGoalIgnoreWeekdays(days: Set<Int>) {
+        val clean = days.filter { it in 1..7 }.toSet()
+        settings.putString(
+            KEY_GOAL_IGNORE_WEEKDAYS, clean.sorted().joinToString(","),
+        )
+        goalIgnoreWeekdaysState.value = clean
+    }
+
+    override fun vacationModeFlow(): Flow<Boolean> = vacationModeState
+
+    override suspend fun setVacationMode(enabled: Boolean) {
+        settings.putBoolean(KEY_VACATION_MODE, enabled)
+        vacationModeState.value = enabled
+    }
+
+    override fun vacationHabitIdsFlow(): Flow<Set<String>> =
+        vacationHabitIdsState
+
+    override suspend fun setVacationHabitIds(ids: Set<String>) {
+        settings.putString(KEY_VACATION_HABIT_IDS, ids.joinToString(","))
+        vacationHabitIdsState.value = ids
+    }
+
+    override fun vacationGoalPauseOpenedFlow(): Flow<Boolean> =
+        vacationGoalPauseOpenedState
+
+    override suspend fun setVacationGoalPauseOpened(opened: Boolean) {
+        settings.putBoolean(KEY_VACATION_GOAL_PAUSE_OPENED, opened)
+        vacationGoalPauseOpenedState.value = opened
+    }
+
     private companion object {
         // -1 = lembrete automático desligado (a chave guarda minutos >= 0).
         const val AUTO_REMINDER_OFF = -1
@@ -104,5 +154,9 @@ class PrefsRepositoryImpl : PrefsRepository {
         const val KEY_DAILY_REVIEW_ENABLED = "daily_review_enabled"
         const val KEY_DAILY_REVIEW_TIME = "daily_review_time"
         const val KEY_AUTO_REMINDER_MINUTES = "auto_reminder_minutes"
+        const val KEY_GOAL_IGNORE_WEEKDAYS = "goal_ignore_weekdays"
+        const val KEY_VACATION_MODE = "vacation_mode"
+        const val KEY_VACATION_HABIT_IDS = "vacation_habit_ids"
+        const val KEY_VACATION_GOAL_PAUSE_OPENED = "vacation_goal_pause_opened"
     }
 }

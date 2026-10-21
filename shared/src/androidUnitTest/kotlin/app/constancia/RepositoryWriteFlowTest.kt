@@ -854,6 +854,28 @@ class RepositoryWriteFlowTest {
         override suspend fun setAutoReminderMinutes(minutes: Int?) {
             auto.value = minutes
         }
+        // Fase D: estado real mínimo (o teste de férias exercita o fluxo).
+        private val ignoreDays = MutableStateFlow<Set<Int>>(emptySet())
+        private val vacation = MutableStateFlow(false)
+        private val vacationIds = MutableStateFlow<Set<String>>(emptySet())
+        private val vacationGoal = MutableStateFlow(false)
+        override fun goalIgnoreWeekdaysFlow(): Flow<Set<Int>> = ignoreDays
+        override suspend fun setGoalIgnoreWeekdays(days: Set<Int>) {
+            ignoreDays.value = days
+        }
+        override fun vacationModeFlow(): Flow<Boolean> = vacation
+        override suspend fun setVacationMode(enabled: Boolean) {
+            vacation.value = enabled
+        }
+        override fun vacationHabitIdsFlow(): Flow<Set<String>> = vacationIds
+        override suspend fun setVacationHabitIds(ids: Set<String>) {
+            vacationIds.value = ids
+        }
+        override fun vacationGoalPauseOpenedFlow(): Flow<Boolean> =
+            vacationGoal
+        override suspend fun setVacationGoalPauseOpened(opened: Boolean) {
+            vacationGoal.value = opened
+        }
     }
 
     @Test

@@ -240,4 +240,25 @@ interface PrefsRepository {
      */
     fun autoReminderMinutesFlow(): Flow<Int?>
     suspend fun setAutoReminderMinutes(minutes: Int?)
+
+    // -- Fase D --
+    /**
+     * R10.1: dias de descanso FIXOS da meta de tarefas (ISO 1=seg..7=dom,
+     * persistidos como csv). Entram nos dias perdoados do streak da meta:
+     * fim de semana fora da meta sem abrir pausa toda sexta-feira.
+     */
+    fun goalIgnoreWeekdaysFlow(): Flow<Set<Int>>
+    suspend fun setGoalIgnoreWeekdays(days: Set<Int>)
+    /** R13.4: modo férias global ligado/desligado. */
+    fun vacationModeFlow(): Flow<Boolean>
+    suspend fun setVacationMode(enabled: Boolean)
+    /**
+     * R13.4: hábitos que o MODO FÉRIAS pausou (os que já estavam em
+     * pausa manual ficam fora — desligar as férias não os retoma).
+     */
+    fun vacationHabitIdsFlow(): Flow<Set<String>>
+    suspend fun setVacationHabitIds(ids: Set<String>)
+    /** R13.4: a pausa da meta hoje aberta foi aberta PELAS férias? */
+    fun vacationGoalPauseOpenedFlow(): Flow<Boolean>
+    suspend fun setVacationGoalPauseOpened(opened: Boolean)
 }
