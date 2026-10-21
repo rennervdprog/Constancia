@@ -34,7 +34,7 @@ actual class NotificationScheduler {
         val content = UNMutableNotificationContent()
         content.setTitle("Lembrete de tarefa")
         content.setBody(title)
-        content.setSound(UNNotificationSound.defaultSound())
+        content.setSound(UNNotificationSound.defaultSound)
         val date = NSDate(timeIntervalSince1970 = triggerAtMillis.toDouble() / 1000.0)
         val components = NSCalendar.currentCalendar.components(
             NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or
@@ -64,7 +64,7 @@ actual class NotificationScheduler {
         val content = UNMutableNotificationContent()
         content.setTitle("Seu dia no Constância")
         content.setBody("Abra o app e veja como está o seu dia.")
-        content.setSound(UNNotificationSound.defaultSound())
+        content.setSound(UNNotificationSound.defaultSound)
         val components = NSDateComponents()
         components.setHour(hour.toLong())
         components.setMinute(minute.toLong())
