@@ -72,6 +72,7 @@ import app.constancia.domain.dateLinePt
 import app.constancia.domain.diaryMatchesQuery
 import app.constancia.domain.diaryStreak
 import app.constancia.domain.doneDatesFor
+import app.constancia.domain.donePairs
 import app.constancia.domain.promptIndexFor
 import app.constancia.model.DiaryEntry
 import app.constancia.model.isoDayNumberCompat
@@ -176,7 +177,7 @@ fun DiaryScreen(
         habits.filter { it.showInCalendar }.forEach { h ->
             val done = doneDatesFor(
                 h,
-                byHabit[h.id].orEmpty().map { it.date to it.quantity },
+                donePairs(byHabit[h.id].orEmpty()),
             )
             done.forEach { ymd ->
                 map[ymd] = (map[ymd] ?: emptyList()) + h.color

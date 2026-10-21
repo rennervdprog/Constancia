@@ -59,6 +59,7 @@ import app.constancia.domain.cycleDoneDays
 import app.constancia.domain.cycleState
 import app.constancia.domain.cycleStreak
 import app.constancia.domain.doneDatesFor
+import app.constancia.domain.donePairs
 import app.constancia.domain.heatGrid
 import app.constancia.domain.isDueOn
 import app.constancia.domain.skippedDatesFor
@@ -680,7 +681,7 @@ private fun HabitCycleSection(
 ) {
     val scheme = MaterialTheme.colorScheme
     val habitColor = Color(habit.color)
-    val doneDates = doneDatesFor(habit, habitCheckins.map { it.date to it.quantity })
+    val doneDates = doneDatesFor(habit, donePairs(habitCheckins))
     val skipped = skippedDatesFor(habitCheckins)
     val sorted = cycles.sortedBy { it.startDate }
     val completedCount = sorted.count { it.completedAt != null }

@@ -111,6 +111,15 @@ fun doneDatesFor(habit: Habit, checkins: List<Pair<String, Double>>): Set<String
     }.map { (date, _) -> date }.toSet()
 
 /**
+ * Pares (data, quantidade) só dos check-ins DONE. O status é a fonte
+ * da verdade do "feito": um registro SKIPPED nunca conta como feito,
+ * qualquer que seja a quantidade gravada.
+ */
+fun donePairs(checkins: List<Checkin>): List<Pair<String, Double>> =
+    checkins.filter { it.status == CheckinStatus.DONE }
+        .map { it.date to it.quantity }
+
+/**
  * TickTick item 4: dias PULADOS (status SKIPPED) de um hábito. Pular é
  * um registro, não uma ausência: o dia entra no conjunto de dias
  * "perdoados" do streak (não conta como feito, mas também não quebra

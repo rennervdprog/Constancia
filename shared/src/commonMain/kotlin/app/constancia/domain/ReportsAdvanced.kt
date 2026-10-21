@@ -263,7 +263,7 @@ fun morningHabitPattern(
     for (habit in morning) {
         val doneDates = doneDatesFor(
             habit,
-            checkins.filter { it.habitId == habit.id }.map { it.date to it.quantity },
+            donePairs(checkins.filter { it.habitId == habit.id }),
         )
         val with = moodEntries.filter { doneDates.contains(it.date) }
         val without = moodEntries.filter { !doneDates.contains(it.date) }
@@ -477,7 +477,7 @@ fun periodHighlights(
     habits.forEach { h ->
         val done = doneDatesFor(
             h,
-            checkins.filter { it.habitId == h.id }.map { it.date to it.quantity },
+            donePairs(checkins.filter { it.habitId == h.id }),
         )
         val b = bestStreak(h, done, emptySet())
         if (b > best) {

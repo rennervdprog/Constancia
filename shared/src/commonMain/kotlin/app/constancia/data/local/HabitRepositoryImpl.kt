@@ -7,6 +7,7 @@ import app.constancia.data.HabitRepository
 import app.constancia.db.ConstanciaDb
 import app.constancia.domain.currentStreak
 import app.constancia.domain.doneDatesFor
+import app.constancia.domain.donePairs
 import app.constancia.domain.forgivenDates
 import app.constancia.domain.nextCycleWindow
 import app.constancia.domain.skippedDatesFor
@@ -217,7 +218,7 @@ internal fun computeTodayStatuses(
     return habits.map { habit ->
         val hcs = checkinsByHabit[habit.id].orEmpty()
         val todayCheckin = hcs.firstOrNull { it.date == today }
-        val doneDates = doneDatesFor(habit, hcs.map { it.date to it.quantity })
+        val doneDates = doneDatesFor(habit, donePairs(hcs))
         // Pausas E dias pulados (TickTick item 4) perdoam o streak.
         val forgiven = forgivenDates(pausesByHabit[habit.id].orEmpty(), today) +
             skippedDatesFor(hcs)

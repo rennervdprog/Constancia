@@ -151,7 +151,7 @@ fun computeReport(
     }
     val checkinsByHabit = checkins.groupBy { it.habitId }
     val doneDatesByHabit = habits.associate { h ->
-        val pairs = checkinsByHabit[h.id].orEmpty().map { it.date to it.quantity }
+        val pairs = donePairs(checkinsByHabit[h.id].orEmpty())
         h.id to satisfiedDates(h, doneDatesFor(h, pairs))
     }
     val activeFromByHabit = habits.associate { h ->

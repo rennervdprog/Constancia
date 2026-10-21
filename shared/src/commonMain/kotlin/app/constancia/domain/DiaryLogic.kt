@@ -132,8 +132,7 @@ fun computeDiaryPattern(
     var best: DiaryPattern? = null
     var bestScore = -1
     for (habit in habits) {
-        val doneDates = doneDatesFor(habit, checkins.filter { it.habitId == habit.id }
-            .map { it.date to it.quantity })
+        val doneDates = doneDatesFor(habit, donePairs(checkins.filter { it.habitId == habit.id }))
         val with = moodEntries.filter { doneDates.contains(it.date) }
         val without = moodEntries.filter { !doneDates.contains(it.date) }
         if (with.size < 2 || without.size < 2) continue
@@ -172,7 +171,7 @@ fun weekFractions(
     val monday = weekStartOf(today)
     val checkinsByHabit = checkins.groupBy { it.habitId }
     val doneByHabit = habits.associate { h ->
-        h.id to doneDatesFor(h, checkinsByHabit[h.id].orEmpty().map { it.date to it.quantity })
+        h.id to doneDatesFor(h, donePairs(checkinsByHabit[h.id].orEmpty()))
     }
     val activeFromByHabit = habits.associate { h ->
         h.id to runCatching { h.createdAt.take(10).toLocalDate() }.getOrNull()
@@ -215,7 +214,7 @@ fun heatGrid(
     weeks: Int = 18,
 ): List<List<HeatCell>> {
     val start = heatGridStart(today, weeks)
-    val doneDates = doneDatesFor(habit, checkins.map { it.date to it.quantity })
+    val doneDates = doneDatesFor(habit, donePairs(checkins))
     val skippedDates = skippedDatesFor(checkins)
     val progressDates = checkins
         .filter { it.status == CheckinStatus.DONE && it.quantity > 0.0 }
@@ -246,7 +245,7 @@ fun completionRateLast30(
     val from = today.minus(DatePeriod(days = 29))
     val checkinsByHabit = checkins.groupBy { it.habitId }
     val doneByHabit = habits.associate { h ->
-        h.id to doneDatesFor(h, checkinsByHabit[h.id].orEmpty().map { it.date to it.quantity })
+        h.id to doneDatesFor(h, donePairs(checkinsByHabit[h.id].orEmpty()))
     }
     val activeFromByHabit = habits.associate { h ->
         h.id to runCatching { h.createdAt.take(10).toLocalDate() }.getOrNull()

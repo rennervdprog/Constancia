@@ -6,6 +6,7 @@ import app.constancia.data.CheckinRepository
 import app.constancia.db.ConstanciaDb
 import app.constancia.domain.cycleDoneDays
 import app.constancia.domain.doneDatesFor
+import app.constancia.domain.donePairs
 import app.constancia.model.Checkin
 import app.constancia.model.CheckinStatus
 import app.constancia.model.GoalType
@@ -165,13 +166,8 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
         val habit = habitRow.toModel()
         val checkins = queries.selectCheckinsForHabit(habitId).executeAsList()
             .map { it.toModel() }
-        // Dias pulados não contam como feitos (doneDatesFor já os exclui
-        // pela quantidade 0, mas o filtro por status é a garantia).
-        val doneDates = doneDatesFor(
-            habit,
-            checkins.filter { it.status == CheckinStatus.DONE }
-                .map { it.date to it.quantity },
-        )
+        // Dias pulados não contam como feitos (donePairs só leva os DONE).
+        val doneDates = doneDatesFor(habit, donePairs(checkins))
         queries.selectCyclesForHabit(habitId).executeAsList()
             .filter { it.completed_at == null }
             .forEach { cycleRow ->

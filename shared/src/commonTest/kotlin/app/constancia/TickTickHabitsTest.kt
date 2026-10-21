@@ -7,6 +7,7 @@ import app.constancia.domain.cycleState
 import app.constancia.domain.CycleState
 import app.constancia.domain.currentStreak
 import app.constancia.domain.doneDatesFor
+import app.constancia.domain.donePairs
 import app.constancia.domain.heatGrid
 import app.constancia.domain.isCycleComplete
 import app.constancia.domain.isGoalMet
@@ -141,9 +142,10 @@ class TickTickHabitsTest {
     fun skippedDayIsARecordNotAnAbsence() {
         val checkins = listOf(ttCheckin("2026-10-18", status = CheckinStatus.SKIPPED))
         assertEquals(setOf("2026-10-18"), skippedDatesFor(checkins))
-        // E o dia pulado NÃO entra nos dias feitos.
+        // E o dia pulado NÃO entra nos dias feitos — quem manda é o
+        // status (donePairs), não a quantidade gravada.
         val h = ttHabit()
-        assertTrue(doneDatesFor(h, checkins.map { it.date to it.quantity }).isEmpty())
+        assertTrue(doneDatesFor(h, donePairs(checkins)).isEmpty())
     }
 
     @Test
