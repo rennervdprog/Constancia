@@ -7,7 +7,9 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -234,8 +236,16 @@ class ConstanciaUiTest {
             }
             tries++
         }
-        composeRule.waitUntil(timeoutMillis = 8000) {
-            nodesWith("Falta 1 item pra fechar o dia")
+        if (!nodesWith("Falta 1 item pra fechar o dia")) {
+            // Diagnóstico: despeja a árvore de semântica no erro p/ o
+            // relatório XML mostrar o estado real da tela na falha.
+            val tree = runCatching {
+                composeRule.onRoot().printToString()
+            }.getOrElse { "árvore indisponível: $it" }
+            throw AssertionError(
+                "Herói não mostrou 'Falta 1 item pra fechar o dia' após " +
+                    "os cliques no check. Árvore de semântica:\n" + tree,
+            )
         }
         shot("03_checkin_marcado")
     }
