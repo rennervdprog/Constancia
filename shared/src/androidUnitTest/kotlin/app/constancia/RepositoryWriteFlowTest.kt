@@ -295,20 +295,34 @@ class RepositoryWriteFlowTest {
 
     // Migração 4 -> 5 (Fase B): cria as tabelas do histórico de
     // ocorrências e das opções de vista sem perder as tarefas.
+    // A base é montada como no teste de migração existente (tabelas da
+    // v2 escritas à mão + migrate), parando na v4 antes do salto final.
     @Test
     fun migration4To5AddsHistoryAndViewOptions() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        ConstanciaDb.Schema.create(driver)
-        // Volta ao estado v4: sem as duas tabelas novas da 5.sqm.
-        driver.execute(null, "DROP TABLE task_occurrence_history", 0)
-        driver.execute(null, "DROP TABLE view_options", 0)
         driver.execute(
             null,
-            "INSERT INTO task_item(id, title, date, created_at) " +
-                "VALUES('t1', 'Tarefa da v4', '2026-10-20', 'agora')",
+            "CREATE TABLE task_item(" +
+                "id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, due_time TEXT, " +
+                "done INTEGER NOT NULL DEFAULT 0, date TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)",
             0,
         )
-
+        driver.execute(
+            null,
+            "CREATE TABLE diary_entry(" +
+                "id TEXT NOT NULL PRIMARY KEY, date TEXT NOT NULL UNIQUE, mood INTEGER, " +
+                "note TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO task_item(id, title, due_time, done, date, created_at, sort_order) " +
+                "VALUES('t1', 'Tarefa da v4', NULL, 0, '2026-10-20', 'agora', 0)",
+            0,
+        )
+        // Sobe até a v4 (sem as tabelas da Fase B) e só então o salto 4->5.
+        ConstanciaDb.Schema.migrate(driver, 1, 4)
         ConstanciaDb.Schema.migrate(driver, 4, 5)
 
         val db = ConstanciaDb(driver)
