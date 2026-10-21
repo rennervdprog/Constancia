@@ -15,6 +15,7 @@ import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
 import app.constancia.model.TaskTemplate
 import kotlinx.coroutines.flow.Flow
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 
 /**
@@ -62,7 +63,12 @@ interface TaskRepository {
         project: TaskProject = TaskProject.ENTRADA,
         session: Session = Session.TARDE,
     ): String
-    suspend fun setDone(id: String, done: Boolean)
+    /**
+     * Marca/desmarca a conclusão. R2.3 (Fase A): [completedOn] permite
+     * concluir "como de" outro dia (ex.: ontem) — o instante gravado e a
+     * âncora da próxima ocorrência usam essa data; null = agora.
+     */
+    suspend fun setDone(id: String, done: Boolean, completedOn: LocalDate? = null)
     suspend fun setPriority(id: String, priority: Int)
     suspend fun setDueDate(id: String, dueDate: String?)
     suspend fun addSubtask(taskId: String, title: String)

@@ -32,8 +32,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import kotlinx.datetime.toInstant
 
 class TaskRepositoryImpl(
     private val db: ConstanciaDb,
@@ -134,11 +139,15 @@ class TaskRepositoryImpl(
         ),
     )
 
-    override suspend fun setDone(id: String, done: Boolean) {
+    override suspend fun setDone(
+        id: String,
+        done: Boolean,
+        completedOn: LocalDate?,
+    ) {
         withContext(Dispatchers.Default) {
             queries.setTaskDone(
                 done.toFlag(),
-                if (done) Clock.System.now().toString() else null,
+                if (done) completedAtString(completedOn) else null,
                 id,
             )
         }
@@ -149,6 +158,20 @@ class TaskRepositoryImpl(
             markLinkedHabit(task)
         }
     }
+
+    /**
+     * Instante gravado em completed_at: o real (agora) ou, para o R2.3
+     * ("concluir como de ontem"), o meio-dia UTC do dia pedido — as
+     * metas leem o dia de conclusão pelos 10 primeiros caracteres da
+     * string ISO, então o dia gravado é exatamente o dia pedido.
+     */
+    private fun completedAtString(completedOn: LocalDate?): String =
+        if (completedOn == null) {
+            Clock.System.now().toString()
+        } else {
+            LocalDateTime(completedOn, LocalTime(12, 0))
+                .toInstant(TimeZone.UTC).toString()
+        }
 
     override suspend fun setPriority(id: String, priority: Int): Unit =
         withContext(Dispatchers.Default) {
@@ -187,7 +210,7 @@ class TaskRepositoryImpl(
                 if (taskRow != null && !taskRow.done.isSet()) {
                     queries.setTaskDone(
                         1,
-                        Clock.System.now().toString(),
+                        completedAtString(null),
                         sub.task_id,
                     )
                     completedTaskId = sub.task_id
@@ -433,16 +456,30 @@ class TaskRepositoryImpl(
         val due = task.dueDate ?: return
         val dueDate = due.toLocalDate()
         val spec = effectiveRepeatSpec(task.repeatSpec, task.repeatRule, dueDate)
+        // Dia efetivo da conclusão (completed_at pode ser "como de ontem"
+        // pelo R2.3); é a referência do laço R4.1 e da base COMPLETION.
+        val completedOn = task.completedAt?.take(10)?.let {
+            runCatching { it.toLocalDate() }.getOrNull()
+        } ?: todayYmd().toLocalDate()
         val next = if (spec != null) {
-            nextOccurrence(spec, dueDate, todayYmd().toLocalDate())
+            nextOccurrence(spec, dueDate, completedOn)
         } else {
-            nextRepeatDate(task.repeatRule, dueDate)
+            nextRepeatDate(task.repeatRule, dueDate, completedOn)
         } ?: return
         val nextYmd = next.toYmd()
+        // Higiene (Fase A): a deduplicação compara a SPEC estruturada da
+        // série (normalizada), não só o rótulo — rótulo legado divergente
+        // não pode nem duplicar nem esconder a ocorrência.
+        val expectedSpec = if (spec != null) {
+            encodeRepeatSpec(spec)
+        } else {
+            task.repeatSpec
+        }
         val already = withContext(Dispatchers.Default) {
             queries.selectTasksForDate(nextYmd, nextYmd).executeAsList().any {
-                it.title == task.title && it.repeat_rule == task.repeatRule &&
-                    it.habit_id == task.habitId
+                it.title == task.title && it.habit_id == task.habitId &&
+                    it.repeat_spec == expectedSpec &&
+                    (spec != null || it.repeat_rule == task.repeatRule)
             }
         }
         if (already) return
