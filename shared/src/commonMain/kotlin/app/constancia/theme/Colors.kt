@@ -18,7 +18,7 @@ val ConstanciaSurface2Light = Color(0xFFFAF6FD)
 val ConstanciaInkLight = Color(0xFF221238)
 val ConstanciaMutedLight = Color(0xFF7A6B90)
 val ConstanciaLineLight = Color(0xFFE2D8F0)
-val ConstanciaTabBgLight = Color(0xFFFFFFFF).copy(alpha = 0.92f)
+val ConstanciaTabBgLight = Color(0xFFFFFFFF).copy(alpha = 0.86f)
 val ConstanciaOnPrimaryLight = Color(0xFFFFFFFF)
 
 // Tema escuro refeito em roxo (não é inversão): fundo roxo-noite profundo,
@@ -56,6 +56,41 @@ data class ConstanciaExtraColors(
      *  cartão inverte para lavanda com conteúdo roxo-noite. */
     val progressCardBg: Color,
     val progressCardContent: Color,
+    // Tokens literais do protótipo "Roxo Profundo" (fidelidade 1:1).
+    /** --line-soft: bordas suaves de cards/linhas (#EAE2F4). */
+    val lineSoft: Color,
+    /** Célula vazia do mapa de calor (#E7DEF5). */
+    val heatEmpty: Color,
+    /** Borda do círculo de check vazio (#C9BCE0). */
+    val checkBorder: Color,
+    val tintAmber: Color,
+    val tintFlame: Color,
+    val tintSun: Color,
+    val tintAqua: Color,
+    val tintBlue: Color,
+    val tintGreen: Color,
+    /** Âmbar sólido dos ícones/textos (#D97706). */
+    val amberStrong: Color,
+    /** Roxo "sol" dos ícones de diário (#8A5FC0). */
+    val sunColor: Color,
+    /** Azul-petróleo sólido (#0E7C86). */
+    val aquaColor: Color,
+    /** Azul-violeta dos ícones de ajustes (#6D3BD1). */
+    val blueColor: Color,
+    /** Verde semântico de sucesso/deltas (#0B7A55). */
+    val greenStrong: Color,
+    /** Barra do período anterior na revisão (#D5C9E8). */
+    val prevBar: Color,
+    /** Placeholder dos campos de captura (#9A86B8). */
+    val placeholder: Color,
+    /** Cartão "Pergunta do dia": gradiente + borda + tinta. */
+    val qGradStart: Color,
+    val qGradEnd: Color,
+    val qBorder: Color,
+    val qInk: Color,
+    /** Chip de visão selecionado nas Tarefas: fundo ink + texto inverso. */
+    val chipInk: Color,
+    val chipInkText: Color,
 )
 
 val ConstanciaExtraLight = ConstanciaExtraColors(
@@ -75,6 +110,28 @@ val ConstanciaExtraLight = ConstanciaExtraColors(
     tabBg = ConstanciaTabBgLight,
     progressCardBg = Color(0xFF2A0A54),
     progressCardContent = Color(0xFFFBF8F3),
+    lineSoft = Color(0xFFEAE2F4),
+    heatEmpty = Color(0xFFE7DEF5),
+    checkBorder = Color(0xFFC9BCE0),
+    tintAmber = Color(0xFFFBEDD8),
+    tintFlame = Color(0xFFFDEBDC),
+    tintSun = Color(0xFFF0E8FA),
+    tintAqua = Color(0xFFE0F2F4),
+    tintBlue = Color(0xFFEAE1FB),
+    tintGreen = Color(0xFFE0F2EA),
+    amberStrong = Color(0xFFD97706),
+    sunColor = Color(0xFF8A5FC0),
+    aquaColor = Color(0xFF0E7C86),
+    blueColor = Color(0xFF6D3BD1),
+    greenStrong = Color(0xFF0B7A55),
+    prevBar = Color(0xFFD5C9E8),
+    placeholder = Color(0xFF9A86B8),
+    qGradStart = Color(0xFFFAF5FE),
+    qGradEnd = Color(0xFFF3EDFC),
+    qBorder = Color(0xFFD9CCF2),
+    qInk = Color(0xFF341664),
+    chipInk = Color(0xFF221238),
+    chipInkText = Color(0xFFFFFFFF),
 )
 
 val ConstanciaExtraDark = ConstanciaExtraColors(
@@ -94,6 +151,28 @@ val ConstanciaExtraDark = ConstanciaExtraColors(
     tabBg = ConstanciaTabBgDark,
     progressCardBg = Color(0xFFEBE2FA),
     progressCardContent = Color(0xFF2A0A54),
+    lineSoft = Color(0xFF2E1C52),
+    heatEmpty = Color(0xFF2A1A52),
+    checkBorder = Color(0xFF4A3572),
+    tintAmber = Color(0xFF3A2A10),
+    tintFlame = Color(0xFF3D2113),
+    tintSun = Color(0xFF2E1A56),
+    tintAqua = Color(0xFF123A3E),
+    tintBlue = Color(0xFF2A1A52),
+    tintGreen = Color(0xFF10382A),
+    amberStrong = Color(0xFFF0A840),
+    sunColor = Color(0xFFC4A6F5),
+    aquaColor = Color(0xFF5EC8CE),
+    blueColor = Color(0xFFB79CFF),
+    greenStrong = Color(0xFF34D399),
+    prevBar = Color(0xFF3B2566),
+    placeholder = Color(0xFF8F7DB3),
+    qGradStart = Color(0xFF2B1850),
+    qGradEnd = Color(0xFF22123F),
+    qBorder = Color(0xFF3B2566),
+    qInk = Color(0xFFE9DEFC),
+    chipInk = Color(0xFFF4EFFC),
+    chipInkText = Color(0xFF221238),
 )
 
 val LocalConstanciaExtra = compositionLocalOf { ConstanciaExtraLight }

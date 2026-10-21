@@ -9,9 +9,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,7 +27,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import app.constancia.theme.constanciaExtra
 
 /** Rótulo de seção dentro dos sheets (formulários). */
 @Composable
@@ -121,8 +130,9 @@ fun TileCard(
     )
 }
 
-/** Botão primário (cta): largura total, raio 18dp, padding vertical 16dp,
- *  fundo primary, texto Sora 16/700. */
+/** Botão primário do protótipo (.btn-primary): largura total, raio 15dp,
+ *  padding vertical 15dp, fundo primary, texto Manrope 15/800 e sombra
+ *  roxa suave "0 14px 26px -10px rgba(75,29,150,.5)". */
 @Composable
 fun CtaButton(
     text: String,
@@ -130,21 +140,88 @@ fun CtaButton(
     modifier: Modifier = Modifier,
     tag: String? = null,
 ) {
+    val primary = MaterialTheme.colorScheme.primary
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.primary)
+            .shadow(
+                elevation = 12.dp,
+                shape = RoundedCornerShape(15.dp),
+                spotColor = primary.copy(alpha = 0.5f),
+                ambientColor = primary.copy(alpha = 0.5f),
+            )
+            .clip(RoundedCornerShape(15.dp))
+            .background(primary)
             .then(if (tag != null) Modifier.testTag(tag) else Modifier)
             .clickable(onClick = onClick)
-            .padding(vertical = 16.dp),
+            .padding(vertical = 15.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onPrimary,
         )
+    }
+}
+
+/**
+ * Cabeçalho das telas filhas do protótipo (.backrow): botão de voltar
+ * 40dp raio 13 (surface, borda line-soft, sombra leve), título Sora
+ * 21/800 e subtítulo 12.5/700 muted logo abaixo.
+ */
+@Composable
+fun BackRow(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .shadow(
+                    elevation = 3.dp,
+                    shape = RoundedCornerShape(13.dp),
+                    spotColor = Color(0xFF26104A).copy(alpha = 0.16f),
+                    ambientColor = Color(0xFF26104A).copy(alpha = 0.16f),
+                )
+                .clip(RoundedCornerShape(13.dp))
+                .background(scheme.surface)
+                .border(
+                    1.dp,
+                    MaterialTheme.constanciaExtra.lineSoft,
+                    RoundedCornerShape(13.dp),
+                )
+                .clickable(onClick = onBack),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.ArrowBack,
+                contentDescription = "Voltar",
+                tint = scheme.onSurface,
+                modifier = Modifier.size(19.dp),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 21.sp),
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = scheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

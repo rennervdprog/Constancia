@@ -60,7 +60,7 @@ fun ChallengesScreen(deps: AppDeps, modifier: Modifier = Modifier) {
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
+        contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 118.dp),
         verticalArrangement = Arrangement.spacedBy(11.dp),
     ) {
         item {

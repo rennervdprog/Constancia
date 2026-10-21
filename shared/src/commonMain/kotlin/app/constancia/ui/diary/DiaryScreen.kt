@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,11 +16,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -33,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,27 +48,36 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
 import app.constancia.domain.DIARY_PROMPTS
 import app.constancia.domain.DIARY_TAGS
-import app.constancia.domain.ENERGY_LABELS
+import app.constancia.domain.DOW_FULL
+import app.constancia.domain.MONTHS_PT
 import app.constancia.domain.MOOD_LABELS
 import app.constancia.domain.computeDiaryPattern
-import app.constancia.domain.diaryDayLabel
 import app.constancia.domain.dateLinePt
 import app.constancia.domain.diaryMatchesQuery
 import app.constancia.domain.diaryStreak
 import app.constancia.domain.promptIndexFor
 import app.constancia.model.DiaryEntry
+import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
 import app.constancia.model.todayYmd
 import app.constancia.theme.constanciaExtra
+import app.constancia.ui.common.BackRow
 import app.constancia.ui.common.CtaButton
 import app.constancia.ui.common.moodColor
 import app.constancia.ui.common.MoodFace
@@ -87,6 +99,7 @@ fun DiaryScreen(
     modifier: Modifier = Modifier,
     initialDate: String? = null,
     onConsumedInitialDate: () -> Unit = {},
+    onBack: () -> Unit = {},
 ) {
     val today = remember { todayYmd() }
     val todayDate = remember { today.toLocalDate() }
@@ -159,19 +172,26 @@ fun DiaryScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 18.dp),
+        contentPadding = PaddingValues(start = 20.dp, top = 10.dp, end = 20.dp, bottom = 118.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Column {
-                Text("Diário", style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Humor, energia, sono e padrões — o dia registrado em um minuto",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                )
-            }
+            BackRow(
+                title = "Diário",
+                subtitle = dateLinePt(formDate.toLocalDate()) +
+                    if (streak > 0) {
+                        " · " + streak.toString() +
+                            if (streak == 1) {
+                                " dia seguido escrevendo"
+                            } else {
+                                " dias seguidos escrevendo"
+                            }
+                    } else {
+                        ""
+                    },
+                onBack = onBack,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
         }
 
         // Editor do dia.
@@ -179,162 +199,143 @@ fun DiaryScreen(
             Column(
                 modifier = Modifier.fillMaxWidth()
                     .background(scheme.surface, RoundedCornerShape(24.dp))
-                    .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(24.dp))
+                    .border(BorderStroke(1.dp, extra.lineSoft), RoundedCornerShape(24.dp))
                     .padding(18.dp),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            diaryDayLabel(formDate.toLocalDate(), todayDate),
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            dateLinePt(formDate.toLocalDate())
-                                .replaceFirstChar { it.uppercase() },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = scheme.onSurfaceVariant,
-                        )
-                    }
-                    if (streak > 0 && formDate == today) {
-                        Box(
-                            modifier = Modifier
-                                .background(extra.amberSoft, RoundedCornerShape(999.dp))
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                        ) {
-                            Text(
-                                text = streak.toString() + "d seguidos",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                                color = scheme.secondary,
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = "Como foi o seu dia?",
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Toque numa carinha — dá pra ajustar depois.",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                    color = scheme.onSurfaceVariant,
+                )
                 Spacer(Modifier.height(14.dp))
-
-                SectionT("Como está o seu humor?")
-                Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     (1..5).forEach { m ->
                         val selected = mood == m
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(
+                                .weight(1f)
+                                .then(
                                     if (selected) {
-                                        moodColor(m).copy(alpha = 0.16f)
+                                        Modifier
+                                            .offset(y = (-3).dp)
+                                            .shadow(
+                                                elevation = 5.dp,
+                                                shape = RoundedCornerShape(18.dp),
+                                                spotColor = moodColor(m)
+                                                    .copy(alpha = 0.35f),
+                                                ambientColor = moodColor(m)
+                                                    .copy(alpha = 0.35f),
+                                            )
                                     } else {
-                                        Color.Transparent
+                                        Modifier
                                     },
                                 )
-                                .border(
-                                    BorderStroke(
-                                        if (selected) 2.dp else 1.dp,
-                                        if (selected) moodColor(m) else scheme.outline,
-                                    ),
-                                    RoundedCornerShape(16.dp),
-                                )
-                                .testTag("mood_" + m)
-                                .clickable { mood = m }
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                        ) {
-                            MoodFace(mood = m, size = 30.dp)
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = MOOD_LABELS[m - 1],
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 10.sp,
-                                ),
-                                color = if (selected) scheme.onSurface
-                                    else scheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-
-                SectionT("Energia hoje")
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    (1..5).forEach { e ->
-                        val selected = energy == e
-                        Box(
-                            modifier = Modifier.weight(1f)
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(RoundedCornerShape(18.dp))
                                 .background(
-                                    if (selected) scheme.primaryContainer
-                                    else Color.Transparent,
+                                    if (selected) scheme.surface
+                                    else scheme.surfaceVariant,
                                 )
                                 .border(
                                     BorderStroke(
                                         1.5.dp,
-                                        if (selected) scheme.primary else scheme.outline,
+                                        if (selected) moodColor(m) else extra.lineSoft,
                                     ),
-                                    RoundedCornerShape(12.dp),
+                                    RoundedCornerShape(18.dp),
                                 )
-                                .testTag("energy_" + e)
-                                .clickable { energy = e }
-                                .padding(vertical = 9.dp),
-                            contentAlignment = Alignment.Center,
+                                .testTag("mood_" + m)
+                                .clickable { mood = m }
+                                .padding(top = 11.dp, bottom = 9.dp),
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = e.toString(),
-                                    style = MaterialTheme.typography.titleSmall.copy(
-                                        fontWeight = FontWeight.ExtraBold,
-                                    ),
-                                    color = if (selected) scheme.primary
-                                        else scheme.onSurface,
-                                )
-                                Text(
-                                    text = ENERGY_LABELS[e - 1],
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 9.5.sp,
-                                    ),
-                                    color = scheme.onSurfaceVariant,
-                                )
+                            MoodFace(mood = m, size = 30.dp)
+                            Spacer(Modifier.height(5.dp))
+                            Text(
+                                text = MOOD_LABELS[m - 1],
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                ),
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+
+                // Steppers lado a lado (Energia · Sono), como no protótipo.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        StepperLabel("ENERGIA")
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            StepBtn("−", "energy_minus") {
+                                energy = (energy - 1).coerceAtLeast(1)
+                            }
+                            Text(
+                                text = buildAnnotatedString {
+                                    append(energy.toString())
+                                    withStyle(
+                                        SpanStyle(
+                                            color = scheme.onSurfaceVariant,
+                                            fontSize = 14.sp,
+                                        ),
+                                    ) {
+                                        append("/5")
+                                    }
+                                },
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                ),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f),
+                            )
+                            StepBtn("+", "energy_plus") {
+                                energy = (energy + 1).coerceAtMost(5)
+                            }
+                        }
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        StepperLabel("SONO")
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            StepBtn("−", "sleep_minus") {
+                                sleep = (sleep - 10.0 / 60.0).coerceAtLeast(4.0)
+                            }
+                            Text(
+                                text = formatSleep(sleep),
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                ),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f),
+                            )
+                            StepBtn("+", "sleep_plus") {
+                                sleep = (sleep + 10.0 / 60.0).coerceAtMost(10.0)
                             }
                         }
                     }
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(20.dp))
 
-                SectionT("Sono da noite passada")
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = formatSleep(sleep),
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    StepBtn("−", "sleep_minus") {
-                        sleep = (sleep - 0.5).coerceAtLeast(0.0)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    StepBtn("+", "sleep_plus") {
-                        sleep = (sleep + 0.5).coerceAtMost(14.0)
-                    }
-                }
-                Spacer(Modifier.height(14.dp))
-
-                SectionT("Etiquetas do dia")
-                Spacer(Modifier.height(8.dp))
                 TagChips(
                     selected = tags,
                     onToggle = { tag ->
@@ -343,22 +344,34 @@ fun DiaryScreen(
                 )
                 Spacer(Modifier.height(14.dp))
 
-                // Pergunta do dia.
+                // Pergunta do dia (.qcard do protótipo): gradiente suave,
+                // selo em roxo-sol, pergunta em Sora e a resposta dentro.
                 Column(
                     modifier = Modifier.fillMaxWidth()
-                        .background(scheme.primaryContainer, RoundedCornerShape(16.dp))
-                        .padding(14.dp),
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(extra.qGradStart, extra.qGradEnd),
+                            ),
+                        )
+                        .border(
+                            BorderStroke(1.dp, extra.qBorder),
+                            RoundedCornerShape(24.dp),
+                        )
+                        .padding(17.dp),
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "Pergunta do dia",
-                            style = MaterialTheme.typography.labelLarge.copy(
+                            text = "PERGUNTA DO DIA",
+                            style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.1.em,
                             ),
-                            color = scheme.primary,
+                            color = extra.sunColor,
                             modifier = Modifier.weight(1f),
                         )
                         Row(
@@ -367,42 +380,52 @@ fun DiaryScreen(
                                 .clickable {
                                     promptIdx = (promptIdx + 1) % DIARY_PROMPTS.size
                                 }
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
                                 Icons.Filled.Refresh,
                                 contentDescription = null,
-                                tint = scheme.primary,
+                                tint = extra.sunColor,
                                 modifier = Modifier.size(13.dp),
                             )
                             Spacer(Modifier.width(4.dp))
                             Text(
-                                text = "Outra",
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = FontWeight.Bold,
+                                text = "Trocar",
+                                style = MaterialTheme.typography.labelLarge.copy(
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.ExtraBold,
                                 ),
-                                color = scheme.primary,
+                                color = extra.sunColor,
                             )
                         }
                     }
-                    Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         text = prompt,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = scheme.onSurface,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = extra.qInk,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = { note = it },
+                        placeholder = { Text("Escreva livremente — só você lê…") },
+                        minLines = 3,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = extra.qBorder,
+                            unfocusedBorderColor = extra.qBorder,
+                            focusedContainerColor = scheme.surface.copy(alpha = 0.75f),
+                            unfocusedContainerColor = scheme.surface.copy(alpha = 0.75f),
+                        ),
+                        modifier = Modifier.fillMaxWidth().testTag("diary_note_field"),
                     )
                 }
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    placeholder = { Text("Escreva livremente — só você lê…") },
-                    minLines = 4,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.fillMaxWidth().testTag("diary_note_field"),
-                )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(14.dp))
 
                 DiaryPhotoSection(
                     photoUri = photoUri,
@@ -411,7 +434,11 @@ fun DiaryScreen(
                 Spacer(Modifier.height(14.dp))
 
                 CtaButton(
-                    text = if (editing != null) "Salvar alterações" else "Salvar o dia",
+                    text = when {
+                        editing != null -> "Salvar alterações"
+                        formDate == today -> "Salvar registro de hoje"
+                        else -> "Salvar registro"
+                    },
                     tag = "diary_save",
                     onClick = {
                         val m = mood.takeIf { it in 1..5 } ?: return@CtaButton
@@ -494,7 +521,7 @@ fun DiaryScreen(
                     modifier = Modifier.fillMaxWidth()
                         .background(scheme.surface, RoundedCornerShape(24.dp))
                         .border(
-                            BorderStroke(1.dp, scheme.outline),
+                            BorderStroke(1.dp, extra.lineSoft),
                             RoundedCornerShape(24.dp),
                         )
                         .padding(18.dp),
@@ -518,121 +545,173 @@ fun DiaryScreen(
             }
         }
 
-        // Calendário do mês pintado pelo humor.
+        // Calendário do mês pintado pelo humor (protótipo): cabeçalho
+        // "{Mês} pelo seu humor" + média, grade de dias em quadrados
+        // arredondados preenchidos com a cor do humor e hoje contornado.
         item {
-            Column(
-                modifier = Modifier.fillMaxWidth()
-                    .background(scheme.surface, RoundedCornerShape(24.dp))
-                    .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(24.dp))
-                    .padding(18.dp),
-            ) {
+            val monthMoods = monthEntries.values.mapNotNull { it.mood }
+            val monthAvg = if (monthMoods.isEmpty()) {
+                null
+            } else {
+                monthMoods.average()
+            }
+            Column {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 2.dp, end = 2.dp, bottom = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = monthTitle(viewYear, viewMonth),
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                        ),
+                        text = monthNamePt(viewMonth) + " pelo seu humor",
+                        style = MaterialTheme.typography.titleLarge,
                         modifier = Modifier.weight(1f),
                     )
-                    StepBtn("‹", "cal_prev") { monthOffset -= 1 }
-                    Spacer(Modifier.width(8.dp))
-                    StepBtn("›", "cal_next") {
+                    if (monthAvg != null) {
+                        Text(
+                            text = "média " + fmtAvg(monthAvg),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                    }
+                    CalNavBtn("‹", "cal_prev") { monthOffset -= 1 }
+                    Spacer(Modifier.width(6.dp))
+                    CalNavBtn("›", "cal_next") {
                         if (monthOffset < 0) monthOffset += 1
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                Row(modifier = Modifier.fillMaxWidth()) {
-                    listOf("S", "T", "Q", "Q", "S", "S", "D").forEach { h ->
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = h,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = scheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                val firstDay = LocalDate(viewYear, viewMonth, 1)
-                val lead = firstDay.dayOfWeek.ordinal // segunda = 0
-                val daysInMonth = firstDay.plus(DatePeriod(months = 1))
-                    .toEpochDays() - firstDay.toEpochDays()
-                val cells = List(lead) { 0 } + (1..daysInMonth).toList()
-                cells.chunked(7).forEach { week ->
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(scheme.surface, RoundedCornerShape(24.dp))
+                        .border(
+                            BorderStroke(1.dp, extra.lineSoft),
+                            RoundedCornerShape(24.dp),
+                        )
+                        .padding(16.dp),
+                ) {
                     Row(modifier = Modifier.fillMaxWidth()) {
-                        week.forEach { dayNum ->
+                        listOf("S", "T", "Q", "Q", "S", "S", "D").forEach { h ->
                             Box(
-                                modifier = Modifier.weight(1f).aspectRatio(1f),
+                                modifier = Modifier.weight(1f),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                if (dayNum > 0) {
-                                    val entry = monthEntries[dayNum]
-                                    val dayDate = LocalDate(viewYear, viewMonth, dayNum)
-                                    val isToday = dayDate == todayDate
-                                    val isFuture = dayDate > todayDate
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier
-                                            .clip(CircleShape)
-                                            .then(
-                                                if (isToday) {
-                                                    Modifier.border(
-                                                        BorderStroke(2.dp, scheme.primary),
-                                                        CircleShape,
-                                                    )
-                                                } else {
-                                                    Modifier
-                                                },
-                                            )
-                                            .clickable(enabled = !isFuture) {
-                                                formDate = dayDate.toString()
-                                            }
-                                            .padding(4.dp),
+                                Text(
+                                    text = h,
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                    ),
+                                    color = scheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    val firstDay = LocalDate(viewYear, viewMonth, 1)
+                    val lead = firstDay.dayOfWeek.ordinal // segunda = 0
+                    val daysInMonth = firstDay.plus(DatePeriod(months = 1))
+                        .toEpochDays() - firstDay.toEpochDays()
+                    val cells = List(lead) { 0 } + (1..daysInMonth).toList()
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        cells.chunked(7).forEach { week ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                week.forEach { dayNum ->
+                                    Box(
+                                        modifier = Modifier.weight(1f).aspectRatio(1f),
+                                        contentAlignment = Alignment.Center,
                                     ) {
-                                        Text(
-                                            text = dayNum.toString(),
-                                            style = MaterialTheme.typography.bodySmall.copy(
-                                                fontWeight = if (isToday) {
-                                                    FontWeight.ExtraBold
-                                                } else {
-                                                    FontWeight.Normal
-                                                },
-                                            ),
-                                            color = if (isFuture) {
-                                                scheme.onSurfaceVariant.copy(alpha = 0.45f)
-                                            } else {
-                                                scheme.onSurface
-                                            },
-                                        )
-                                        Box(
-                                            modifier = Modifier.size(6.dp)
-                                                .background(
-                                                    if (entry != null) moodColor(entry.mood ?: 3)
-                                                    else Color.Transparent,
-                                                    CircleShape,
-                                                ),
-                                        )
+                                        if (dayNum > 0) {
+                                            val entry = monthEntries[dayNum]
+                                            val dayDate = LocalDate(
+                                                viewYear, viewMonth, dayNum,
+                                            )
+                                            val isToday = dayDate == todayDate
+                                            val isFuture = dayDate > todayDate
+                                            val moodOfDay = entry?.mood
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .clip(RoundedCornerShape(11.dp))
+                                                    .background(
+                                                        if (moodOfDay != null) {
+                                                            moodColor(moodOfDay)
+                                                        } else {
+                                                            scheme.surfaceVariant
+                                                        },
+                                                    )
+                                                    .then(
+                                                        if (isToday) {
+                                                            Modifier.border(
+                                                                BorderStroke(
+                                                                    2.5.dp,
+                                                                    scheme.primary,
+                                                                ),
+                                                                RoundedCornerShape(11.dp),
+                                                            )
+                                                        } else {
+                                                            Modifier
+                                                        },
+                                                    )
+                                                    .clickable(enabled = !isFuture) {
+                                                        formDate = dayDate.toString()
+                                                    },
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(
+                                                    text = dayNum.toString(),
+                                                    style = MaterialTheme.typography
+                                                        .bodySmall.copy(
+                                                            fontSize = 12.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                        ),
+                                                    color = when {
+                                                        isFuture -> scheme.onSurfaceVariant
+                                                            .copy(alpha = 0.45f)
+                                                        moodOfDay == 3 -> scheme.onSurface
+                                                        moodOfDay != null -> Color.White
+                                                        else -> scheme.onSurface
+                                                    },
+                                                )
+                                            }
+                                        }
                                     }
+                                }
+                                repeat(7 - week.size) {
+                                    Box(modifier = Modifier.weight(1f).aspectRatio(1f))
                                 }
                             }
                         }
-                        repeat(7 - week.size) {
-                            Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    // Legenda das cores do humor.
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        (1..5).forEach { m ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier.size(10.dp)
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(moodColor(m)),
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = MOOD_LABELS[m - 1],
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        fontSize = 10.5.sp,
+                                    ),
+                                    color = scheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "O ponto é a cor do humor. Toque num dia para reler o registro.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                )
             }
         }
 
@@ -661,10 +740,9 @@ fun DiaryScreen(
         }
         item {
             Text(
-                "Histórico",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                ),
+                "Registros recentes",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 2.dp, top = 8.dp),
             )
         }
         if (history.isEmpty()) {
@@ -680,12 +758,31 @@ fun DiaryScreen(
                 )
             }
         } else {
-            items(history, key = { it.id }) { entry ->
-                HistoryRow(
-                    entry = entry,
-                    todayDate = todayDate,
-                    onClick = { formDate = entry.date },
-                )
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(scheme.surface, RoundedCornerShape(24.dp))
+                        .border(
+                            BorderStroke(1.dp, extra.lineSoft),
+                            RoundedCornerShape(24.dp),
+                        ),
+                ) {
+                    history.forEachIndexed { index, entry ->
+                        if (index > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(extra.lineSoft),
+                            )
+                        }
+                        HistoryRow(
+                            entry = entry,
+                            todayDate = todayDate,
+                            onClick = { formDate = entry.date },
+                        )
+                    }
+                }
             }
         }
     }
@@ -699,13 +796,58 @@ private fun SectionT(text: String) {
     )
 }
 
-/** Botão redondo de passo (sono e navegação do calendário). */
+/** Rótulo dos steppers do protótipo: 12/800 maiúsculas em muted. */
+@Composable
+private fun StepperLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge.copy(
+            fontSize = 12.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.06.em,
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** Botão de passo do protótipo (.step-btn): 38dp, raio 12, fundo
+ *  surface-2 com borda line e o glifo em roxo 19/800. */
 @Composable
 private fun StepBtn(label: String, tag: String, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier.size(38.dp)
-            .background(scheme.surfaceVariant, CircleShape)
+            .clip(RoundedCornerShape(12.dp))
+            .background(scheme.surfaceVariant)
+            .border(
+                BorderStroke(1.5.dp, scheme.outline),
+                RoundedCornerShape(12.dp),
+            )
+            .testTag(tag)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 19.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = scheme.primary,
+        )
+    }
+}
+
+/** Botão menor de navegação do calendário (mês anterior/próximo). */
+@Composable
+private fun CalNavBtn(label: String, tag: String, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Box(
+        modifier = Modifier.size(28.dp)
+            .clip(RoundedCornerShape(9.dp))
+            .background(scheme.surfaceVariant)
+            .border(BorderStroke(1.dp, extra.lineSoft), RoundedCornerShape(9.dp))
             .testTag(tag)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -720,42 +862,54 @@ private fun StepBtn(label: String, tag: String, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TagChips(selected: List<String>, onToggle: (String) -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        DIARY_TAGS.chunked(4).forEach { rowTags ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                rowTags.forEach { tag ->
-                    val isSel = tag in selected
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(
-                                if (isSel) scheme.primaryContainer
-                                else Color.Transparent,
-                            )
-                            .border(
-                                BorderStroke(
-                                    1.5.dp,
-                                    if (isSel) scheme.primary else scheme.outline,
-                                ),
-                                RoundedCornerShape(999.dp),
-                            )
-                            .testTag("diary_tag_" + tag)
-                            .clickable { onToggle(tag) }
-                            .padding(horizontal = 12.dp, vertical = 7.dp),
-                    ) {
-                        Text(
-                            text = tag,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (isSel) scheme.primary
-                                else scheme.onSurfaceVariant,
-                        )
-                    }
-                }
+    val extra = MaterialTheme.constanciaExtra
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        DIARY_TAGS.forEach { tag ->
+            val isSel = tag in selected
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        if (isSel) scheme.primaryContainer else Color.Transparent,
+                    )
+                    .border(
+                        BorderStroke(
+                            1.5.dp,
+                            if (isSel) scheme.primary else scheme.outline,
+                        ),
+                        RoundedCornerShape(999.dp),
+                    )
+                    .testTag("diary_tag_" + tag)
+                    .clickable { onToggle(tag) }
+                    .padding(horizontal = 13.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = tag,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = if (isSel) scheme.onPrimaryContainer else extra.ink2,
+                )
             }
         }
+    }
+}
+
+/** Título do registro no histórico: "Segunda, 19 de outubro". */
+private fun historyTitle(date: LocalDate, today: LocalDate): String = when (date) {
+    today -> "Hoje"
+    today.minus(DatePeriod(days = 1)) -> "Ontem"
+    else -> {
+        val wd = DOW_FULL[date.isoDayNumberCompat() % 7]
+        wd + ", " + date.dayOfMonth + " de " +
+            MONTHS_PT[date.monthNumber - 1]
     }
 }
 
@@ -769,72 +923,56 @@ private fun HistoryRow(
     val date = entry.date.toLocalDate()
     Row(
         modifier = Modifier.fillMaxWidth()
-            .background(scheme.surface, RoundedCornerShape(20.dp))
-            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
-            .padding(14.dp),
-        verticalAlignment = Alignment.Top,
+            .padding(horizontal = 15.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier.size(44.dp)
-                .background(moodColor(entry.mood ?: 3).copy(alpha = 0.16f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            MoodFace(mood = entry.mood ?: 3, size = 26.dp)
+        if (entry.photoUri != null) {
+            DiaryPhotoImage(
+                photoUri = entry.photoUri,
+                modifier = Modifier
+                    .size(52.dp)
+                    .clip(RoundedCornerShape(14.dp)),
+            )
+        } else {
+            Box(
+                modifier = Modifier.size(52.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(moodColor(entry.mood ?: 3).copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                MoodFace(mood = entry.mood ?: 3, size = 30.dp)
+            }
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = diaryDayLabel(date, todayDate),
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                    ),
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "Energia " + entry.energy + "/5 · Sono " +
-                        formatSleep(entry.sleepHours ?: 0.0),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = scheme.onSurfaceVariant,
-                )
-            }
-            if (entry.note.isNotBlank()) {
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = if (entry.note.length > 130) {
-                        entry.note.take(130) + "…"
-                    } else {
-                        entry.note
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                )
-            }
-            if (entry.tags.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    entry.tags.take(4).forEach { tag ->
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    scheme.primaryContainer,
-                                    RoundedCornerShape(999.dp),
-                                )
-                                .padding(horizontal = 8.dp, vertical = 3.dp),
-                        ) {
-                            Text(
-                                text = tag,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = scheme.primary,
-                            )
-                        }
+            Text(
+                text = historyTitle(date, todayDate),
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = buildString {
+                    if (entry.note.isNotBlank()) {
+                        append("“")
+                        append(entry.note.take(40))
+                        if (entry.note.length > 40) append("…")
+                        append("” · ")
                     }
-                }
-            }
+                    append("energia ")
+                    append(entry.energy)
+                    entry.sleepHours?.let {
+                        append(" · sono ")
+                        append(formatSleep(it))
+                    }
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+                maxLines = 2,
+            )
         }
     }
 }
@@ -850,14 +988,12 @@ private fun DiaryPhotoSection(
         if (uri != null) onPicked(uri)
     }
     Column {
-        SectionT("Foto do dia")
-        Spacer(Modifier.height(8.dp))
         if (photoUri == null) {
             Column(
                 modifier = Modifier.fillMaxWidth()
                     .border(
                         BorderStroke(1.5.dp, scheme.outline),
-                        RoundedCornerShape(16.dp),
+                        RoundedCornerShape(24.dp),
                     )
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -937,17 +1073,28 @@ private fun fmtAvg(value: Double): String {
     return (scaled / 10).toString() + "," + (scaled % 10).toString()
 }
 
-/** Formata as horas de sono como no protótipo: 7h, 7,5h. */
+/** Formata as horas de sono como no protótipo: 7h, 7h10, 7h45. */
 fun formatSleep(hours: Double): String {
-    val whole = hours.toInt()
-    val half = (hours - whole) >= 0.5
-    return whole.toString() + (if (half) ",5" else "") + "h"
+    var whole = hours.toInt()
+    var minutes = ((hours - whole) * 60).roundToInt()
+    if (minutes == 60) {
+        whole += 1
+        minutes = 0
+    }
+    return if (minutes == 0) {
+        whole.toString() + "h"
+    } else {
+        whole.toString() + "h" + minutes.toString().padStart(2, '0')
+    }
 }
 
-private fun monthTitle(year: Int, month: Int): String {
+private fun monthTitle(year: Int, month: Int): String =
+    monthNamePt(month) + " de " + year
+
+private fun monthNamePt(month: Int): String {
     val names = listOf(
         "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
         "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
     )
-    return names[(month - 1).coerceIn(0, 11)] + " de " + year
+    return names[(month - 1).coerceIn(0, 11)]
 }

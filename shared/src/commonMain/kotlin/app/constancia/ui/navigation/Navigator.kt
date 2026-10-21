@@ -1,8 +1,8 @@
 package app.constancia.ui.navigation
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.FormatListBulleted
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.runtime.Composable
@@ -19,7 +19,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
  * criar?". Diário, Progresso (relatórios) e Desafios moram na aba Mais.
  */
 enum class AppTab(val label: String, val icon: ImageVector) {
-    HOJE("Hoje", Icons.Outlined.CheckCircle),
+    HOJE("Hoje", Icons.Outlined.Home),
     TAREFAS("Tarefas", Icons.Outlined.FormatListBulleted),
     HABITOS("Hábitos", Icons.Outlined.Whatshot),
     MAIS("Mais", Icons.Outlined.MoreHoriz),

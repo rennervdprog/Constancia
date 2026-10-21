@@ -15,12 +15,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,23 +32,28 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FormatListBulleted
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,25 +68,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import app.constancia.AppDeps
+import app.constancia.domain.DIARY_PROMPTS
 import app.constancia.domain.MOOD_LABELS
 import app.constancia.domain.SleepLagPattern
 import app.constancia.domain.dateLinePt
 import app.constancia.domain.dayFlowTasks
 import app.constancia.domain.diaryStreak
+import app.constancia.domain.dueLabel
 import app.constancia.domain.fmt1
 import app.constancia.domain.greetingFor
 import app.constancia.domain.isDueOn
+import app.constancia.domain.prioName
+import app.constancia.domain.promptIndexFor
 import app.constancia.domain.sleepLagPattern
+import app.constancia.domain.subtaskProgress
 import app.constancia.domain.timeSortKey
 import app.constancia.domain.weekFractions
 import app.constancia.model.FrequencyType
@@ -86,21 +103,19 @@ import app.constancia.model.Habit
 import app.constancia.model.HabitStatus
 import app.constancia.model.Session
 import app.constancia.model.TaskItem
+import app.constancia.model.TaskProject
 import app.constancia.model.todayYmd
 import app.constancia.model.toLocalDate
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.theme.constanciaExtra
-import app.constancia.ui.common.MoodFace
 import app.constancia.ui.common.habitIcon
-import app.constancia.ui.common.moodColor
-import app.constancia.ui.diary.DiaryPhotoImage
-import app.constancia.ui.tasks.TodoRowWithActions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
@@ -112,10 +127,10 @@ private fun sessionTitle(session: Session): String = when (session) {
     Session.NOITE -> "Noite"
 }
 
-private fun sessionIcon(session: Session) = when (session) {
-    Session.MANHA -> Icons.Filled.WbSunny
-    Session.TARDE -> Icons.Filled.WbSunny
-    Session.NOITE -> Icons.Filled.NightsStay
+private fun sessionRange(session: Session): String = when (session) {
+    Session.MANHA -> "até 12h"
+    Session.TARDE -> "12h – 18h"
+    Session.NOITE -> "depois das 18h"
 }
 
 // Formata quantidade sem casas decimais quando for inteira.
@@ -127,16 +142,30 @@ private fun fmtQty(value: Double): String {
 private fun createdFrom(habit: Habit) =
     runCatching { habit.createdAt.take(10).toLocalDate() }.getOrNull()
 
+/** Frequência curta da linha do hábito ("todo dia", "seg, qua e sex"). */
+private fun freqShort(habit: Habit, weekDone: Int): String = when (habit.frequencyType) {
+    FrequencyType.DAILY -> "todo dia"
+    FrequencyType.WEEKLY_X -> habit.weeklyTarget.toString() + "x por semana"
+    FrequencyType.DAYS_OF_WEEK -> habit.daysOfWeek
+        .mapNotNull {
+            listOf("dom", "seg", "ter", "qua", "qui", "sex", "sáb").getOrNull(it - 1)
+        }
+        .joinToString(", ")
+        .ifBlank { "dias fixos" }
+}
+
 /**
- * Tela Hoje (protótipo turbinado aprovado): progresso do dia (só hábitos
- * devidos), cartão "Sua semana", cartão do diário e o fluxo "Seu dia" —
- * hábitos e tarefas misturados por sessão e horário.
+ * Tela Hoje (protótipo "Roxo Profundo" aprovado): saudação com avatar e
+ * sino, painel-herói roxo "Seu dia" com anel e breakdown, semana em
+ * pílulas, sessões (Manhã/Tarde/Noite) com linhas em cartão único —
+ * hábitos, tarefas e a linha do diário na Noite — e o cartão de padrão
+ * detectado no fim. A navegação por dia é pelas pílulas da semana.
  */
 @Composable
 fun HomeScreen(
     deps: AppDeps,
     modifier: Modifier = Modifier,
-    onOpenDiary: () -> Unit = {},
+    onOpenDiary: (String) -> Unit = {},
     onOpenReports: () -> Unit = {},
 ) {
     val today = remember { todayYmd() }
@@ -147,7 +176,6 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     var timerTarget by remember { mutableStateOf<HabitStatus?>(null) }
     var expandedTaskId by remember { mutableStateOf<String?>(null) }
-    var quickText by remember { mutableStateOf("") }
 
     val statusFlow = remember(selectedDate) {
         if (isToday) deps.habits.todayStatusFlow()
@@ -166,7 +194,6 @@ fun HomeScreen(
 
     val hour = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
     val greeting = greetingFor(hour)
-    val dateLine = dateLinePt(todayDate)
 
     val active = statuses.filter { !it.habit.paused }
     val paused = statuses.filter { it.habit.paused }
@@ -176,43 +203,37 @@ fun HomeScreen(
 
     val dayTasks = dayFlowTasks(allTasks, selectedDate)
     val tasksDone = dayTasks.count { it.done }
-    val dayDone = doneCount + tasksDone
-    val dayTotal = dueToday.size + dayTasks.size
 
     val fractions = weekFractions(habits, checkins, todayDate)
-    val streakDays = diaryStreak(diaryEntries.map { it.date }.toSet(), todayDate)
     val sleepPattern = sleepLagPattern(diaryEntries, allTasks, todayDate)
-
-    fun quickAdd() {
-        val title = quickText.trim()
-        if (title.isEmpty()) return
-        quickText = ""
-        scope.launch { deps.tasks.quickAdd(title, dueDate = today) }
-    }
+    val diaryPrompt = DIARY_PROMPTS[
+        promptIndexFor(selectedDate) % DIARY_PROMPTS.size
+    ]
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier.fillMaxSize().testTag("home_list"),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(
+                start = 20.dp, end = 20.dp, top = 10.dp, bottom = 118.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             item {
-                Column(modifier = Modifier.padding(bottom = 16.dp)) {
-                    Text(
-                        text = if (isToday) dateLine else "Você está vendo outro dia",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        text = if (isToday) greeting else dateLinePt(selectedDate),
-                        style = MaterialTheme.typography.displaySmall,
-                    )
-                }
+                GreetHeader(
+                    dateLine = if (isToday) {
+                        dateLinePt(todayDate)
+                    } else {
+                        dateLinePt(selectedDate)
+                    },
+                    greeting = if (isToday) greeting else dateLinePt(selectedDate)
+                        .replaceFirstChar { it.uppercase() },
+                    hasPattern = sleepPattern != null,
+                    onBellClick = onOpenReports,
+                )
             }
 
             item {
-                DayRingPanel(
+                HeroPanel(
                     habitsDone = doneCount,
                     habitsTotal = dueToday.size,
                     tasksDone = tasksDone,
@@ -220,11 +241,12 @@ fun HomeScreen(
                     diaryDone = selEntry != null,
                     bestStreak = bestStreak,
                     isToday = isToday,
+                    onOpenDiary = { onOpenDiary(selYmd) },
                 )
             }
 
             item {
-                WeekBarsCard(
+                WeekPills(
                     fractions = fractions,
                     todayDate = todayDate,
                     selectedDate = selectedDate,
@@ -232,105 +254,16 @@ fun HomeScreen(
                 )
             }
 
-            if (!isToday) {
-                item(key = "back-today") {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 14.dp)
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer)
-                            .clickable { selectedDate = todayDate }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Filled.ArrowBack,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(17.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Voltar para hoje",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-
-            item {
-                DiaryCard(
-                    title = if (isToday) "Diário de hoje" else "Diário do dia",
-                    hasEntry = selEntry != null,
-                    mood = selEntry?.mood,
-                    energy = selEntry?.energy,
-                    note = selEntry?.note.orEmpty(),
-                    photoUri = selEntry?.photoUri,
-                    streak = streakDays,
-                    onOpenDiary = onOpenDiary,
-                )
-            }
-
-            if (habits.isEmpty() && dayTasks.isEmpty()) {
-                item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(22.dp),
-                            )
-                            .border(
-                                BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                                RoundedCornerShape(22.dp),
-                            ),
-                    ) {
-                        Column(Modifier.padding(20.dp)) {
-                            Text(
-                                text = "Vamos começar?",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "Você ainda não tem hábitos. Toque no botão + para criar o " +
-                                    "primeiro — comece pequeno, um hábito que caiba no seu pior dia.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            }
-
-            item(key = "dayflow-head") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 2.dp, top = 16.dp, end = 2.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Seu dia",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        text = dayDone.toString() + " de " + dayTotal.toString() + " feitos",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
             Session.entries.forEach { session ->
                 val sessionHabits = dueToday.filter { it.habit.session == session }
                 val sessionTasks = dayTasks.filter { it.session == session }
-                if (sessionHabits.isNotEmpty() || sessionTasks.isNotEmpty()) {
+                val showDiaryRow = session == Session.NOITE
+                if (sessionHabits.isNotEmpty() || sessionTasks.isNotEmpty() || showDiaryRow) {
                     val sessionDone = sessionHabits.count { it.isDoneToday } +
-                        sessionTasks.count { it.done }
-                    val sessionTotal = sessionHabits.size + sessionTasks.size
+                        sessionTasks.count { it.done } +
+                        if (showDiaryRow && selEntry != null) 1 else 0
+                    val sessionTotal = sessionHabits.size + sessionTasks.size +
+                        if (showDiaryRow) 1 else 0
                     item(key = "sec-" + session.name) {
                         SessionHeader(
                             session = session,
@@ -343,79 +276,49 @@ fun HomeScreen(
                         sessionHabits.map { FlowItem.HabitItem(it) } +
                             sessionTasks.map { FlowItem.TaskFlowItem(it) }
                         ).sortedBy { it.sortKey }
-                    flow.forEach { flowItem ->
-                        when (flowItem) {
-                            is FlowItem.HabitItem -> item(key = "habit-" + flowItem.status.habit.id) {
-                                HabitCard(
-                                    status = flowItem.status,
-                                    today = selYmd,
-                                    deps = deps,
-                                    scope = scope,
-                                    onOpenTimer = { timerTarget = flowItem.status },
-                                )
+                    item(key = "card-" + session.name) {
+                        SessionRowsCard {
+                            flow.forEachIndexed { index, flowItem ->
+                                if (index > 0) RowDivider()
+                                when (flowItem) {
+                                    is FlowItem.HabitItem -> HabitSessionRow(
+                                        status = flowItem.status,
+                                        dateYmd = selYmd,
+                                        deps = deps,
+                                        scope = scope,
+                                        onOpenTimer = { timerTarget = flowItem.status },
+                                    )
+                                    is FlowItem.TaskFlowItem -> TaskSessionRow(
+                                        task = flowItem.task,
+                                        today = selectedDate,
+                                        habitName = flowItem.task.habitId
+                                            ?.let { habitNames[it] },
+                                        expanded = expandedTaskId == flowItem.task.id,
+                                        onToggleExpand = {
+                                            expandedTaskId =
+                                                if (expandedTaskId == flowItem.task.id) {
+                                                    null
+                                                } else {
+                                                    flowItem.task.id
+                                                }
+                                        },
+                                        deps = deps,
+                                        scope = scope,
+                                    )
+                                }
                             }
-                            is FlowItem.TaskFlowItem -> item(key = "task-" + flowItem.task.id) {
-                                TodoRowWithActions(
-                                    task = flowItem.task,
-                                    today = selectedDate,
-                                    habitName = flowItem.task.habitId?.let { habitNames[it] },
-                                    expanded = expandedTaskId == flowItem.task.id,
-                                    onToggleExpand = {
-                                        expandedTaskId = if (expandedTaskId == flowItem.task.id) {
-                                            null
-                                        } else {
-                                            flowItem.task.id
-                                        }
-                                    },
-                                    deps = deps,
-                                    scope = scope,
+                            if (showDiaryRow) {
+                                if (flow.isNotEmpty()) RowDivider()
+                                DiarySessionRow(
+                                    hasEntry = selEntry != null,
+                                    mood = selEntry?.mood,
+                                    energy = selEntry?.energy,
+                                    prompt = diaryPrompt,
+                                    onOpen = { onOpenDiary(selYmd) },
                                 )
                             }
                         }
                     }
-                }
-            }
-
-            item(key = "quickadd") {
-                Column(modifier = Modifier.padding(top = 6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedTextField(
-                            value = quickText,
-                            onValueChange = { if (it.length <= 60) quickText = it },
-                            placeholder = { Text("Adicionar tarefa rápida…") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { quickAdd() }),
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.weight(1f).testTag("task_input"),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .background(MaterialTheme.colorScheme.primary, CircleShape)
-                                .testTag("task_add")
-                                .clickable { quickAdd() },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Filled.Add,
-                                contentDescription = "Adicionar tarefa",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(22.dp),
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "Hábitos e tarefas do dia, misturados por sessão e horário. " +
-                            "A lista completa, estilo Todoist, fica na aba Tarefas.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 
@@ -427,7 +330,7 @@ fun HomeScreen(
 
             if (sleepPattern != null) {
                 item(key = "pattern-detected") {
-                    PatternDetectedCard(
+                    InsightCard(
                         pattern = sleepPattern,
                         onOpenReports = onOpenReports,
                     )
@@ -463,417 +366,683 @@ private sealed interface FlowItem {
     }
 }
 
+/**
+ * Cabeçalho da Hoje (.greet do protótipo): avatar em gradiente roxo
+ * 46dp raio 16, data em muted capitalizada + saudação Sora 19/700 e o
+ * botão de sino 42dp à direita (o ponto chama aparece quando há um
+ * padrão detectado; tocar abre os relatórios).
+ */
 @Composable
-private fun WeekBarsCard(
-    fractions: List<Double>,
-    todayDate: kotlinx.datetime.LocalDate,
-    selectedDate: kotlinx.datetime.LocalDate,
-    onSelectDate: (kotlinx.datetime.LocalDate) -> Unit,
+private fun GreetHeader(
+    dateLine: String,
+    greeting: String,
+    hasPattern: Boolean,
+    onBellClick: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val labels = listOf("S", "T", "Q", "Q", "S", "S", "D")
-    val todayIdx = todayDate.isoDayNumberCompat() - 1 // seg=0
-    val monday = todayDate.minus(DatePeriod(days = todayIdx))
-    val selectedIdx = selectedDate.toEpochDays() - monday.toEpochDays()
-    val valid = fractions.filter { it >= 0.0 }
-    val pct = if (valid.isEmpty()) null else (valid.average() * 100).toInt()
-
-    Column(
+    val extra = MaterialTheme.constanciaExtra
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 14.dp)
-            .background(scheme.surface, RoundedCornerShape(24.dp))
-            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(24.dp))
-            .padding(18.dp),
+            .padding(start = 2.dp, end = 2.dp, top = 6.dp, bottom = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .shadow(
+                    elevation = 8.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    spotColor = Color(0xFF38066E).copy(alpha = 0.4f),
+                    ambientColor = Color(0xFF38066E).copy(alpha = 0.4f),
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(Color(0xFF5B21B6), Color(0xFF38106E)),
+                    ),
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "Sua semana",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                ),
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = if (pct != null) pct.toString() + "%" else "—",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                ),
-                color = scheme.primary,
+            Icon(
+                Icons.Filled.Person,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
             )
         }
-        Spacer(Modifier.height(14.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = dateLine.split(" ").joinToString(" ") {
+                    it.replaceFirstChar { c -> c.uppercase() }
+                },
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = scheme.onSurfaceVariant,
+            )
+            Text(
+                text = greeting,
+                style = MaterialTheme.typography.displaySmall.copy(fontSize = 19.sp),
+                color = scheme.onSurface,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .shadow(
+                    elevation = 3.dp,
+                    shape = RoundedCornerShape(14.dp),
+                    spotColor = Color(0xFF26104A).copy(alpha = 0.14f),
+                    ambientColor = Color(0xFF26104A).copy(alpha = 0.14f),
+                )
+                .clip(RoundedCornerShape(14.dp))
+                .background(scheme.surface)
+                .border(1.dp, extra.lineSoft, RoundedCornerShape(14.dp))
+                .clickable(onClick = onBellClick),
+            contentAlignment = Alignment.Center,
         ) {
-            fractions.forEachIndexed { idx, frac ->
-                val isToday = idx == todayIdx
-                val isSelected = idx == selectedIdx
-                val dayDate = monday.plus(DatePeriod(days = idx))
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = "Padrões e relatórios",
+                tint = extra.ink2,
+                modifier = Modifier.size(20.dp),
+            )
+            if (hasPattern) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-9).dp, y = 9.dp)
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(scheme.secondary)
+                        .border(2.dp, scheme.surface, CircleShape),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Painel-herói "Seu dia" do protótipo: gradiente roxo profundo
+ * (#4B1D96 → #38106E → #1E0740) com círculos decorativos translúcidos,
+ * chip de sequência em vidro, anel de 104dp em lavanda (#D3BDFB) com
+ * "% DO DIA", breakdown em tiles translúcidos e o botão branco
+ * "Registrar o dia de hoje". Conta hábitos devidos + tarefas + diário.
+ */
+@Composable
+private fun HeroPanel(
+    habitsDone: Int,
+    habitsTotal: Int,
+    tasksDone: Int,
+    tasksTotal: Int,
+    diaryDone: Boolean,
+    bestStreak: Int,
+    isToday: Boolean,
+    onOpenDiary: () -> Unit,
+) {
+    val total = habitsTotal + tasksTotal + 1
+    val done = habitsDone + tasksDone + if (diaryDone) 1 else 0
+    val frac = if (total > 0) done.toFloat() / total else 0f
+    val celebrated = total > 0 && done >= total
+    val animFrac by animateFloatAsState(
+        targetValue = frac,
+        animationSpec = tween(durationMillis = 700),
+        label = "dayRing",
+    )
+    val title = when {
+        celebrated -> "Dia fechado. Constância pura."
+        frac >= 0.5f -> "Quase lá"
+        frac > 0f -> "Bom começo"
+        else -> "Vamos começar"
+    }
+    val missing = total - done
+    val subtitle = when {
+        celebrated ->
+            if (isToday) "Tudo feito por hoje. Descanse." else "Tudo feito naquele dia."
+        missing == 1 ->
+            if (isToday) "Falta 1 item pra fechar o dia" else "Faltou 1 item naquele dia"
+        else ->
+            if (isToday) "Faltam $missing itens pra fechar o dia"
+            else "Faltaram $missing itens naquele dia"
+    }
+    val shape = RoundedCornerShape(28.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 18.dp,
+                shape = shape,
+                spotColor = Color(0xFF2A0A54).copy(alpha = 0.55f),
+                ambientColor = Color(0xFF2A0A54).copy(alpha = 0.55f),
+            )
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF4B1D96),
+                        Color(0xFF38106E),
+                        Color(0xFF1E0740),
+                    ),
+                    start = Offset(0f, 0f),
+                    end = Offset(420f, 620f),
+                ),
+            ),
+    ) {
+        // Círculos decorativos (anéis translúcidos do protótipo).
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 70.dp, y = (-90).dp)
+                .size(250.dp)
+                .border(34.dp, Color.White.copy(alpha = 0.07f), CircleShape),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = (-26).dp, y = 120.dp)
+                .size(190.dp)
+                .border(26.dp, Color.White.copy(alpha = 0.05f), CircleShape),
+        )
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "SEU DIA",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.12.em,
+                        ),
+                        color = Color(0xFFC9AFF7),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 21.sp,
+                        ),
+                        color = Color.White,
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                        color = Color(0xFFD9C8F8),
+                    )
+                }
+                if (bestStreak > 0) {
+                    Row(
                         modifier = Modifier
-                            .width(26.dp)
-                            .height(52.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(scheme.surfaceVariant),
-                        contentAlignment = Alignment.BottomCenter,
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(Color.White.copy(alpha = 0.14f))
+                            .border(
+                                1.dp,
+                                Color.White.copy(alpha = 0.2f),
+                                RoundedCornerShape(99.dp),
+                            )
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (frac >= 0.0) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height((7 + frac * 41).dp)
-                                    .background(
-                                        if (isToday) scheme.secondary else scheme.primary,
-                                        RoundedCornerShape(8.dp),
-                                    ),
+                        val flameScale = if (celebrated) {
+                            val transition = rememberInfiniteTransition(label = "flame")
+                            val s by transition.animateFloat(
+                                initialValue = 1f,
+                                targetValue = 1.22f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(durationMillis = 620),
+                                    repeatMode = RepeatMode.Reverse,
+                                ),
+                                label = "flameScale",
+                            )
+                            s
+                        } else {
+                            1f
+                        }
+                        Icon(
+                            Icons.Filled.Whatshot,
+                            contentDescription = null,
+                            tint = Color(0xFFFFB37A),
+                            modifier = Modifier.size(14.dp).scale(flameScale),
+                        )
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            text = bestStreak.toString() +
+                                if (bestStreak == 1) " dia" else " dias",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = Color(0xFFDECFFB),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier.size(104.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Canvas(modifier = Modifier.size(104.dp)) {
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.18f),
+                            style = Stroke(width = 9.dp.toPx()),
+                        )
+                        if (animFrac > 0f) {
+                            drawArc(
+                                color = Color(0xFFD3BDFB),
+                                startAngle = -90f,
+                                sweepAngle = 360f * animFrac,
+                                useCenter = false,
+                                style = Stroke(
+                                    width = 9.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                ),
                             )
                         }
                     }
-                    Spacer(Modifier.height(7.dp))
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSelected) scheme.primary else Color.Transparent,
-                            )
-                            .border(
-                                BorderStroke(
-                                    1.5.dp,
-                                    when {
-                                        isSelected -> scheme.primary
-                                        isToday -> scheme.primary
-                                        else -> Color.Transparent
-                                    },
-                                ),
-                                CircleShape,
-                            )
-                            .clickable { onSelectDate(dayDate) },
-                        contentAlignment = Alignment.Center,
-                    ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = dayDate.dayOfMonth.toString(),
+                            text = (animFrac * 100).roundToInt().toString() + "%",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = Color.White,
+                        )
+                        Text(
+                            text = "DO DIA",
                             style = MaterialTheme.typography.labelMedium.copy(
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.08.em,
                             ),
-                            color = if (isSelected) scheme.onPrimary
-                            else scheme.onSurface,
+                            color = Color(0xFFD8C6FB),
                         )
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = labels[idx],
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = if (isToday) FontWeight.ExtraBold
-                            else FontWeight.Normal,
-                        ),
-                        color = if (isToday) scheme.primary else scheme.onSurfaceVariant,
-                    )
                 }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = if (pct != null) {
-                pct.toString() + "% da semana até aqui"
-            } else {
-                "Sem hábitos devidos nesta semana"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun DiaryCard(
-    title: String = "Diário de hoje",
-    hasEntry: Boolean,
-    mood: Int?,
-    energy: Int?,
-    note: String,
-    photoUri: String?,
-    streak: Int,
-    onOpenDiary: () -> Unit,
-) {
-    val scheme = MaterialTheme.colorScheme
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 14.dp)
-            .background(scheme.surface, RoundedCornerShape(24.dp))
-            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(24.dp))
-            .padding(18.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                ),
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = "Abrir diário ›",
-                style = MaterialTheme.typography.labelLarge,
-                color = scheme.primary,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .testTag("open_diary")
-                    .clickable(onClick = onOpenDiary)
-                    .padding(4.dp),
-            )
-        }
-        Spacer(Modifier.height(10.dp))
-        if (hasEntry && mood != null) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(44.dp)
-                        .background(moodColor(mood).copy(alpha = 0.16f), CircleShape),
-                    contentAlignment = Alignment.Center,
+                Spacer(Modifier.width(18.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(9.dp),
                 ) {
-                    MoodFace(mood = mood, size = 26.dp)
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Humor: " + MOOD_LABELS[(mood - 1).coerceIn(0, 4)] +
-                            (energy?.let { " · Energia " + it + "/5" } ?: ""),
-                        style = MaterialTheme.typography.bodyLarge.copy(
-                            fontWeight = FontWeight.Bold,
-                        ),
+                    HeroStat(
+                        icon = Icons.Filled.CheckCircle,
+                        label = "Hábitos",
+                        value = "$habitsDone de $habitsTotal",
                     )
-                    if (note.isNotBlank()) {
-                        Text(
-                            text = if (note.length > 88) note.take(88) + "…" else note,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = scheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (streak > 0) {
-                    Box(
-                        modifier = Modifier
-                            .background(
-                                MaterialTheme.constanciaExtra.amberSoft,
-                                RoundedCornerShape(999.dp),
-                            )
-                            .padding(horizontal = 9.dp, vertical = 5.dp),
-                    ) {
-                        Text(
-                            text = streak.toString() + "d",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = scheme.secondary,
-                        )
-                    }
+                    HeroStat(
+                        icon = Icons.Filled.FormatListBulleted,
+                        label = "Tarefas",
+                        value = "$tasksDone de $tasksTotal",
+                    )
+                    HeroStat(
+                        icon = Icons.Filled.MenuBook,
+                        label = "Diário",
+                        value = if (diaryDone) "feito" else "por fazer",
+                    )
                 }
             }
-            if (photoUri != null) {
-                Spacer(Modifier.height(12.dp))
-                DiaryPhotoImage(photoUri = photoUri)
-            }
-            Spacer(Modifier.height(12.dp))
-            Box(
-                modifier = Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.5.dp, scheme.outline, RoundedCornerShape(12.dp))
+            Spacer(Modifier.height(16.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White)
                     .clickable(onClick = onOpenDiary)
-                    .padding(vertical = 11.dp),
-                contentAlignment = Alignment.Center,
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Editar registro",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = scheme.onSurface,
-                )
-            }
-        } else {
-            Text(
-                text = "Como foi o seu dia?",
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = "Humor, energia, sono e uma foto — um minuto e o dia fica registrado.",
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(12.dp))
-            Box(
-                modifier = Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(scheme.primary)
-                    .testTag("diary_write")
-                    .clickable(onClick = onOpenDiary)
-                    .padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "Escrever agora",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = scheme.onPrimary,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DayProgressCard(doneCount: Int, total: Int, bestStreak: Int) {
-    val scheme = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    val progress = if (total == 0) 0f else doneCount.toFloat() / total.toFloat()
-    val pct = (progress * 100).toInt()
-
-    val bigText = when {
-        total == 0 -> "Vamos começar?"
-        doneCount == total -> "Dia concluído!"
-        else -> "Bom ritmo!"
-    }
-    val subText = when {
-        total == 0 -> "Crie seu primeiro hábito tocando no botão +."
-        doneCount == total -> "Todos os hábitos de hoje foram concluídos."
-        else -> "Toque no círculo de um hábito para marcar o dia."
-    }
-
-    // Cartão INVERTIDO: fundo ink, conteúdo bg. Raio 24dp, padding 18dp,
-    // gap 16dp, margin-bottom 14dp (DESIGN_TOKENS.md).
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(extra.progressCardBg, RoundedCornerShape(24.dp))
-            .padding(18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Box(
-            modifier = Modifier.size(84.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Canvas(modifier = Modifier.size(84.dp)) {
-                val stroke = 9.dp.toPx()
-                drawArc(
-                    color = extra.progressCardContent.copy(alpha = 0.16f),
-                    startAngle = 0f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    style = Stroke(stroke, cap = StrokeCap.Round),
-                )
-                drawArc(
-                    color = scheme.secondary,
-                    startAngle = -90f,
-                    sweepAngle = 360f * progress,
-                    useCenter = false,
-                    style = Stroke(stroke, cap = StrokeCap.Round),
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = pct.toString() + "%",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 19.sp,
+                    text = if (diaryDone) {
+                        "Editar o diário de hoje"
+                    } else {
+                        "Registrar o dia de hoje"
+                    },
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
                     ),
-                    color = extra.progressCardContent,
+                    color = Color(0xFF2A0A54),
                 )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = doneCount.toString() + " de " + total,
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 10.sp),
-                    color = extra.progressCardContent.copy(alpha = 0.65f),
+                Spacer(Modifier.width(6.dp))
+                Icon(
+                    Icons.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = Color(0xFF2A0A54),
+                    modifier = Modifier.size(16.dp),
                 )
-            }
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = bigText,
-                style = MaterialTheme.typography.titleLarge,
-                color = extra.progressCardContent,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = subText,
-                style = MaterialTheme.typography.bodySmall,
-                color = extra.progressCardContent.copy(alpha = 0.72f),
-            )
-            if (bestStreak > 0) {
-                Spacer(Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(scheme.secondary.copy(alpha = 0.16f))
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        Icons.Filled.Whatshot,
-                        contentDescription = null,
-                        tint = scheme.secondary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = bestStreak.toString() + " dias seguidos",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                        ),
-                        color = scheme.secondary,
-                    )
-                }
             }
         }
     }
-    Spacer(Modifier.height(14.dp))
 }
 
+/** Linha do breakdown do herói: tile translúcido + rótulo + contador. */
 @Composable
-private fun SessionHeader(session: Session, done: Int, total: Int) {
-    val scheme = MaterialTheme.colorScheme
-    // Cabeçalho de sessão: margem 16/2/10dp (DESIGN_TOKENS.md).
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 2.dp, top = 16.dp, end = 2.dp, bottom = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            sessionIcon(session),
-            contentDescription = null,
-            tint = scheme.primary,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.width(8.dp))
+private fun HeroStat(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color.White.copy(alpha = 0.13f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Spacer(Modifier.width(10.dp))
         Text(
-            text = sessionTitle(session),
-            style = MaterialTheme.typography.titleMedium,
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.5.sp),
+            color = Color(0xFFF3EDFC),
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = done.toString() + " de " + total + " feitos",
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
+            text = value,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = Color(0xFFC9AFF7),
         )
     }
 }
 
+/**
+ * Semana em PÍLULAS do protótipo: dia da semana + número, selecionada em
+ * roxo com sombra, pontinho sob os dias com registro (chama quando o dia
+ * foi fechado). Sem cartão em volta, sem barras.
+ */
 @Composable
-private fun HabitCard(
+private fun WeekPills(
+    fractions: List<Double>,
+    todayDate: LocalDate,
+    selectedDate: LocalDate,
+    onSelectDate: (LocalDate) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val labels = listOf("SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM")
+    val todayIdx = todayDate.isoDayNumberCompat() - 1 // seg = 0
+    val monday = todayDate.minus(DatePeriod(days = todayIdx))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        fractions.forEachIndexed { idx, frac ->
+            val dayDate = monday.plus(DatePeriod(days = idx))
+            val isSelected = dayDate == selectedDate
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (isSelected) {
+                            Modifier.shadow(
+                                elevation = 10.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                spotColor = scheme.primary.copy(alpha = 0.5f),
+                                ambientColor = scheme.primary.copy(alpha = 0.5f),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (isSelected) scheme.primary else scheme.surface)
+                    .then(
+                        if (isSelected) {
+                            Modifier
+                        } else {
+                            Modifier.border(
+                                1.dp, extra.lineSoft, RoundedCornerShape(16.dp),
+                            )
+                        },
+                    )
+                    .clickable { onSelectDate(dayDate) }
+                    .padding(top = 9.dp, bottom = 8.dp),
+            ) {
+                Text(
+                    text = labels[idx],
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = if (isSelected) {
+                        Color(0xFFD8C6FB)
+                    } else {
+                        scheme.onSurfaceVariant
+                    },
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = dayDate.dayOfMonth.toString(),
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = if (isSelected) Color.White else scheme.onSurface,
+                )
+                Spacer(Modifier.height(3.dp))
+                Box(
+                    modifier = Modifier
+                        .size(5.dp)
+                        .clip(CircleShape)
+                        .background(
+                            when {
+                                frac < 0.0 -> Color.Transparent
+                                isSelected -> Color(0xFFD3BDFB)
+                                frac >= 1.0 -> scheme.secondary
+                                else -> scheme.primary
+                            },
+                        ),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Cabeçalho de sessão do protótipo: tile de ícone 30dp na cor suave da
+ * sessão (âmbar Manhã, chama Tarde, lavanda Noite), nome Sora, faixa de
+ * horário em muted e o contador "N de M" em roxo à direita.
+ */
+@Composable
+private fun SessionHeader(session: Session, done: Int, total: Int) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val (tint, iconColor, icon) = when (session) {
+        Session.MANHA -> Triple(extra.tintAmber, extra.amberStrong, Icons.Filled.WbSunny)
+        Session.TARDE -> Triple(extra.tintFlame, scheme.secondary, Icons.Filled.WbSunny)
+        Session.NOITE -> Triple(extra.tintSun, scheme.primary, Icons.Filled.NightsStay)
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 2.dp, top = 20.dp, end = 2.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(30.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(tint),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(17.dp),
+            )
+        }
+        Spacer(Modifier.width(9.dp))
+        Text(
+            text = sessionTitle(session),
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 14.5.sp),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = sessionRange(session),
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontWeight = FontWeight.Bold,
+            ),
+            color = scheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = done.toString() + " de " + total.toString(),
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = scheme.primary,
+        )
+    }
+}
+
+/** Cartão único da sessão (.rows do protótipo): surface, raio 24,
+ *  borda line-soft e divisórias finas entre as linhas. */
+@Composable
+private fun SessionRowsCard(
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 5.dp,
+                shape = RoundedCornerShape(24.dp),
+                spotColor = Color(0xFF26104A).copy(alpha = 0.16f),
+                ambientColor = Color(0xFF26104A).copy(alpha = 0.16f),
+            )
+            .clip(RoundedCornerShape(24.dp))
+            .background(scheme.surface)
+            .border(1.dp, extra.lineSoft, RoundedCornerShape(24.dp)),
+        content = content,
+    )
+}
+
+@Composable
+private fun RowDivider() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(1.dp)
+            .background(MaterialTheme.constanciaExtra.lineSoft),
+    )
+}
+
+/** Chip de horário da linha (lembrete do hábito ou hora da tarefa). */
+@Composable
+private fun TimeChip(time: String) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(scheme.surfaceVariant)
+            .border(1.dp, extra.lineSoft, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = time,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = extra.ink2,
+        )
+    }
+}
+
+/**
+ * Botão de check circular do protótipo: 34dp, borda 2.5dp #C9BCE0
+ * quando pendente; preenchido em roxo com sombra e check branco quando
+ * feito (com o pulso rápido ao alternar).
+ */
+@Composable
+private fun CheckCircleButton(
+    done: Boolean,
+    onToggle: () -> Unit,
+    tag: String = "habit_check",
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val pulse = remember { Animatable(1f) }
+    var firstRun by remember { mutableStateOf(true) }
+    LaunchedEffect(done) {
+        if (firstRun) {
+            firstRun = false
+            return@LaunchedEffect
+        }
+        pulse.snapTo(0.82f)
+        pulse.animateTo(1.12f, tween(durationMillis = 140))
+        pulse.animateTo(1f, tween(durationMillis = 200))
+    }
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .scale(pulse.value)
+            .then(
+                if (done) {
+                    Modifier.shadow(
+                        elevation = 7.dp,
+                        shape = CircleShape,
+                        spotColor = scheme.primary.copy(alpha = 0.45f),
+                        ambientColor = scheme.primary.copy(alpha = 0.45f),
+                    )
+                } else {
+                    Modifier
+                },
+            )
+            .clip(CircleShape)
+            .testTag(tag)
+            .background(if (done) scheme.primary else Color.Transparent)
+            .then(
+                if (done) Modifier
+                else Modifier.border(2.5.dp, extra.checkBorder, CircleShape),
+            )
+            .clickable(onClick = onToggle),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (done) {
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = "Concluído",
+                tint = scheme.onPrimary,
+                modifier = Modifier.size(17.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Linha de hábito na sessão (.row do protótipo): tile 42dp na cor
+ * própria do hábito, título (riscado quando feito), sublinha com chama
+ * da sequência + frequência, chip de horário do lembrete, timer de foco
+ * discreto e o check circular. Hábitos de quantidade ganham o stepper
+ * logo abaixo da sublinha.
+ */
+@Composable
+private fun HabitSessionRow(
     status: HabitStatus,
-    today: String,
+    dateYmd: String,
     deps: AppDeps,
     scope: CoroutineScope,
     onOpenTimer: () -> Unit,
@@ -883,100 +1052,449 @@ private fun HabitCard(
     val habitColor = Color(habit.color)
     val isQuantity = habit.goalType == GoalType.QUANTITY
     val currentQty = status.todayCheckin?.quantity ?: 0.0
-
-    // habit-card: surface, borda 1dp line, raio 22dp, padding 14dp, gap 13dp,
-    // margin-bottom 11dp (DESIGN_TOKENS.md). O stepper fica numa linha própria
-    // abaixo (largura total) para nunca estourar em telas estreitas.
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 11.dp)
-            .background(scheme.surface, RoundedCornerShape(22.dp))
-            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(22.dp))
-            .padding(14.dp),
+            .padding(horizontal = 15.dp, vertical = 13.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(13.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // Ícone do hábito: caixa 48dp, raio 15dp, ícone 24dp explícito.
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .background(habitColor.copy(alpha = 0.16f), RoundedCornerShape(15.dp))
-                    .padding(12.dp),
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(habitColor.copy(alpha = 0.15f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     habitIcon(habit.icon),
                     contentDescription = null,
                     tint = habitColor,
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(21.dp),
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = habit.name,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = if (status.isDoneToday) {
+                        scheme.onSurfaceVariant
+                    } else {
+                        scheme.onSurface
+                    },
+                    textDecoration = if (status.isDoneToday) {
+                        TextDecoration.LineThrough
+                    } else {
+                        null
+                    },
                 )
-                Spacer(Modifier.height(3.dp))
+                Spacer(Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (status.currentStreak > 0) {
                         Icon(
                             Icons.Filled.Whatshot,
                             contentDescription = null,
                             tint = scheme.secondary,
-                            modifier = Modifier.size(14.dp),
+                            modifier = Modifier.size(12.dp),
                         )
                         Spacer(Modifier.width(3.dp))
                         Text(
                             text = status.currentStreak.toString() +
                                 if (status.currentStreak == 1) " dia" else " dias",
                             style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold,
                             ),
                             color = scheme.secondary,
                         )
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    if (habit.frequencyType == FrequencyType.WEEKLY_X) {
                         Text(
-                            text = status.weekDone.toString() + "/" +
-                                habit.weeklyTarget + " na semana",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = " · " + freqShort(habit, status.weekDone),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                            ),
+                            color = scheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Text(
+                            text = freqShort(habit, status.weekDone),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                            ),
                             color = scheme.onSurfaceVariant,
                         )
                     }
                 }
             }
-            IconButton(onClick = onOpenTimer) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .clickable(onClick = onOpenTimer),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     Icons.Filled.Timer,
                     contentDescription = "Timer de foco",
                     tint = scheme.onSurfaceVariant,
+                    modifier = Modifier.size(19.dp),
                 )
+            }
+            if (habit.reminderEnabled && habit.reminderTime != null) {
+                TimeChip(habit.reminderTime!!)
             }
             CheckCircleButton(
                 done = status.isDoneToday,
-                onToggle = { scope.launch { deps.checkins.toggle(habit.id, today) } },
+                onToggle = { scope.launch { deps.checkins.toggle(habit.id, dateYmd) } },
             )
         }
         if (isQuantity) {
-            Spacer(Modifier.height(10.dp))
-            QuantityStepper(
-                current = currentQty,
-                target = habit.targetQuantity,
-                unit = habit.quantityUnit,
-                onDecrease = {
-                    val next = (currentQty - 1.0).coerceAtLeast(0.0)
-                    scope.launch { deps.checkins.setQuantity(habit.id, today, next) }
-                },
-                onIncrease = {
-                    scope.launch {
-                        deps.checkins.setQuantity(habit.id, today, currentQty + 1.0)
+            Spacer(Modifier.height(9.dp))
+            Box(modifier = Modifier.padding(start = 54.dp)) {
+                QuantityStepper(
+                    current = currentQty,
+                    target = habit.targetQuantity,
+                    unit = habit.quantityUnit,
+                    onDecrease = {
+                        val next = (currentQty - 1.0).coerceAtLeast(0.0)
+                        scope.launch { deps.checkins.setQuantity(habit.id, dateYmd, next) }
+                    },
+                    onIncrease = {
+                        scope.launch {
+                            deps.checkins.setQuantity(habit.id, dateYmd, currentQty + 1.0)
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** Ícone do tile da tarefa na Hoje, pela área (projeto) dela. */
+private fun projectIcon(project: TaskProject) = when (project) {
+    TaskProject.TRABALHO -> Icons.Filled.Work
+    TaskProject.CASA -> Icons.Filled.Home
+    TaskProject.PESSOAL -> Icons.Filled.Person
+    TaskProject.SAUDE -> Icons.Filled.Favorite
+    TaskProject.ENTRADA -> Icons.Filled.Inbox
+}
+
+/**
+ * Linha de tarefa na sessão (.row do protótipo): tile na cor do projeto,
+ * título, sublinha ("Atrasada · ontem · Trabalho · P1" com o trecho de
+ * atraso em vermelho), chip de horário e check circular. Tocar expande
+ * subtarefas e ações rápidas, como na aba Tarefas.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TaskSessionRow(
+    task: TaskItem,
+    today: LocalDate,
+    habitName: String?,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+    deps: AppDeps,
+    scope: CoroutineScope,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val projectColor = Color(task.project.colorHex)
+    val isOverdue = !task.done && task.dueDate != null && task.dueDate < today.toString()
+    val progress = subtaskProgress(task.subtasks)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggleExpand)
+                .padding(horizontal = 15.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(projectColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    projectIcon(task.project),
+                    contentDescription = null,
+                    tint = projectColor,
+                    modifier = Modifier.size(21.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = if (task.done) scheme.onSurfaceVariant else scheme.onSurface,
+                    textDecoration = if (task.done) {
+                        TextDecoration.LineThrough
+                    } else {
+                        null
+                    },
+                )
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isOverdue) {
+                        Text(
+                            text = "Atrasada · " +
+                                (dueLabel(task, today)?.lowercase() ?: ""),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = extra.red,
+                        )
+                        Text(
+                            text = " · " + task.project.label +
+                                if (task.priority == 1) " · P1" else "",
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                            ),
+                            color = scheme.onSurfaceVariant,
+                        )
+                    } else {
+                        Text(
+                            text = task.project.label +
+                                (if (task.priority == 1) " · P1" else "") +
+                                (habitName?.let { " · hábito $it" } ?: ""),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                            ),
+                            color = scheme.onSurfaceVariant,
+                        )
                     }
+                }
+            }
+            if (task.dueTime != null) {
+                TimeChip(task.dueTime!!)
+            }
+            CheckCircleButton(
+                done = task.done,
+                onToggle = {
+                    scope.launch { deps.tasks.setDone(task.id, !task.done) }
                 },
+                tag = "task_check",
+            )
+        }
+        if (expanded) {
+            Column(
+                modifier = Modifier.padding(
+                    start = 69.dp, end = 15.dp, bottom = 13.dp,
+                ),
+            ) {
+                task.subtasks.forEach { sub ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                scope.launch {
+                                    deps.tasks.setSubtaskDone(sub.id, !sub.done)
+                                }
+                            }
+                            .padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(22.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (sub.done) scheme.primary else Color.Transparent,
+                                )
+                                .then(
+                                    if (sub.done) Modifier
+                                    else Modifier.border(
+                                        2.dp, extra.checkBorder, CircleShape,
+                                    ),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (sub.done) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = scheme.onPrimary,
+                                    modifier = Modifier.size(13.dp),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(9.dp))
+                        Text(
+                            text = sub.title,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = if (sub.done) {
+                                scheme.onSurfaceVariant
+                            } else {
+                                scheme.onSurface
+                            },
+                            textDecoration = if (sub.done) {
+                                TextDecoration.LineThrough
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
+                if (progress != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(scheme.outline),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progress.pct / 100f)
+                                .height(5.dp)
+                                .background(scheme.primary, RoundedCornerShape(99.dp)),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (!task.done) {
+                        MiniAct(text = "Adiar p/ amanhã") {
+                            val next = task.dueDate?.toLocalDate()
+                                ?.plus(DatePeriod(days = 1))
+                                ?: today.plus(DatePeriod(days = 1))
+                            scope.launch { deps.tasks.setDueDate(task.id, next.toString()) }
+                        }
+                        MiniAct(text = "Prioridade: " + prioName(task.priority)) {
+                            scope.launch {
+                                deps.tasks.setPriority(
+                                    task.id,
+                                    app.constancia.domain.cyclePriority(task.priority),
+                                )
+                            }
+                        }
+                        MiniAct(text = "Excluir", danger = true) {
+                            scope.launch { deps.tasks.delete(task.id) }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Açãozinha em pílula (.mini-act do protótipo). */
+@Composable
+private fun MiniAct(
+    text: String,
+    danger: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(9.dp))
+            .background(if (danger) extra.redSoft else scheme.primaryContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = if (danger) extra.red else scheme.primary,
+        )
+    }
+}
+
+/**
+ * Linha do diário na sessão Noite (.row do protótipo): tile lavanda com
+ * lápis, "Escrever no diário", a pergunta do dia na sublinha e a ação
+ * "Abrir". Com registro, vira o resumo do dia escrito.
+ */
+@Composable
+private fun DiarySessionRow(
+    hasEntry: Boolean,
+    mood: Int?,
+    energy: Int?,
+    prompt: String,
+    onOpen: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 15.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(extra.tintSun),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Edit,
+                contentDescription = null,
+                tint = extra.sunColor,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (hasEntry) "Diário do dia" else "Escrever no diário",
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = if (hasEntry) {
+                    "Humor: " + MOOD_LABELS[(mood ?: 3).coerceIn(1, 5) - 1] +
+                        (energy?.let { " · energia $it/5" } ?: "")
+                } else {
+                    "Pergunta do dia: “$prompt”"
+                },
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                color = scheme.onSurfaceVariant,
+                maxLines = 2,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(9.dp))
+                .background(scheme.primaryContainer)
+                .testTag("open_diary")
+                .clickable(onClick = onOpen)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+        ) {
+            Text(
+                text = "Abrir",
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+                color = scheme.primary,
             )
         }
     }
@@ -1041,60 +1559,21 @@ private fun StepperButton(text: String, onClick: () -> Unit, tag: String? = null
 }
 
 @Composable
-private fun CheckCircleButton(done: Boolean, onToggle: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    // Micro-interação: pulso rápido ao concluir (e ao desmarcar).
-    val pulse = remember { Animatable(1f) }
-    var firstRun by remember { mutableStateOf(true) }
-    LaunchedEffect(done) {
-        if (firstRun) {
-            firstRun = false
-            return@LaunchedEffect
-        }
-        pulse.snapTo(0.82f)
-        pulse.animateTo(1.12f, tween(durationMillis = 140))
-        pulse.animateTo(1f, tween(durationMillis = 200))
-    }
-    Box(
-        modifier = Modifier
-            .size(46.dp)
-            .scale(pulse.value)
-            .clip(CircleShape)
-            .testTag("habit_check")
-            .background(if (done) scheme.primary else Color.Transparent)
-            .then(
-                if (done) Modifier
-                else Modifier.border(2.5.dp, scheme.outline, CircleShape),
-            )
-            .clickable(onClick = onToggle),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (done) {
-            Icon(
-                Icons.Filled.Check,
-                contentDescription = "Concluído",
-                tint = scheme.onPrimary,
-                modifier = Modifier.size(24.dp),
-            )
-        }
-    }
-}
-
-@Composable
 private fun PausedSection(
     paused: List<HabitStatus>,
     deps: AppDeps,
     scope: CoroutineScope,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
     var expanded by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp)
-            .background(scheme.surface, RoundedCornerShape(22.dp))
-            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(22.dp)),
+            .padding(top = 20.dp)
+            .background(scheme.surface, RoundedCornerShape(24.dp))
+            .border(BorderStroke(1.dp, extra.lineSoft), RoundedCornerShape(24.dp)),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -1136,7 +1615,7 @@ private fun PausedSection(
                             modifier = Modifier
                                 .size(36.dp)
                                 .background(
-                                    Color(habit.color).copy(alpha = 0.16f),
+                                    Color(habit.color).copy(alpha = 0.15f),
                                     RoundedCornerShape(12.dp),
                                 )
                                 .padding(8.dp),
@@ -1250,8 +1729,6 @@ private fun FocusTimerDialog(
                     color = scheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
-                // Segmentado (DESIGN_TOKENS.md): botão flex-1, padding 9/6dp, raio 10dp;
-                // selecionado fundo surface com sombra leve e texto ink.
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1305,14 +1782,12 @@ private fun FocusTimerDialog(
                     color = scheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(20.dp))
-                // CTA: largura total, raio 18dp, padding vertical 16dp,
-                // fundo primary, texto onPrimary Sora 16/700.
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(scheme.primary, RoundedCornerShape(18.dp))
+                        .background(scheme.primary, RoundedCornerShape(15.dp))
                         .clickable { running = !running }
-                        .padding(vertical = 16.dp),
+                        .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1328,7 +1803,7 @@ private fun FocusTimerDialog(
                                 remaining < selectedMinutes * 60 -> "Retomar foco"
                                 else -> "Iniciar foco"
                             },
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             color = scheme.onPrimary,
                         )
                     }
@@ -1354,261 +1829,105 @@ private fun FocusTimerDialog(
 }
 
 /**
- * Painel "Seu dia" (UI/UX elevada do protótipo aprovado): anel animado que
- * reage aos checks, contando hábitos devidos + tarefas do dia + diário.
- * Ao fechar 100%, o cartão vira celebração (fundo roxo profundo, chama
- * pulsando).
+ * Cartão de padrão no fim da Hoje (.insight do protótipo): seção
+ * "Padrão detectado" com link pros relatórios e o cartão em gradiente
+ * roxo escuro — selo "SONO × DIA SEGUINTE", título e o texto do padrão.
  */
 @Composable
-private fun DayRingPanel(
-    habitsDone: Int,
-    habitsTotal: Int,
-    tasksDone: Int,
-    tasksTotal: Int,
-    diaryDone: Boolean,
-    bestStreak: Int,
-    isToday: Boolean,
-) {
-    val scheme = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    val total = habitsTotal + tasksTotal + 1
-    val done = habitsDone + tasksDone + if (diaryDone) 1 else 0
-    val frac = if (total > 0) done.toFloat() / total else 0f
-    val celebrated = total > 0 && done >= total
-    val animFrac by animateFloatAsState(
-        targetValue = frac,
-        animationSpec = tween(durationMillis = 700),
-        label = "dayRing",
-    )
-    val title = when {
-        celebrated -> "Dia fechado. Constância pura."
-        frac >= 0.5f -> "Quase lá"
-        frac > 0f -> "Bom começo"
-        else -> "Vamos começar"
-    }
-    val missing = total - done
-    val subtitle = when {
-        celebrated ->
-            if (isToday) "Tudo feito por hoje. Descanse." else "Tudo feito naquele dia."
-        missing == 1 ->
-            if (isToday) "Falta 1 item pra fechar o dia" else "Faltou 1 item naquele dia"
-        else ->
-            if (isToday) "Faltam $missing itens pra fechar o dia"
-            else "Faltaram $missing itens naquele dia"
-    }
-    val content = if (celebrated) extra.progressCardContent else scheme.onSurface
-    val subContent = if (celebrated) extra.progressCardContent.copy(alpha = 0.75f)
-    else scheme.onSurfaceVariant
-    val trackColor = if (celebrated) extra.progressCardContent.copy(alpha = 0.22f)
-    else extra.heat0
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 14.dp)
-            .background(
-                if (celebrated) extra.progressCardBg else scheme.surface,
-                RoundedCornerShape(26.dp),
-            )
-            .border(
-                BorderStroke(1.dp, if (celebrated) extra.progressCardBg else scheme.outline),
-                RoundedCornerShape(26.dp),
-            )
-            .padding(horizontal = 18.dp, vertical = 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.size(94.dp), contentAlignment = Alignment.Center) {
-            Canvas(modifier = Modifier.size(94.dp)) {
-                drawCircle(
-                    color = trackColor,
-                    style = Stroke(width = 9.dp.toPx()),
-                )
-                if (animFrac > 0f) {
-                    drawArc(
-                        color = if (celebrated) scheme.secondary else scheme.primary,
-                        startAngle = -90f,
-                        sweepAngle = 360f * animFrac,
-                        useCenter = false,
-                        style = Stroke(width = 9.dp.toPx(), cap = StrokeCap.Round),
-                    )
-                }
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = (animFrac * 100).roundToInt().toString() + "%",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                    ),
-                    color = content,
-                )
-                Text(
-                    text = "do dia",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = subContent,
-                )
-            }
+private fun InsightCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
+    val goodDay = (pattern.overdueRatio ?: 1.0) >= 1.3 ||
+        (pattern.moodAfterShort != null && pattern.moodAfterEnough != null &&
+            (pattern.moodAfterEnough ?: 0.0) - (pattern.moodAfterShort ?: 0.0) > 0.3)
+    val body = buildString {
+        pattern.overdueRatio?.let { r ->
+            append("Em noites com menos de 6h30 de sono, você atrasa ")
+            append(fmt1(r) + "× mais tarefas no dia seguinte. ")
         }
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 17.sp,
-                ),
-                color = content,
-            )
-            Spacer(Modifier.height(3.dp))
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = subContent,
-            )
-            Spacer(Modifier.height(9.dp))
-            Text(
-                text = "Hábitos $habitsDone de $habitsTotal · Tarefas $tasksDone de " +
-                    "$tasksTotal · Diário " + if (diaryDone) "feito" else "por fazer",
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                ),
-                color = content,
-            )
-            if (bestStreak > 0) {
-                Spacer(Modifier.height(9.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(
-                            if (celebrated) scheme.secondary.copy(alpha = 0.18f)
-                            else extra.amber.copy(alpha = 0.14f),
-                        )
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    val flameScale = if (celebrated) {
-                        val transition = rememberInfiniteTransition(label = "flame")
-                        val s by transition.animateFloat(
-                            initialValue = 1f,
-                            targetValue = 1.22f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(durationMillis = 620),
-                                repeatMode = RepeatMode.Reverse,
-                            ),
-                            label = "flameScale",
-                        )
-                        s
-                    } else {
-                        1f
-                    }
-                    Icon(
-                        Icons.Filled.Whatshot,
-                        contentDescription = null,
-                        tint = scheme.secondary,
-                        modifier = Modifier.size(15.dp).scale(flameScale),
-                    )
-                    Spacer(Modifier.width(5.dp))
-                    Text(
-                        text = bestStreak.toString() +
-                            if (bestStreak == 1) " dia de sequência" else " dias de sequência",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.ExtraBold,
-                        ),
-                        color = if (celebrated) content else extra.amber,
-                    )
-                }
-            }
-            if (celebrated && isToday) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = "Você fechou tudo que se propôs hoje.",
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontWeight = FontWeight.SemiBold,
-                    ),
-                    color = content,
-                )
-            }
+        val ms = pattern.moodAfterShort
+        val me = pattern.moodAfterEnough
+        if (ms != null && me != null) {
+            append("Humor médio: " + fmt1(ms) + " após noite curta × ")
+            append(fmt1(me) + " após noite boa.")
         }
     }
-}
-
-/** Cartão "Padrão detectado" no fim da Hoje — ponte para os Relatórios. */
-@Composable
-private fun PatternDetectedCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 2.dp, bottom = 14.dp)
-            .background(scheme.surface, RoundedCornerShape(24.dp))
-            .border(BorderStroke(1.dp, scheme.outline), RoundedCornerShape(24.dp))
-            .padding(18.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Filled.NightsStay,
-                contentDescription = null,
-                tint = scheme.primary,
-                modifier = Modifier.size(17.dp),
-            )
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text = "Padrão detectado",
-                style = MaterialTheme.typography.labelLarge,
-                color = scheme.primary,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "Sono × dia seguinte",
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontWeight = FontWeight.ExtraBold,
-            ),
-        )
-        Spacer(Modifier.height(5.dp))
-        val body = buildString {
-            pattern.overdueRatio?.let { r ->
-                append("Em noites com menos de 6h30 de sono, você atrasa ")
-                append(fmt1(r) + "× mais tarefas no dia seguinte. ")
-            }
-            val ms = pattern.moodAfterShort
-            val me = pattern.moodAfterEnough
-            if (ms != null && me != null) {
-                append("Humor médio: " + fmt1(ms) + " após noite curta × ")
-                append(fmt1(me) + " após noite boa.")
-            }
-        }
-        Text(
-            text = body,
-            style = MaterialTheme.typography.bodyMedium,
-            color = extra.ink2,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Base: ${pattern.shortNights} noites curtas × " +
-                "${pattern.enoughNights} noites boas · associação, não causa.",
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(10.dp))
+    Column(modifier = Modifier.padding(top = 20.dp)) {
         Row(
             modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
-                .clickable(onClick = onOpenReports)
-                .padding(horizontal = 4.dp, vertical = 4.dp),
+                .fillMaxWidth()
+                .padding(start = 2.dp, end = 2.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
+                text = "Padrão detectado",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
                 text = "Ver relatórios",
                 style = MaterialTheme.typography.labelLarge,
-                color = scheme.primary,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenReports)
+                    .padding(4.dp),
             )
-            Icon(
-                Icons.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = scheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(24.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(Color(0xFF3B1478), Color(0xFF22094A)),
+                        start = Offset(0f, 0f),
+                        end = Offset(380f, 420f),
+                    ),
+                )
+                .clickable(onClick = onOpenReports)
+                .padding(18.dp),
+        ) {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color(0xFFB794F0),
+                        modifier = Modifier.size(13.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "SONO × DIA SEGUINTE",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.12.em,
+                        ),
+                        color = Color(0xFFB794F0),
+                    )
+                }
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    text = if (goodDay) {
+                        "Dormir cedo rende um amanhã melhor"
+                    } else {
+                        "Suas noites e seus dias, lado a lado"
+                    },
+                    style = MaterialTheme.typography.headlineSmall.copy(
+                        fontSize = 18.5.sp,
+                    ),
+                    color = Color.White,
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 21.sp,
+                    ),
+                    color = Color(0xFFDCCFFB),
+                )
+            }
         }
     }
 }

@@ -16,15 +16,18 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -63,6 +66,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
 import app.constancia.domain.DOW_FULL
@@ -115,6 +119,7 @@ import app.constancia.model.TaskProject
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.isoToAppDay
 import app.constancia.theme.constanciaExtra
+import app.constancia.ui.common.BackRow
 import app.constancia.ui.common.habitIcon
 import app.constancia.ui.common.moodColor
 import app.constancia.ui.tasks.priorityColor
@@ -147,6 +152,7 @@ fun ReportsScreen(
     deps: AppDeps,
     modifier: Modifier = Modifier,
     onOpenPaywall: () -> Unit = {},
+    onBack: () -> Unit = {},
 ) {
     val timeZone = TimeZone.currentSystemDefault()
     var period by remember { mutableStateOf(ReportPeriod.MES) }
@@ -230,16 +236,10 @@ fun ReportsScreen(
             .padding(horizontal = 20.dp)
     ) {
         Spacer(Modifier.height(10.dp))
-        Text(
-            "Relatórios",
-            style = MaterialTheme.typography.headlineSmall,
-            color = cs.onBackground,
-        )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            "tarefas × hábitos × diário, cruzados",
-            style = MaterialTheme.typography.bodySmall,
-            color = cs.onSurfaceVariant,
+        BackRow(
+            title = "Relatórios",
+            subtitle = "tarefas × hábitos × diário, cruzados",
+            onBack = onBack,
         )
         Spacer(Modifier.height(16.dp))
 
@@ -321,7 +321,7 @@ fun ReportsScreen(
                     text = "Copiar resumo",
                 )
             }
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(118.dp))
         }
     }
 
@@ -446,8 +446,8 @@ private fun CardTitle(title: String, hint: String?) {
 @Composable
 private fun CardBox(
     modifier: Modifier = Modifier,
-    corner: Dp = 18.dp,
-    contentPadding: PaddingValues = PaddingValues(16.dp),
+    corner: Dp = 24.dp,
+    contentPadding: PaddingValues = PaddingValues(18.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val extra = MaterialTheme.constanciaExtra
@@ -455,7 +455,7 @@ private fun CardBox(
         modifier
             .clip(RoundedCornerShape(corner))
             .background(extra.pageCard)
-            .border(1.dp, extra.pageLine, RoundedCornerShape(corner))
+            .border(1.dp, extra.lineSoft, RoundedCornerShape(corner))
             .padding(contentPadding),
         content = content,
     )
@@ -468,24 +468,26 @@ private fun KpiGrid(summary: PeriodSummary, data: ReportData, period: ReportPeri
         ReportPeriod.MES -> "no mês"
         ReportPeriod.ANO -> "no ano"
     }
-    val conclusionLabel = buildString {
-        append("de conclusão")
-        summary.combinedDelta?.let { append(" · " + fmtDeltaPp(it) + " vs. anterior") }
-    }
     val moodLabel = buildString {
         append("humor médio")
-        summary.sleepAvg?.let { append(" · sono médio " + fmtSleep(it)) }
+        summary.sleepAvg?.let { append(" · sono " + fmtSleep(it)) }
     }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(11.dp)) {
             KpiCard(
                 Modifier.weight(1f),
                 "${summary.tasksDone}",
                 "tarefas concluídas $periodWord",
             )
-            KpiCard(Modifier.weight(1f), pct(summary.combinedRate), conclusionLabel)
+            KpiCard(
+                Modifier.weight(1f),
+                pct(summary.combinedRate),
+                "de conclusão",
+                delta = summary.combinedDelta?.let { fmtDeltaPp(it) },
+                deltaPositive = (summary.combinedDelta ?: 0.0) >= 0.0,
+            )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(11.dp)) {
             KpiCard(Modifier.weight(1f), "${data.totalCheckins}", "check-ins de hábitos")
             KpiCard(
                 Modifier.weight(1f),
@@ -496,28 +498,52 @@ private fun KpiGrid(summary: PeriodSummary, data: ReportData, period: ReportPeri
     }
 }
 
+/** KPI do protótipo: cartão raio 20, valor Sora 23/800 e a legenda
+ *  12/700 em muted — com o delta em verde (ou vermelho) à frente dela. */
 @Composable
-private fun KpiCard(modifier: Modifier = Modifier, value: String, label: String) {
+private fun KpiCard(
+    modifier: Modifier = Modifier,
+    value: String,
+    label: String,
+    delta: String? = null,
+    deltaPositive: Boolean = true,
+) {
     val cs = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
     Column(
         modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(extra.pageCard)
-            .border(1.dp, extra.pageLine, RoundedCornerShape(18.dp))
-            .padding(horizontal = 16.dp, vertical = 18.dp),
+            .border(1.dp, extra.lineSoft, RoundedCornerShape(20.dp))
+            .padding(15.dp),
     ) {
         Text(
             value,
-            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 29.sp),
+            style = MaterialTheme.typography.headlineSmall,
             color = cs.onBackground,
         )
-        Spacer(Modifier.height(5.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = extra.ink3,
-        )
+        Spacer(Modifier.height(3.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (delta != null) {
+                Text(
+                    delta,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = if (deltaPositive) extra.greenStrong else extra.red,
+                )
+                Spacer(Modifier.width(5.dp))
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = extra.ink3,
+            )
+        }
     }
 }
 
@@ -1201,51 +1227,166 @@ private fun PatternsSection(
         )
         return
     }
-    CardBox(Modifier.fillMaxWidth(), corner = 24.dp) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 2.dp, end = 2.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 "Padrões cruzados",
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.titleLarge,
                 color = cs.onBackground,
                 modifier = Modifier.weight(1f),
             )
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(cs.primaryContainer)
-                    .padding(horizontal = 9.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    "só no Constância",
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = cs.primary,
-                )
-            }
-        }
-        if (morning == null && sleep == null) {
-            Spacer(Modifier.height(8.dp))
             Text(
-                "Registre humor, energia e sono por alguns dias: o cruzamento " +
-                    "só aparece quando a amostra sustenta — sem palpite.",
-                fontSize = 13.sp,
+                "só no Constância",
+                style = MaterialTheme.typography.bodySmall,
                 color = extra.ink3,
             )
         }
-        if (morning != null) {
-            Spacer(Modifier.height(14.dp))
-            MorningPatternBlock(morning)
+        if (morning == null && sleep == null) {
+            CardBox(Modifier.fillMaxWidth()) {
+                Text(
+                    "Registre humor, energia e sono por alguns dias: o cruzamento " +
+                        "só aparece quando a amostra sustenta — sem palpite.",
+                    fontSize = 13.sp,
+                    color = extra.ink3,
+                )
+            }
         }
         if (sleep != null) {
-            if (morning != null) {
-                Spacer(Modifier.height(14.dp))
-                Box(
-                    Modifier.fillMaxWidth().height(1.dp).background(extra.pageLine)
-                )
-                Spacer(Modifier.height(14.dp))
-            }
-            SleepPatternBlock(sleep)
+            SleepInsightCard(sleep)
         }
+        if (morning != null) {
+            if (sleep != null) Spacer(Modifier.height(12.dp))
+            CardBox(Modifier.fillMaxWidth()) {
+                MorningPatternBlock(morning)
+            }
+        }
+    }
+}
+
+/**
+ * Cartão insight do padrão sono × dia seguinte (.insight do protótipo):
+ * gradiente roxo escuro, selo em lavanda, título Sora, texto e as três
+ * caixas translúcidas de comparação, com a base da amostra no rodapé.
+ */
+@Composable
+private fun SleepInsightCard(p: SleepLagPattern) {
+    val moodShort = p.moodAfterShort
+    val moodEnough = p.moodAfterEnough
+    val goodDay = (p.overdueRatio ?: 1.0) >= 1.3 ||
+        (moodShort != null && moodEnough != null && moodEnough - moodShort > 0.3)
+    val body = buildString {
+        p.overdueRatio?.let { r ->
+            append("Em noites com menos de 6h30 de sono, você atrasa ")
+            append(fmt1(r) + "× mais tarefas no dia seguinte. ")
+        }
+        if (moodShort != null && moodEnough != null) {
+            append("Humor médio: " + fmt1(moodShort) + " após noite curta × ")
+            append(fmt1(moodEnough) + " após noite boa.")
+        }
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    colors = listOf(Color(0xFF3B1478), Color(0xFF22094A)),
+                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                    end = androidx.compose.ui.geometry.Offset(380f, 420f),
+                ),
+            )
+            .padding(18.dp),
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Filled.AutoAwesome,
+                    contentDescription = null,
+                    tint = Color(0xFFB794F0),
+                    modifier = Modifier.size(13.dp),
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "SONO × DIA SEGUINTE",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 0.12.em,
+                    ),
+                    color = Color(0xFFB794F0),
+                )
+            }
+            Spacer(Modifier.height(7.dp))
+            Text(
+                if (goodDay) "Dormir cedo rende um amanhã melhor"
+                else "Suas noites e seus dias, lado a lado",
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 18.5.sp),
+                color = Color.White,
+            )
+            Spacer(Modifier.height(5.dp))
+            Text(
+                body,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Medium,
+                lineHeight = 21.sp,
+                color = Color(0xFFDCCFFB),
+            )
+            Spacer(Modifier.height(13.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                if (moodEnough != null) {
+                    VsStat(fmt1(moodEnough), "humor · noite boa", Modifier.weight(1f))
+                }
+                if (moodShort != null) {
+                    VsStat(fmt1(moodShort), "humor · noite curta", Modifier.weight(1f))
+                }
+                VsStat(
+                    pct(p.overdueRateAfterShort),
+                    "atrasos · após noite curta",
+                    Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(11.dp))
+            Text(
+                "Base: ${p.shortNights} noites curtas × ${p.enoughNights} noites " +
+                    "boas · associação, não causa.",
+                fontSize = 11.5.sp,
+                color = Color(0xFFA58BD8),
+            )
+        }
+    }
+}
+
+/** Caixa de comparação translúcida do cartão insight (.vs do protótipo). */
+@Composable
+private fun VsStat(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(15.dp))
+            .background(Color.White.copy(alpha = 0.09f))
+            .border(
+                1.dp,
+                Color.White.copy(alpha = 0.13f),
+                RoundedCornerShape(15.dp),
+            )
+            .padding(horizontal = 13.dp, vertical = 11.dp),
+    ) {
+        Text(
+            value,
+            style = MaterialTheme.typography.headlineSmall.copy(fontSize = 21.sp),
+            color = Color.White,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            label,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFBEA3F2),
+        )
     }
 }
 
@@ -1322,70 +1463,6 @@ private fun MorningPatternBlock(p: MorningHabitPattern) {
 }
 
 @Composable
-private fun SleepPatternBlock(p: SleepLagPattern) {
-    val cs = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            Icons.Filled.NightsStay,
-            contentDescription = null,
-            tint = cs.primary,
-            modifier = Modifier.size(17.dp),
-        )
-        Spacer(Modifier.width(7.dp))
-        Text(
-            "Sono × dia seguinte",
-            style = MaterialTheme.typography.labelLarge,
-            color = cs.primary,
-        )
-    }
-    Spacer(Modifier.height(8.dp))
-    val moodShort = p.moodAfterShort
-    val moodEnough = p.moodAfterEnough
-    val goodDay = (p.overdueRatio ?: 1.0) >= 1.3 ||
-        (moodShort != null && moodEnough != null && moodEnough - moodShort > 0.3)
-    Text(
-        if (goodDay) "Dormir cedo rende um amanhã melhor"
-        else "Suas noites e seus dias, lado a lado",
-        style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
-        color = cs.onBackground,
-    )
-    Spacer(Modifier.height(6.dp))
-    val body = buildString {
-        p.overdueRatio?.let { r ->
-            append("Em noites com menos de 6h30 de sono, você atrasa ")
-            append(fmt1(r) + "× mais tarefas no dia seguinte. ")
-        }
-        if (moodShort != null && moodEnough != null) {
-            append("Humor médio: " + fmt1(moodShort) + " após noite curta × ")
-            append(fmt1(moodEnough) + " após noite boa.")
-        }
-    }
-    Text(body, fontSize = 13.sp, color = extra.ink2)
-    Spacer(Modifier.height(12.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (moodEnough != null) {
-            PatternStat(fmt1(moodEnough), "humor · noite boa", Modifier.weight(1f))
-        }
-        if (moodShort != null) {
-            PatternStat(fmt1(moodShort), "humor · noite curta", Modifier.weight(1f))
-        }
-        PatternStat(
-            pct(p.overdueRateAfterShort),
-            "atrasos · após noite curta",
-            Modifier.weight(1f),
-        )
-    }
-    Spacer(Modifier.height(10.dp))
-    Text(
-        "Base: ${p.shortNights} noites curtas × ${p.enoughNights} noites boas. " +
-            "Associação observada — não é causa e efeito.",
-        fontSize = 11.sp,
-        color = extra.ink3,
-    )
-}
-
-@Composable
 private fun ReviewSection(review: PeriodReview, period: ReportPeriod) {
     val cs = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
@@ -1437,6 +1514,8 @@ private fun ReviewSection(review: PeriodReview, period: ReportPeriod) {
             review.prevDoneByWeekday.maxOrNull() ?: 0,
             1,
         )
+        val todayIdx = Clock.System.todayIn(TimeZone.currentSystemDefault())
+            .isoDayNumberCompat() - 1
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -1447,36 +1526,25 @@ private fun ReviewSection(review: PeriodReview, period: ReportPeriod) {
                     Row(
                         verticalAlignment = Alignment.Bottom,
                         horizontalArrangement = Arrangement.spacedBy(3.dp),
-                        modifier = Modifier.height(84.dp),
+                        modifier = Modifier.height(88.dp),
                     ) {
-                        ReviewBar(
-                            frac = review.prevDoneByWeekday[i].toFloat() / maxCount,
-                            color = cs.primary.copy(alpha = 0.30f),
-                        )
                         ReviewBar(
                             frac = review.doneByWeekday[i].toFloat() / maxCount,
                             color = cs.primary,
                         )
+                        ReviewBar(
+                            frac = review.prevDoneByWeekday[i].toFloat() / maxCount,
+                            color = extra.prevBar,
+                        )
                     }
                     Spacer(Modifier.height(6.dp))
-                    Text(label, fontSize = 10.5.sp, color = extra.ink3)
+                    Text(
+                        label,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (i == todayIdx) cs.primary else extra.ink3,
+                    )
                 }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(9.dp).clip(RoundedCornerShape(2.dp)).background(cs.primary))
-                Spacer(Modifier.width(5.dp))
-                Text("este período", fontSize = 11.sp, color = extra.ink3)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(9.dp).clip(RoundedCornerShape(2.dp))
-                        .background(cs.primary.copy(alpha = 0.30f))
-                )
-                Spacer(Modifier.width(5.dp))
-                Text("anterior", fontSize = 11.sp, color = extra.ink3)
             }
         }
         review.victory?.let { v ->
@@ -1503,9 +1571,14 @@ private fun ReviewSection(review: PeriodReview, period: ReportPeriod) {
 private fun ReviewBar(frac: Float, color: Color) {
     Box(
         Modifier
-            .width(11.dp)
+            .width(13.dp)
             .fillMaxHeight(frac.coerceIn(0.03f, 1f))
-            .clip(RoundedCornerShape(3.dp))
+            .clip(
+                RoundedCornerShape(
+                    topStart = 5.dp, topEnd = 5.dp,
+                    bottomStart = 3.dp, bottomEnd = 3.dp,
+                ),
+            )
             .background(color),
     )
 }
@@ -1519,10 +1592,16 @@ private fun ReviewLine(label: String, text: String) {
             label,
             fontSize = 13.sp,
             fontWeight = FontWeight.ExtraBold,
-            color = cs.primary,
+            color = cs.onBackground,
         )
         Spacer(Modifier.width(6.dp))
-        Text(text, fontSize = 13.sp, color = extra.ink2, modifier = Modifier.weight(1f))
+        Text(
+            text,
+            fontSize = 13.sp,
+            lineHeight = 20.sp,
+            color = extra.ink2,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -1577,12 +1656,6 @@ private fun XraySection(xray: OverdueXray, isPro: Boolean, onOpenPaywall: () -> 
             }
         }
         Spacer(Modifier.height(14.dp))
-        Text(
-            "Por projeto",
-            style = MaterialTheme.typography.labelLarge,
-            color = cs.onBackground,
-        )
-        Spacer(Modifier.height(8.dp))
         xray.byProject.forEach { slice ->
             val project = TaskProject.entries.firstOrNull { it.label == slice.label }
             XrayRow(
@@ -1591,15 +1664,9 @@ private fun XraySection(xray: OverdueXray, isPro: Boolean, onOpenPaywall: () -> 
                 count = slice.count,
                 share = slice.share(xray.total),
             )
-            Spacer(Modifier.height(7.dp))
+            Spacer(Modifier.height(11.dp))
         }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Por prioridade",
-            style = MaterialTheme.typography.labelLarge,
-            color = cs.onBackground,
-        )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(3.dp))
         xray.byPriority.forEach { slice ->
             val prio = slice.label.removePrefix("P").toIntOrNull() ?: 2
             XrayRow(
@@ -1612,9 +1679,9 @@ private fun XraySection(xray: OverdueXray, isPro: Boolean, onOpenPaywall: () -> 
                 count = slice.count,
                 share = slice.share(xray.total),
             )
-            Spacer(Modifier.height(7.dp))
+            Spacer(Modifier.height(11.dp))
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
         Text(
             buildString {
                 append("Idade média do atraso: " + fmt1(xray.avgAgeDays) + " dias")
@@ -1624,32 +1691,44 @@ private fun XraySection(xray: OverdueXray, isPro: Boolean, onOpenPaywall: () -> 
                 }
                 append(".")
             },
-            fontSize = 12.sp,
-            color = extra.ink3,
+            fontSize = 13.sp,
+            lineHeight = 20.sp,
+            color = extra.ink2,
         )
     }
 }
 
+/** Barra horizontal do raio-X (.hbar do protótipo): ponto + nome e o
+ *  valor à direita; a barra de 8dp vai abaixo, na cor da fatia. */
 @Composable
 private fun XrayRow(dot: Color, label: String, count: Int, share: Double) {
     val cs = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(9.dp).clip(CircleShape).background(dot))
-        Spacer(Modifier.width(8.dp))
-        Text(
-            label,
-            fontSize = 12.5.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = extra.ink2,
-            modifier = Modifier.width(110.dp),
-        )
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(9.dp).clip(CircleShape).background(dot))
+            Spacer(Modifier.width(8.dp))
+            Text(
+                label,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = extra.ink2,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                "$count · " + pct(share),
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = cs.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(6.dp))
         Box(
             Modifier
-                .weight(1f)
-                .height(7.dp)
+                .fillMaxWidth()
+                .height(8.dp)
                 .clip(RoundedCornerShape(99.dp))
-                .background(extra.pageChip),
+                .background(extra.pageLine),
         ) {
             Box(
                 Modifier
@@ -1659,13 +1738,6 @@ private fun XrayRow(dot: Color, label: String, count: Int, share: Double) {
                     .background(dot),
             )
         }
-        Spacer(Modifier.width(8.dp))
-        Text(
-            "$count · " + pct(share),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = cs.onBackground,
-        )
     }
 }
 
@@ -1676,144 +1748,99 @@ private fun YearReviewSection(
     isPro: Boolean,
     today: LocalDate,
 ) {
-    val cs = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    CardBox(Modifier.fillMaxWidth(), corner = 24.dp) {
+    // Cartão em gradiente do protótipo (.year-card): roxo profundo com o
+    // ano "fantasma" gigante no canto, selo, título e o resumo do ano em
+    // uma frase — a revista do trimestre entra como linha do rodapé.
+    val shape = RoundedCornerShape(24.dp)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                androidx.compose.ui.graphics.Brush.linearGradient(
+                    colors = listOf(
+                        Color(0xFF2E1159),
+                        Color(0xFF4B1D96),
+                        Color(0xFF7C3AED),
+                    ),
+                    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+                    end = androidx.compose.ui.geometry.Offset(420f, 380f),
+                ),
+            ),
+    ) {
         Text(
-            "Ano em revista · " + MONTHS_PT[today.monthNumber - 1],
-            style = MaterialTheme.typography.labelLarge,
-            color = cs.primary,
+            text = year.from.year.toString(),
+            style = MaterialTheme.typography.headlineSmall.copy(
+                fontSize = 104.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = Color.White.copy(alpha = 0.09f),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset(x = 10.dp, y = 26.dp),
         )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Seu ${year.from.year} em constância",
-            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
-            color = cs.onBackground,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Dias de sequência, tarefas vencidas, humor ao longo do ano — " +
-                "montado automaticamente e pronto pra compartilhar.",
-            fontSize = 13.sp,
-            color = extra.ink3,
-        )
-        Spacer(Modifier.height(12.dp))
-        if (year.bestStreak > 0) {
-            HighlightFact(
-                icon = Icons.Filled.Whatshot,
-                tint = cs.secondary,
-                text = "${year.bestStreak} dias de maior sequência" +
-                    (year.bestStreakHabit?.let { " — $it" } ?: ""),
-            )
-        }
-        if (year.tasksDone > 0) {
-            HighlightFact(
-                icon = Icons.Filled.Check,
-                tint = cs.primary,
-                text = "${year.tasksDone} tarefas concluídas · " +
-                    pct(year.taskRate) + " das planejadas",
-            )
-        }
-        if (year.totalCheckins > 0) {
-            HighlightFact(
-                icon = Icons.Filled.Insights,
-                tint = cs.primary,
-                text = "${year.totalCheckins} check-ins no ano",
-            )
-        }
-        if (year.perfectDays > 0) {
-            HighlightFact(
-                icon = Icons.Filled.Check,
-                tint = cs.primary,
-                text = "${year.perfectDays} dias perfeitos",
-            )
-        }
-        year.happiestMonth?.let { m ->
-            HighlightFact(
-                icon = Icons.Filled.WbSunny,
-                tint = extra.amber,
-                text = "Mês mais feliz: " + MONTHS_PT[m - 1] +
-                    (year.happiestMonthAvg?.let { " (humor médio " + fmt1(it) + ")" } ?: ""),
-            )
-        }
-        year.mostProductiveWeekday?.let { iso ->
-            HighlightFact(
-                icon = Icons.Filled.Insights,
-                tint = cs.primary,
-                text = "Dia mais produtivo: " + WEEKDAYS_ISO_PT[iso - 1],
-            )
-        }
-        if (year.moodByMonth.any { it != null }) {
-            Spacer(Modifier.height(12.dp))
+        Column(Modifier.padding(19.dp)) {
             Text(
-                "Humor médio por mês",
-                style = MaterialTheme.typography.labelLarge,
-                color = cs.onBackground,
+                text = "ANO EM REVISTA",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.12.em,
+                ),
+                color = Color(0xFFC4A6F5),
             )
-            Spacer(Modifier.height(8.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                year.moodByMonth.forEachIndexed { i, v ->
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            Modifier.height(52.dp),
-                            contentAlignment = Alignment.BottomCenter,
-                        ) {
-                            if (v != null) {
-                                val frac = ((v - 1.0) / 4.0).toFloat().coerceIn(0.12f, 1f)
-                                Box(
-                                    Modifier
-                                        .width(16.dp)
-                                        .fillMaxHeight(frac)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(moodColor(v.roundToInt().coerceIn(1, 5))),
-                                )
-                            } else {
-                                Box(
-                                    Modifier
-                                        .width(16.dp)
-                                        .height(4.dp)
-                                        .clip(RoundedCornerShape(4.dp))
-                                        .background(extra.heat0),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(5.dp))
-                        Text(
-                            MONTHS[i].take(1).uppercase(),
-                            fontSize = 9.5.sp,
-                            color = extra.ink3,
-                        )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Seu " + year.from.year + " em constância",
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 19.sp),
+                color = Color.White,
+            )
+            Spacer(Modifier.height(5.dp))
+            Text(
+                text = buildString {
+                    append(year.totalCheckins)
+                    append(" check-ins, ")
+                    append(year.tasksDone)
+                    append(" tarefas, ")
+                    append(year.bestStreak)
+                    append(" dias de sequência")
+                    year.happiestMonth?.let {
+                        append(" e o humor em alta em ")
+                        append(MONTHS_PT[it - 1])
                     }
-                }
+                    append(" — montado automaticamente, pronto pra compartilhar.")
+                },
+                fontSize = 13.5.sp,
+                lineHeight = 20.sp,
+                color = Color(0xFFE0D3F7),
+                modifier = Modifier.widthIn(max = 250.dp),
+            )
+            Spacer(Modifier.height(14.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.15f)),
+            )
+            Spacer(Modifier.height(12.dp))
+            if (isPro) {
+                Text(
+                    text = "Trimestre em revista: " + quarter.tasksDone +
+                        " tarefas concluídas · " + quarter.totalCheckins +
+                        " check-ins · maior sequência de " + quarter.bestStreak +
+                        " dias neste trimestre.",
+                    fontSize = 13.sp,
+                    lineHeight = 19.sp,
+                    color = Color(0xFFE0D3F7),
+                )
+            } else {
+                Text(
+                    text = "No Constância Pro: versão completa do ano + " +
+                        "revista do trimestre.",
+                    fontSize = 12.5.sp,
+                    color = Color(0xFFC4A6F5),
+                )
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        Box(Modifier.fillMaxWidth().height(1.dp).background(extra.pageLine))
-        Spacer(Modifier.height(12.dp))
-        if (isPro) {
-            Text(
-                "Trimestre em revista · Pro",
-                style = MaterialTheme.typography.labelLarge,
-                color = cs.primary,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "${quarter.tasksDone} tarefas concluídas · " +
-                    "${quarter.totalCheckins} check-ins · maior sequência de " +
-                    "${quarter.bestStreak} dias neste trimestre.",
-                fontSize = 13.sp,
-                color = extra.ink2,
-            )
-        } else {
-            Text(
-                "No Constância Pro: versão completa do ano + revista do trimestre.",
-                fontSize = 12.sp,
-                color = extra.ink3,
-            )
         }
     }
 }
