@@ -65,6 +65,7 @@ internal fun HabitRow.toModel(): Habit = Habit(
     quantityStep = quantity_step,
     showInToday = show_in_today.isSet(),
     showInCalendar = show_in_calendar.isSet(),
+    ignoreWeekdays = ignore_weekdays.toIsoDaySet(),
 )
 
 internal fun CheckinRow.toModel(): Checkin = Checkin(
@@ -234,6 +235,15 @@ internal fun ChallengeRow.toModel(): Challenge = Challenge(
 // Conversoes modelo -> valores de banco (usadas nos inserts/updates).
 
 internal fun Habit.daysOfWeekCsv(): String = daysOfWeek.joinToString(",")
+
+/** R13.1: dias de descanso (ISO 1..7) como csv ordenado, "" = nenhum. */
+internal fun Habit.ignoreWeekdaysCsv(): String =
+    ignoreWeekdays.sorted().joinToString(",")
+
+/** csv de dias ISO (1=segunda .. 7=domingo) -> conjunto; lixo é ignorado. */
+internal fun String.toIsoDaySet(): Set<Int> =
+    split(",").mapNotNull { it.trim().toIntOrNull() }
+        .filter { it in 1..7 }.toSet()
 
 internal fun Long.isSet(): Boolean = this == 1L
 

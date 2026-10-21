@@ -36,6 +36,26 @@ data class Habit(
     val quantityStep: Double = 1.0, // passo do stepper (item 1)
     val showInToday: Boolean = false, // opt-in: aparecer na Hoje mesmo fora dos dias devidos (item 4)
     val showInCalendar: Boolean = false, // opt-in: marcas de check-in no calendário do diário (item 4)
+    // Fase D (schema v9):
+    /** R13.1: dias de descanso planejados, ISO (1=segunda .. 7=domingo).
+     *  Nesses dias o hábito NÃO é devido e a sequência não quebra.
+     *  Vale para DAILY e DAYS_OF_WEEK; WEEKLY_X ignora (meta semanal). */
+    val ignoreWeekdays: Set<Int> = emptySet(),
+)
+
+/**
+ * R10.2 + R13.2 (Fase D): a sequência como OBJETO — quanto tem, desde
+ * quando, até quando, e o recorde histórico. Vale para hábitos e para
+ * as metas de tarefas (o mesmo formato nas duas camadas).
+ * [start]/[end] são o primeiro/último dia CONTADO da sequência atual
+ * (null quando a sequência é 0); para sequências semanais, são a
+ * segunda/o domingo das semanas extremas da corrida.
+ */
+data class StreakInfo(
+    val count: Int,
+    val start: LocalDate?,
+    val end: LocalDate?,
+    val best: Int,
 )
 
 /** Status do check-in: DONE = feito/parcial; SKIPPED = pulado (registrado
@@ -91,6 +111,8 @@ data class HabitStatus(
     val isDoneToday: Boolean,
     val currentStreak: Int,
     val weekDone: Int, // check-ins na semana atual (para WEEKLY_X)
+    // Fase D (R13.2): a sequência atual como objeto (início/fim/recorde).
+    val streakInfo: StreakInfo = StreakInfo(0, null, null, 0),
 )
 
 /** Listas/projetos das tarefas (estilo Todoist), com a cor de cada um. */

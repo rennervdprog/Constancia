@@ -9,6 +9,7 @@ CREATE TABLE habit(
   quantity_step REAL NOT NULL DEFAULT 1.0, -- passo do stepper (TickTick item 1)
   show_in_today INTEGER NOT NULL DEFAULT 0, -- opt-in: sempre mostrar na Hoje (item 4)
   show_in_calendar INTEGER NOT NULL DEFAULT 0, -- opt-in: marcas no calendário do diário (item 4)
+  ignore_weekdays TEXT NOT NULL DEFAULT '', -- csv ISO 1..7: dias de descanso planejados (R13.1, Fase D)
   frequency_type TEXT NOT NULL, -- DAILY | WEEKLY_X | DAYS_OF_WEEK
   days_of_week TEXT NOT NULL DEFAULT '', -- csv de 1..7 (1=domingo), vazio = todos
   weekly_target INTEGER NOT NULL DEFAULT 7,
@@ -232,14 +233,15 @@ SELECT * FROM habit WHERE id = ?;
 
 insertHabit:
 INSERT INTO habit(id, name, icon, color, goal_type, target_quantity, quantity_unit,
-  quantity_step, show_in_today, show_in_calendar,
+  quantity_step, show_in_today, show_in_calendar, ignore_weekdays,
   frequency_type, days_of_week, weekly_target, session, reminder_enabled,
   reminder_time, paused, archived, created_at, sort_order)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateHabit:
 UPDATE habit SET name = ?, icon = ?, color = ?, goal_type = ?, target_quantity = ?,
   quantity_unit = ?, quantity_step = ?, show_in_today = ?, show_in_calendar = ?,
+  ignore_weekdays = ?,
   frequency_type = ?, days_of_week = ?, weekly_target = ?,
   session = ?, reminder_enabled = ?, reminder_time = ?, sort_order = ?
 WHERE id = ?;

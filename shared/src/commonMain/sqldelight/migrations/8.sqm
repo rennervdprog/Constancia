@@ -1,0 +1,7 @@
+-- Migração 8 -> 9: Fase D do Plano de Elevação (consistência de
+-- metas e hábitos).
+-- R13.1: dias de descanso planejados POR HÁBITO — csv de dias ISO
+-- (1=segunda .. 7=domingo) que não são devidos nem quebram a sequência
+-- (ex.: "6,7" = fins de semana de folga num hábito diário). Vale para
+-- hábitos DAILY e DAYS_OF_WEEK; WEEKLY_X não usa (a meta é semanal).
+ALTER TABLE habit ADD COLUMN ignore_weekdays TEXT NOT NULL DEFAULT '';
