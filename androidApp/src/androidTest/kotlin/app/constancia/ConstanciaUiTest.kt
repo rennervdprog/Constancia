@@ -5,11 +5,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -193,8 +193,15 @@ class ConstanciaUiTest {
             composeRule.onNodeWithText("tarefas × hábitos × diário, cruzados").assertIsDisplayed()
         } catch (e: Throwable) {
             System.err.println(
-                "APPABRE_PROGRESSO_DUMP:\n" + composeRule.onRoot().printToString(),
+                "APPABRE_FAIL: " + e.javaClass.simpleName + ": " +
+                    (e.message ?: "").take(300),
             )
+            shot("09_appabre_debug")
+            val roots = composeRule.onAllNodes(isRoot()).fetchSemanticsNodes()
+            System.err.println("APPABRE_ROOTS: " + roots.size)
+            roots.forEachIndexed { idx, node ->
+                System.err.println("ROOT[$idx] bounds=" + node.boundsInRoot)
+            }
             throw e
         }
         shot("01_progresso")
