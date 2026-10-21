@@ -55,6 +55,7 @@ fun rememberAppDeps(driverFactory: DatabaseDriverFactory): AppDeps {
             prefs = PrefsRepositoryImpl(),
         )
         scope.launch { deps.challenges.ensureSeed() }
+        scope.launch { deps.tasks.ensureFactoryTemplates() }
         deps
     }
 }

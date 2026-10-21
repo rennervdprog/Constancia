@@ -6,11 +6,14 @@ import app.constancia.model.Checkin
 import app.constancia.model.DiaryEntry
 import app.constancia.model.Habit
 import app.constancia.model.HabitStatus
+import app.constancia.model.GoalPause
 import app.constancia.model.NewTask
 import app.constancia.model.PauseInterval
+import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
+import app.constancia.model.TaskTemplate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.TimeZone
 
@@ -65,6 +68,33 @@ interface TaskRepository {
     suspend fun addSubtask(taskId: String, title: String)
     suspend fun setSubtaskDone(subtaskId: String, done: Boolean)
     suspend fun delete(id: String)
+
+    // -- Backlog Todoist Faixa 1/2 --
+    /** Item 1: move TODAS as pendentes vencidas (dueDate < hoje) para o
+     *  dia alvo. Retorna quantas foram movidas. */
+    suspend fun rescheduleAllOverdue(todayYmd: String, targetYmd: String): Int
+    /** Item 9: define/remove o lembrete da tarefa (null = sem lembrete). */
+    suspend fun setReminder(id: String, minutesBefore: Int?)
+
+    /** Item 10: vistas salvas nomeadas com cor. */
+    fun savedViewsFlow(): Flow<List<SavedView>>
+    suspend fun addSavedView(view: SavedView): String
+    suspend fun deleteSavedView(id: String)
+
+    /** Item 11: modelos de lista de tarefas. */
+    fun templatesFlow(): Flow<List<TaskTemplate>>
+    /** Salva um modelo a partir de itens (título/projeto/prioridade/sessão/nota). */
+    suspend fun saveTemplate(name: String, items: List<NewTask>): String
+    suspend fun deleteTemplate(id: String)
+    /** Cria as tarefas do modelo (com o prazo dado; null = sem data). */
+    suspend fun instantiateTemplate(templateId: String, dueDate: String?): Int
+    /** Garante os modelos de fábrica (idempotente). */
+    suspend fun ensureFactoryTemplates()
+
+    /** Item 2: pausas da meta de tarefas (streak congelado). */
+    fun goalPausesFlow(): Flow<List<GoalPause>>
+    /** Liga/desliga o modo pausa da meta a partir de hoje. */
+    suspend fun setGoalPaused(paused: Boolean, todayYmd: String)
 }
 
 interface DiaryRepository {
@@ -102,4 +132,18 @@ interface PrefsRepository {
     suspend fun setPro(pro: Boolean)
     fun onboardingDoneFlow(): Flow<Boolean>
     suspend fun setOnboardingDone()
+
+    // -- Backlog Todoist Faixa 1/2 --
+    /** Item 2: meta diária de tarefas concluídas (0 = desligada). */
+    fun taskDailyGoalFlow(): Flow<Int>
+    suspend fun setTaskDailyGoal(goal: Int)
+    /** Item 2: meta semanal de tarefas concluídas (0 = desligada). */
+    fun taskWeeklyGoalFlow(): Flow<Int>
+    suspend fun setTaskWeeklyGoal(goal: Int)
+    /** Item 3: Daily Review — notificação diária de resumo do dia. */
+    fun dailyReviewEnabledFlow(): Flow<Boolean>
+    suspend fun setDailyReviewEnabled(enabled: Boolean)
+    /** Item 3: horário do Daily Review, "HH:mm" (padrão "08:00"). */
+    fun dailyReviewTimeFlow(): Flow<String>
+    suspend fun setDailyReviewTime(time: String)
 }

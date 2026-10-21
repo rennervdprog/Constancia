@@ -1,0 +1,53 @@
+-- Migração 3 -> 4: backlog do relatório Todoist (Faixas 1 e 2).
+-- Tarefas ganham prazo final (deadline) separado da data agendada,
+-- duração estimada, instante de conclusão (base das metas/streak de
+-- tarefas), lembrete relativo e a regra de recorrência estruturada
+-- (repeat_spec; repeat_rule segue como rótulo legível).
+ALTER TABLE task_item ADD COLUMN deadline_date TEXT;
+ALTER TABLE task_item ADD COLUMN duration_minutes INTEGER;
+ALTER TABLE task_item ADD COLUMN completed_at TEXT;
+ALTER TABLE task_item ADD COLUMN reminder_minutes_before INTEGER;
+ALTER TABLE task_item ADD COLUMN repeat_spec TEXT NOT NULL DEFAULT '';
+
+-- Vistas salvas das tarefas (item 10): combinações nomeadas com cor.
+CREATE TABLE saved_view(
+  id TEXT NOT NULL PRIMARY KEY,
+  name TEXT NOT NULL,
+  color INTEGER NOT NULL,
+  project TEXT, -- entrada|pessoal|trabalho|casa|saude ou null = todos
+  priority INTEGER, -- 1..3 ou null = todas
+  period TEXT NOT NULL DEFAULT 'all', -- all|today|week|overdue|nodate
+  group_by TEXT NOT NULL DEFAULT 'none', -- none|project|priority|date
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+-- Modelos de lista de tarefas (item 11): o modelo serializa TAREFAS
+-- (projetos são enum fixo), com 2-3 modelos de fábrica semeados.
+CREATE TABLE task_template(
+  id TEXT NOT NULL PRIMARY KEY,
+  name TEXT NOT NULL,
+  is_factory INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE task_template_item(
+  id TEXT NOT NULL PRIMARY KEY,
+  template_id TEXT NOT NULL REFERENCES task_template(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  project TEXT NOT NULL DEFAULT 'entrada',
+  priority INTEGER NOT NULL DEFAULT 2,
+  session TEXT NOT NULL DEFAULT 'TARDE',
+  note TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX template_item_template ON task_template_item(template_id);
+
+-- Pausas da meta de tarefas (item 2): intervalos em que o streak de
+-- metas fica congelado sem quebrar (mesma ideia das pausas de hábito).
+CREATE TABLE task_goal_pause(
+  id TEXT NOT NULL PRIMARY KEY,
+  start_date TEXT NOT NULL, -- yyyy-MM-dd (inclusive)
+  end_date TEXT -- yyyy-MM-dd (inclusive) ou null = pausa aberta
+);

@@ -85,10 +85,16 @@ data class TaskItem(
     val priority: Int = 2, // 1=P1 alta, 2=P2 média, 3=P3 baixa
     val dueDate: String? = null, // yyyy-MM-dd ou null = sem data (Entrada)
     val session: Session = Session.TARDE,
-    val repeatRule: String = "", // "" | "Todo dia" | "Seg a Sex" | "Semanal"
+    val repeatRule: String = "", // "" | "Todo dia" | "Seg a Sex" | "Semanal" (rótulo legível)
     val note: String = "",
     val habitId: String? = null, // tarefa vinculada a um hábito
     val subtasks: List<Subtask> = emptyList(),
+    // Backlog Todoist (schema v4):
+    val deadlineDate: String? = null, // yyyy-MM-dd: prazo final, distinto da data agendada
+    val durationMinutes: Int? = null, // duração estimada em minutos
+    val completedAt: String? = null, // instante ISO da conclusão (metas/streak de tarefas)
+    val reminderMinutesBefore: Int? = null, // null = sem lembrete; 0 = na hora; N = N min antes
+    val repeatSpec: String = "", // regra de recorrência estruturada codificada (domain/RepeatRule)
 )
 
 /** Dados para criar uma tarefa nova (formulário completo ou captura rápida). */
@@ -103,6 +109,52 @@ data class NewTask(
     val repeatRule: String = "",
     val habitId: String? = null,
     val subtaskTitles: List<String> = emptyList(),
+    // Backlog Todoist (schema v4):
+    val deadlineDate: String? = null,
+    val durationMinutes: Int? = null,
+    val reminderMinutesBefore: Int? = null,
+    val repeatSpec: String = "",
+)
+
+/** Vista salva de tarefas (item 10): combinação nomeada com cor, sem
+ *  linguagem de query. period: all|today|week|overdue|nodate;
+ *  groupBy: none|project|priority|date. */
+data class SavedView(
+    val id: String,
+    val name: String,
+    val colorHex: Long,
+    val project: TaskProject? = null,
+    val priority: Int? = null,
+    val period: String = "all",
+    val groupBy: String = "none",
+    val sortOrder: Int = 0,
+)
+
+/** Item de um modelo de lista (item 11): a tarefa-modelo serializada. */
+data class TaskTemplateItem(
+    val id: String,
+    val templateId: String,
+    val title: String,
+    val project: TaskProject = TaskProject.ENTRADA,
+    val priority: Int = 2,
+    val session: Session = Session.TARDE,
+    val note: String = "",
+    val sortOrder: Int = 0,
+)
+
+/** Modelo de lista de tarefas (item 11): "Rotina da manhã", etc. */
+data class TaskTemplate(
+    val id: String,
+    val name: String,
+    val isFactory: Boolean = false,
+    val items: List<TaskTemplateItem> = emptyList(),
+)
+
+/** Intervalo de pausa da meta de tarefas (item 2): streak congelado. */
+data class GoalPause(
+    val id: String,
+    val startDate: String, // yyyy-MM-dd (inclusive)
+    val endDate: String?, // yyyy-MM-dd (inclusive) ou null = pausa aberta
 )
 
 data class DiaryEntry(

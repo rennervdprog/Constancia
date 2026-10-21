@@ -5,20 +5,28 @@ import app.constancia.db.Checkin as CheckinRow
 import app.constancia.db.Diary_entry as DiaryEntryRow
 import app.constancia.db.Habit as HabitRow
 import app.constancia.db.Pause_interval as PauseIntervalRow
+import app.constancia.db.Saved_view as SavedViewRow
 import app.constancia.db.Subtask as SubtaskRow
+import app.constancia.db.Task_goal_pause as GoalPauseRow
 import app.constancia.db.Task_item as TaskItemRow
+import app.constancia.db.Task_template as TaskTemplateRow
+import app.constancia.db.Task_template_item as TaskTemplateItemRow
 import app.constancia.model.Challenge
 import app.constancia.model.ChallengeStatus
 import app.constancia.model.Checkin
 import app.constancia.model.DiaryEntry
 import app.constancia.model.FrequencyType
+import app.constancia.model.GoalPause
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
 import app.constancia.model.PauseInterval
+import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
+import app.constancia.model.TaskTemplate
+import app.constancia.model.TaskTemplateItem
 
 // Conversoes entidade SQLDelight -> modelo de dominio.
 // Colunas INTEGER do SQLite chegam como Long; flags 0/1 viram Boolean.
@@ -70,6 +78,47 @@ internal fun TaskItemRow.toModel(subtasks: List<Subtask> = emptyList()): TaskIte
     note = note,
     habitId = habit_id,
     subtasks = subtasks,
+    deadlineDate = deadline_date,
+    durationMinutes = duration_minutes?.toInt(),
+    completedAt = completed_at,
+    reminderMinutesBefore = reminder_minutes_before?.toInt(),
+    repeatSpec = repeat_spec,
+)
+
+internal fun SavedViewRow.toModel(): SavedView = SavedView(
+    id = id,
+    name = name,
+    colorHex = color,
+    project = project?.toTaskProjectOrNull(),
+    priority = priority?.toInt(),
+    period = period,
+    groupBy = group_by,
+    sortOrder = sort_order.toInt(),
+)
+
+internal fun TaskTemplateRow.toModel(items: List<TaskTemplateItem>): TaskTemplate =
+    TaskTemplate(
+        id = id,
+        name = name,
+        isFactory = is_factory.isSet(),
+        items = items,
+    )
+
+internal fun TaskTemplateItemRow.toModel(): TaskTemplateItem = TaskTemplateItem(
+    id = id,
+    templateId = template_id,
+    title = title,
+    project = project.toTaskProject(),
+    priority = priority.toInt(),
+    session = session.toSession(),
+    note = note,
+    sortOrder = sort_order.toInt(),
+)
+
+internal fun GoalPauseRow.toModel(): GoalPause = GoalPause(
+    id = id,
+    startDate = start_date,
+    endDate = end_date,
 )
 
 internal fun SubtaskRow.toModel(): Subtask = Subtask(
@@ -126,6 +175,10 @@ internal fun String.toChallengeStatus(): ChallengeStatus =
 
 internal fun String.toTaskProject(): TaskProject =
     TaskProject.entries.firstOrNull { it.name.lowercase() == this } ?: TaskProject.ENTRADA
+
+/** Como [toTaskProject], mas preserva null (filtros de vista salva). */
+internal fun String.toTaskProjectOrNull(): TaskProject? =
+    TaskProject.entries.firstOrNull { it.name.lowercase() == this }
 
 internal fun TaskProject.toDbValue(): String = name.lowercase()
 

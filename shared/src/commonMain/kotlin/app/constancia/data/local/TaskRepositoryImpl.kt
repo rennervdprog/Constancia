@@ -6,12 +6,15 @@ import app.constancia.data.CheckinRepository
 import app.constancia.data.TaskRepository
 import app.constancia.db.ConstanciaDb
 import app.constancia.domain.nextRepeatDate
+import app.constancia.model.GoalPause
 import app.constancia.model.GoalType
 import app.constancia.model.NewTask
+import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
+import app.constancia.model.TaskTemplate
 import app.constancia.model.newId
 import app.constancia.model.toLocalDate
 import app.constancia.model.toYmd
@@ -24,6 +27,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 class TaskRepositoryImpl(
     private val db: ConstanciaDb,
@@ -74,6 +78,11 @@ class TaskRepositoryImpl(
             task.dueDate,
             task.session.name,
             task.repeatRule,
+            task.deadlineDate,
+            task.durationMinutes?.toLong(),
+            null, // completed_at
+            task.reminderMinutesBefore?.toLong(),
+            task.repeatSpec,
             task.note,
             task.habitId,
             now,
@@ -101,7 +110,11 @@ class TaskRepositoryImpl(
 
     override suspend fun setDone(id: String, done: Boolean) {
         withContext(Dispatchers.Default) {
-            queries.setTaskDone(done.toFlag(), id)
+            queries.setTaskDone(
+                done.toFlag(),
+                if (done) Clock.System.now().toString() else null,
+                id,
+            )
         }
         if (done) {
             val task = getById(id) ?: return
@@ -143,7 +156,11 @@ class TaskRepositoryImpl(
             if (siblings.isNotEmpty() && siblings.all { it.done.isSet() }) {
                 val taskRow = queries.selectTaskById(sub.task_id).executeAsOneOrNull()
                 if (taskRow != null && !taskRow.done.isSet()) {
-                    queries.setTaskDone(1, sub.task_id)
+                    queries.setTaskDone(
+                        1,
+                        Clock.System.now().toString(),
+                        sub.task_id,
+                    )
                     completedTaskId = sub.task_id
                 }
             }
@@ -159,9 +176,220 @@ class TaskRepositoryImpl(
         queries.deleteTask(id)
     }
 
+    // -- Backlog Todoist Faixa 1/2 --
+
+    override suspend fun rescheduleAllOverdue(
+        todayYmd: String,
+        targetYmd: String,
+    ): Int = withContext(Dispatchers.Default) {
+        val count = queries.countOverdueTasks(todayYmd).executeAsOne().toInt()
+        if (count > 0) queries.rescheduleOverdueTasks(targetYmd, targetYmd, todayYmd)
+        count
+    }
+
+    override suspend fun setReminder(id: String, minutesBefore: Int?): Unit =
+        withContext(Dispatchers.Default) {
+            queries.setTaskReminder(minutesBefore?.toLong(), id)
+        }
+
+    override fun savedViewsFlow(): Flow<List<SavedView>> =
+        queries.selectSavedViews().asFlow().mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override suspend fun addSavedView(view: SavedView): String =
+        withContext(Dispatchers.Default) {
+            val id = if (view.id.isBlank()) newId() else view.id
+            val count = queries.selectSavedViews().executeAsList().size
+            queries.insertSavedView(
+                id,
+                view.name,
+                view.colorHex,
+                view.project?.toDbValue(),
+                view.priority?.toLong(),
+                view.period,
+                view.groupBy,
+                count.toLong(),
+                Clock.System.now().toString(),
+            )
+            id
+        }
+
+    override suspend fun deleteSavedView(id: String): Unit =
+        withContext(Dispatchers.Default) {
+            queries.deleteSavedView(id)
+        }
+
+    override fun templatesFlow(): Flow<List<TaskTemplate>> =
+        combine(
+            queries.selectTemplates().asFlow().mapToList(Dispatchers.Default),
+            queries.selectTemplateItems().asFlow().mapToList(Dispatchers.Default),
+        ) { templates, items ->
+            val byTemplate = items.map { it.toModel() }.groupBy { it.templateId }
+            templates.map { row -> row.toModel(byTemplate[row.id].orEmpty()) }
+        }
+
+    override suspend fun saveTemplate(name: String, items: List<NewTask>): String =
+        withContext(Dispatchers.Default) {
+            val id = newId()
+            val now = Clock.System.now().toString()
+            queries.insertTemplate(id, name, 0, now)
+            items.forEachIndexed { index, item ->
+                queries.insertTemplateItem(
+                    newId(), id, item.title, item.project.toDbValue(),
+                    item.priority.toLong(), item.session.name, item.note,
+                    index.toLong(), now,
+                )
+            }
+            id
+        }
+
+    override suspend fun deleteTemplate(id: String): Unit =
+        withContext(Dispatchers.Default) {
+            queries.deleteTemplateItems(id)
+            queries.deleteTemplate(id)
+        }
+
+    override suspend fun instantiateTemplate(
+        templateId: String,
+        dueDate: String?,
+    ): Int {
+        val template = withContext(Dispatchers.Default) {
+            val row = queries.selectTemplates().executeAsList()
+                .firstOrNull { it.id == templateId } ?: return@withContext null
+            val items = queries.selectTemplateItems().executeAsList()
+                .filter { it.template_id == templateId }
+                .map { it.toModel() }
+            row.toModel(items)
+        } ?: return 0
+        template.items.forEach { item ->
+            add(
+                NewTask(
+                    title = item.title,
+                    note = item.note,
+                    project = item.project,
+                    priority = item.priority,
+                    dueDate = dueDate,
+                    session = item.session,
+                ),
+            )
+        }
+        return template.items.size
+    }
+
+    override suspend fun ensureFactoryTemplates(): Unit =
+        withContext(Dispatchers.Default) {
+            val existing = queries.countFactoryTemplates().executeAsOne()
+            if (existing > 0) return@withContext
+            val now = Clock.System.now().toString()
+            FACTORY_TEMPLATES.forEach { (name, items) ->
+                val templateId = newId()
+                queries.insertTemplate(templateId, name, 1, now)
+                items.forEachIndexed { index, item ->
+                    queries.insertTemplateItem(
+                        newId(), templateId, item.title,
+                        item.project.toDbValue(), item.priority.toLong(),
+                        item.session.name, item.note, index.toLong(), now,
+                    )
+                }
+            }
+        }
+
+    override fun goalPausesFlow(): Flow<List<GoalPause>> =
+        queries.selectGoalPauses().asFlow().mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override suspend fun setGoalPaused(paused: Boolean, todayYmd: String): Unit =
+        withContext(Dispatchers.Default) {
+            if (paused) {
+                val open = queries.selectGoalPauses().executeAsList()
+                    .any { it.end_date == null }
+                if (!open) queries.insertGoalPause(newId(), todayYmd)
+            } else {
+                // Fecha na véspera: hoje já volta a contar para a meta.
+                val yesterday = todayYmd.toLocalDate()
+                    .minus(DatePeriod(days = 1)).toYmd()
+                queries.closeOpenGoalPauses(yesterday)
+            }
+        }
+
+    /** Modelos de fábrica do item 11 (semeados uma única vez). */
+    private companion object {
+        val FACTORY_TEMPLATES: List<Pair<String, List<NewTask>>> = listOf(
+            "Rotina da manhã" to listOf(
+                NewTask(
+                    title = "Beber um copo de água",
+                    project = TaskProject.SAUDE,
+                    session = Session.MANHA,
+                ),
+                NewTask(
+                    title = "Arrumar a cama",
+                    project = TaskProject.CASA,
+                    session = Session.MANHA,
+                ),
+                NewTask(
+                    title = "Alongar por 5 minutos",
+                    project = TaskProject.SAUDE,
+                    session = Session.MANHA,
+                ),
+                NewTask(
+                    title = "Revisar o dia de hoje",
+                    project = TaskProject.PESSOAL,
+                    session = Session.MANHA,
+                ),
+            ),
+            "Lista de compras" to listOf(
+                NewTask(
+                    title = "Anotar o que falta na despensa",
+                    project = TaskProject.CASA,
+                    session = Session.TARDE,
+                ),
+                NewTask(
+                    title = "Conferir a geladeira",
+                    project = TaskProject.CASA,
+                    session = Session.TARDE,
+                ),
+                NewTask(
+                    title = "Montar a lista da semana",
+                    project = TaskProject.CASA,
+                    session = Session.TARDE,
+                ),
+                NewTask(
+                    title = "Ir ao mercado",
+                    project = TaskProject.CASA,
+                    priority = 1,
+                    session = Session.TARDE,
+                ),
+            ),
+            "Fechamento do mês" to listOf(
+                NewTask(
+                    title = "Conferir o extrato",
+                    project = TaskProject.TRABALHO,
+                    session = Session.TARDE,
+                ),
+                NewTask(
+                    title = "Pagar as contas do mês",
+                    project = TaskProject.TRABALHO,
+                    priority = 1,
+                    session = Session.TARDE,
+                ),
+                NewTask(
+                    title = "Revisar as assinaturas",
+                    project = TaskProject.TRABALHO,
+                    session = Session.TARDE,
+                ),
+                NewTask(
+                    title = "Guardar os comprovantes",
+                    project = TaskProject.TRABALHO,
+                    session = Session.TARDE,
+                ),
+            ),
+        )
+    }
+
     /**
      * Tarefa recorrente concluída -> cria a próxima ocorrência (mesmos
      * campos, subtarefas zeradas), se ainda não existir uma igual no dia.
+     * O prazo final acompanha deslocado pelo mesmo intervalo do prazo.
      */
     private suspend fun spawnNextOccurrence(task: TaskItem) {
         val due = task.dueDate ?: return
@@ -174,6 +402,9 @@ class TaskRepositoryImpl(
             }
         }
         if (already) return
+        val shiftDays = next.toEpochDays() - due.toLocalDate().toEpochDays()
+        val nextDeadline = task.deadlineDate?.toLocalDate()
+            ?.plus(DatePeriod(days = shiftDays.toInt()))?.toYmd()
         add(
             NewTask(
                 title = task.title,
@@ -186,6 +417,10 @@ class TaskRepositoryImpl(
                 repeatRule = task.repeatRule,
                 habitId = task.habitId,
                 subtaskTitles = task.subtasks.map { it.title },
+                deadlineDate = nextDeadline,
+                durationMinutes = task.durationMinutes,
+                reminderMinutesBefore = task.reminderMinutesBefore,
+                repeatSpec = task.repeatSpec,
             ),
         )
     }

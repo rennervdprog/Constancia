@@ -20,6 +20,14 @@ class PrefsRepositoryImpl : PrefsRepository {
         MutableStateFlow(settings.getBoolean(KEY_IS_PRO, false))
     private val onboardingDoneState =
         MutableStateFlow(settings.getBoolean(KEY_ONBOARDING_DONE, false))
+    private val taskDailyGoalState =
+        MutableStateFlow(settings.getInt(KEY_TASK_DAILY_GOAL, 0))
+    private val taskWeeklyGoalState =
+        MutableStateFlow(settings.getInt(KEY_TASK_WEEKLY_GOAL, 0))
+    private val dailyReviewEnabledState =
+        MutableStateFlow(settings.getBoolean(KEY_DAILY_REVIEW_ENABLED, false))
+    private val dailyReviewTimeState =
+        MutableStateFlow(settings.getString(KEY_DAILY_REVIEW_TIME, "08:00"))
 
     override fun darkThemeFlow(): Flow<Boolean> = darkThemeState
 
@@ -42,9 +50,41 @@ class PrefsRepositoryImpl : PrefsRepository {
         onboardingDoneState.value = true
     }
 
+    override fun taskDailyGoalFlow(): Flow<Int> = taskDailyGoalState
+
+    override suspend fun setTaskDailyGoal(goal: Int) {
+        settings.putInt(KEY_TASK_DAILY_GOAL, goal)
+        taskDailyGoalState.value = goal
+    }
+
+    override fun taskWeeklyGoalFlow(): Flow<Int> = taskWeeklyGoalState
+
+    override suspend fun setTaskWeeklyGoal(goal: Int) {
+        settings.putInt(KEY_TASK_WEEKLY_GOAL, goal)
+        taskWeeklyGoalState.value = goal
+    }
+
+    override fun dailyReviewEnabledFlow(): Flow<Boolean> = dailyReviewEnabledState
+
+    override suspend fun setDailyReviewEnabled(enabled: Boolean) {
+        settings.putBoolean(KEY_DAILY_REVIEW_ENABLED, enabled)
+        dailyReviewEnabledState.value = enabled
+    }
+
+    override fun dailyReviewTimeFlow(): Flow<String> = dailyReviewTimeState
+
+    override suspend fun setDailyReviewTime(time: String) {
+        settings.putString(KEY_DAILY_REVIEW_TIME, time)
+        dailyReviewTimeState.value = time
+    }
+
     private companion object {
         const val KEY_DARK_THEME = "dark_theme"
         const val KEY_IS_PRO = "is_pro"
         const val KEY_ONBOARDING_DONE = "onboarding_done"
+        const val KEY_TASK_DAILY_GOAL = "task_daily_goal"
+        const val KEY_TASK_WEEKLY_GOAL = "task_weekly_goal"
+        const val KEY_DAILY_REVIEW_ENABLED = "daily_review_enabled"
+        const val KEY_DAILY_REVIEW_TIME = "daily_review_time"
     }
 }
