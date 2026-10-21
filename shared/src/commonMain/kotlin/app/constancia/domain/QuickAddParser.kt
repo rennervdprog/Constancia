@@ -21,7 +21,7 @@ import kotlinx.datetime.plus
  * - em sobreposição, ganha o trecho que começa antes (e o mais longo);
  * - trechos ignorados pelo usuário (desfazer) voltam ao título.
  */
-enum class QuickSpanKind { DATE, TIME, PRIORITY, PROJECT, REPEAT }
+enum class QuickSpanKind { DATE, TIME, PRIORITY, PROJECT, REPEAT, REMINDER, DURATION }
 
 data class QuickSpan(
     val start: Int,
@@ -42,6 +42,9 @@ data class QuickAddParse(
     val priority: Int? = null,
     val project: TaskProject? = null,
     val repeat: RepeatRule? = null,
+    // R3.3 (Fase C): "!30m" vira lembrete; "por 30min" vira duração.
+    val reminderMinutes: Int? = null,
+    val durationMinutes: Int? = null,
 )
 
 /** Remove acentos e baixa a caixa, mantendo os índices 1:1. */
@@ -105,6 +108,8 @@ private data class Candidate(
     val priority: Int? = null,
     val project: TaskProject? = null,
     val repeat: RepeatRule? = null,
+    val reminderMinutes: Int? = null,
+    val durationMinutes: Int? = null,
 )
 
 /**
@@ -343,6 +348,33 @@ fun parseQuickAdd(
         )
     }
 
+    // ---------------- Lembrete "!30m" / "!1h" (R3.3) --------------------
+    // Estilo Todoist: "!" + quantidade + unidade (h = horas; min/m ou
+    // sem unidade = minutos antes da base da tarefa).
+    for (m in Regex("""!(\d{1,4})\s?(min|m|h)?\b""").findAll(norm)) {
+        val amount = m.groupValues[1].toIntOrNull() ?: continue
+        val minutes = if (m.groupValues[2] == "h") amount * 60 else amount
+        add(
+            Candidate(
+                m.range.first, m.range.last + 1, QuickSpanKind.REMINDER,
+                label = "Lembrete " + reminderLabel(minutes).lowercase(),
+                reminderMinutes = minutes,
+            ),
+        )
+    }
+
+    // ---------------- Duração "por 30min" (R3.3) ------------------------
+    for (m in Regex("""\bpor\s+(\d{1,3})\s?min\b""").findAll(norm)) {
+        val minutes = m.groupValues[1].toIntOrNull() ?: continue
+        add(
+            Candidate(
+                m.range.first, m.range.last + 1, QuickSpanKind.DURATION,
+                label = "Duração " + durationLabel(minutes),
+                durationMinutes = minutes,
+            ),
+        )
+    }
+
     // ---------------- Resolução de conflitos ---------------------------
     val sorted = candidates.sortedWith(
         compareBy({ it.start }, { -(it.end - it.start) }),
@@ -418,6 +450,12 @@ fun parseQuickAdd(
             it.kind == QuickSpanKind.PROJECT
         }?.project,
         repeat = refinedRepeat,
+        reminderMinutes = accepted.firstOrNull {
+            it.kind == QuickSpanKind.REMINDER
+        }?.reminderMinutes,
+        durationMinutes = accepted.firstOrNull {
+            it.kind == QuickSpanKind.DURATION
+        }?.durationMinutes,
     )
 }
 
@@ -456,6 +494,8 @@ fun quickSpanSummary(span: QuickSpan): String = when (span.kind) {
     QuickSpanKind.PRIORITY -> span.label
     QuickSpanKind.PROJECT -> span.label
     QuickSpanKind.REPEAT -> span.label
+    QuickSpanKind.REMINDER -> span.label
+    QuickSpanKind.DURATION -> span.label
 }
 
 /** yyyy-MM-dd da data resolvida (atalho para a UI/testes). */

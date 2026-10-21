@@ -201,4 +201,40 @@ class QuickAddParserTest {
         assertEquals(0, soCrases.spans.size)
         assertEquals("sexta comprar pão", soCrases.title)
     }
+
+    // Fase C — R3.3: "!30m" (lembrete) e "por 30min" (duração) ----------
+    @Test
+    fun bangReminderIsParsed() {
+        val parse = parseQuickAdd("Ligar para o banco amanhã às 10h !30m", today)
+        assertEquals(30, parse.reminderMinutes)
+        assertEquals("Ligar para o banco", parse.title)
+        assertEquals(
+            "!30m",
+            parse.spans.first { it.kind == QuickSpanKind.REMINDER }.text,
+        )
+        assertEquals(
+            60, parseQuickAdd("Reunião !1h", today).reminderMinutes,
+        )
+        assertEquals(
+            45, parseQuickAdd("Reunião !45min", today).reminderMinutes,
+        )
+        assertEquals(
+            15, parseQuickAdd("Reunião !15", today).reminderMinutes,
+        )
+        assertNull(parseQuickAdd("Tudo certo!", today).reminderMinutes)
+    }
+
+    @Test
+    fun porDurationIsParsed() {
+        val parse = parseQuickAdd("Estudar por 30min", today)
+        assertEquals(30, parse.durationMinutes)
+        assertEquals("Estudar", parse.title)
+        assertEquals(
+            "por 30min",
+            parse.spans.first { it.kind == QuickSpanKind.DURATION }.text,
+        )
+        assertEquals(
+            90, parseQuickAdd("Treinar por 90 min", today).durationMinutes,
+        )
+    }
 }
