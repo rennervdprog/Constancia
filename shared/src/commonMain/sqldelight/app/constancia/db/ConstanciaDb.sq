@@ -142,6 +142,33 @@ CREATE TABLE task_occurrence_history(
 );
 CREATE INDEX occurrence_history_source ON task_occurrence_history(source_task_id);
 
+-- Lembretes de tarefa como LISTA (R6.1, Fase C, schema v7): cada linha
+-- é um lembrete relativo (minutos antes da base = prazo + horário, ou
+-- 09:00 sem horário) ou absoluto (instante fixo). auto = 1 marca o
+-- lembrete materializado pela preferência de lembrete automático (R6.2).
+CREATE TABLE task_reminder(
+  id TEXT NOT NULL PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES task_item(id) ON DELETE CASCADE,
+  type TEXT NOT NULL, -- RELATIVE | ABSOLUTE
+  minute_offset INTEGER, -- RELATIVE: minutos antes da base ou null
+  at_millis INTEGER, -- ABSOLUTE: instante epoch millis ou null
+  auto INTEGER NOT NULL DEFAULT 0, -- 1 = automático (R6.2)
+  created_at TEXT NOT NULL
+);
+CREATE INDEX task_reminder_task ON task_reminder(task_id);
+
+-- Lembretes de hábito (TickTick §9.4 absorvido na Fase C): vários
+-- horários "HH:mm" por hábito, repetidos todo dia. As colunas
+-- reminder_enabled/reminder_time do hábito viram espelho (ligado +
+-- primeiro horário) para as telas que ordenam/exibem pelo horário.
+CREATE TABLE habit_reminder(
+  id TEXT NOT NULL PRIMARY KEY,
+  habit_id TEXT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
+  time TEXT NOT NULL, -- "HH:mm"
+  created_at TEXT NOT NULL
+);
+CREATE INDEX habit_reminder_habit ON habit_reminder(habit_id);
+
 -- Opções de vista persistidas por visão (R8.1, Fase B): agrupar/ordenar
 -- sobrevivem a girar o celular e a trocar de aba.
 -- view_key: 'view:ENTRADA'|'view:HOJE'|'view:PROXIMOS'|'view:FEITAS'|'saved:<id>'
@@ -329,6 +356,41 @@ UPDATE task_item SET reminder_minutes_before = ? WHERE id = ?;
 
 deleteTask:
 DELETE FROM task_item WHERE id = ?;
+
+-- Lembretes de tarefa: a lista da tarefa (R6.1, Fase C)
+selectAllTaskReminders:
+SELECT * FROM task_reminder ORDER BY created_at ASC, id ASC;
+
+selectRemindersForTask:
+SELECT * FROM task_reminder WHERE task_id = ? ORDER BY created_at ASC, id ASC;
+
+insertTaskReminder:
+INSERT INTO task_reminder(id, task_id, type, minute_offset, at_millis, auto, created_at)
+VALUES(?, ?, ?, ?, ?, ?, ?);
+
+deleteTaskReminder:
+DELETE FROM task_reminder WHERE id = ?;
+
+deleteRemindersForTask:
+DELETE FROM task_reminder WHERE task_id = ?;
+
+-- Lembretes de hábito: vários horários por hábito (Fase C)
+selectAllHabitReminders:
+SELECT * FROM habit_reminder ORDER BY habit_id ASC, time ASC;
+
+selectRemindersForHabit:
+SELECT * FROM habit_reminder WHERE habit_id = ? ORDER BY time ASC;
+
+insertHabitReminder:
+INSERT INTO habit_reminder(id, habit_id, time, created_at)
+VALUES(?, ?, ?, ?);
+
+deleteRemindersForHabit:
+DELETE FROM habit_reminder WHERE habit_id = ?;
+
+-- Espelho do lembrete no hábito (ligado + primeiro horário da lista).
+setHabitReminderMirror:
+UPDATE habit SET reminder_enabled = ?, reminder_time = ? WHERE id = ?;
 
 -- Histórico de ocorrências (R1.1, Fase B)
 insertOccurrenceHistory:

@@ -129,8 +129,10 @@ data class TaskItem(
     val deadlineDate: String? = null, // yyyy-MM-dd: prazo final, distinto da data agendada
     val durationMinutes: Int? = null, // duração estimada em minutos
     val completedAt: String? = null, // instante ISO da conclusão (metas/streak de tarefas)
-    val reminderMinutesBefore: Int? = null, // null = sem lembrete; 0 = na hora; N = N min antes
+    val reminderMinutesBefore: Int? = null, // espelho legado: 1º lembrete relativo (a lista vive em reminders)
     val repeatSpec: String = "", // regra de recorrência estruturada codificada (domain/RepeatRule)
+    // Fase C (schema v7): a LISTA de lembretes da tarefa (tabela própria).
+    val reminders: List<TaskReminder> = emptyList(),
 )
 
 /** Dados para criar uma tarefa nova (formulário completo ou captura rápida). */
@@ -150,6 +152,48 @@ data class NewTask(
     val durationMinutes: Int? = null,
     val reminderMinutesBefore: Int? = null,
     val repeatSpec: String = "",
+    // Fase C (schema v7): lembretes pedidos na criação (a lista; o
+    // reminderMinutesBefore acima segue como atalho de 1 lembrete).
+    val reminders: List<ReminderSpec> = emptyList(),
+)
+
+/**
+ * Tipo do lembrete de tarefa (R6.1, Fase C): RELATIVE = minutos antes
+ * da base da tarefa (prazo + horário, ou 09:00 sem horário);
+ * ABSOLUTE = instante fixo, independente do prazo.
+ */
+enum class ReminderType { RELATIVE, ABSOLUTE }
+
+/**
+ * Lembrete de tarefa persistido (tabela task_reminder, schema v7).
+ * [auto] = true marca o lembrete materializado pela preferência de
+ * lembrete automático (R6.2) — some quando o usuário edita a lista.
+ */
+data class TaskReminder(
+    val id: String,
+    val taskId: String,
+    val type: ReminderType,
+    val minuteOffset: Int? = null, // RELATIVE: minutos antes da base
+    val atMillis: Long? = null, // ABSOLUTE: instante epoch millis
+    val auto: Boolean = false,
+)
+
+/** Especificação de lembrete ao criar/editar (sem id — o repositório gera). */
+data class ReminderSpec(
+    val type: ReminderType,
+    val minuteOffset: Int? = null,
+    val atMillis: Long? = null,
+)
+
+/**
+ * Lembrete de hábito (tabela habit_reminder, Fase C — absorvido do
+ * backlog TickTick §9.4): um horário "HH:mm" que se repete todo dia.
+ * Um hábito pode ter VÁRIOS (o campo único virou a primeira linha).
+ */
+data class HabitReminder(
+    val id: String,
+    val habitId: String,
+    val time: String, // "HH:mm"
 )
 
 /** Vista salva de tarefas (item 10): combinação nomeada com cor, sem

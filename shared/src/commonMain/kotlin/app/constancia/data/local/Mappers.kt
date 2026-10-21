@@ -6,11 +6,13 @@ import app.constancia.db.Diary_entry as DiaryEntryRow
 import app.constancia.db.Habit as HabitRow
 import app.constancia.db.Habit_cycle as HabitCycleRow
 import app.constancia.db.Habit_record as HabitRecordRow
+import app.constancia.db.Habit_reminder as HabitReminderRow
 import app.constancia.db.Pause_interval as PauseIntervalRow
 import app.constancia.db.Saved_view as SavedViewRow
 import app.constancia.db.Subtask as SubtaskRow
 import app.constancia.db.Task_goal_pause as GoalPauseRow
 import app.constancia.db.Task_item as TaskItemRow
+import app.constancia.db.Task_reminder as TaskReminderRow
 import app.constancia.db.Task_occurrence_history as TaskOccurrenceRow
 import app.constancia.db.View_options as ViewOptionsRow
 import app.constancia.db.Task_template as TaskTemplateRow
@@ -26,11 +28,14 @@ import app.constancia.model.GoalType
 import app.constancia.model.Habit
 import app.constancia.model.HabitCycle
 import app.constancia.model.HabitRecord
+import app.constancia.model.HabitReminder
 import app.constancia.model.PauseInterval
 import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
+import app.constancia.model.ReminderType
 import app.constancia.model.TaskItem
+import app.constancia.model.TaskReminder
 import app.constancia.model.TaskOccurrence
 import app.constancia.model.TaskProject
 import app.constancia.model.TaskTemplate
@@ -97,7 +102,10 @@ internal fun PauseIntervalRow.toModel(): PauseInterval = PauseInterval(
     endDate = end_date,
 )
 
-internal fun TaskItemRow.toModel(subtasks: List<Subtask> = emptyList()): TaskItem = TaskItem(
+internal fun TaskItemRow.toModel(
+    subtasks: List<Subtask> = emptyList(),
+    reminders: List<TaskReminder> = emptyList(),
+): TaskItem = TaskItem(
     id = id,
     title = title,
     dueTime = due_time,
@@ -116,6 +124,25 @@ internal fun TaskItemRow.toModel(subtasks: List<Subtask> = emptyList()): TaskIte
     completedAt = completed_at,
     reminderMinutesBefore = reminder_minutes_before?.toInt(),
     repeatSpec = repeat_spec,
+    reminders = reminders,
+)
+
+internal fun String.toReminderType(): ReminderType =
+    ReminderType.entries.firstOrNull { it.name == this } ?: ReminderType.RELATIVE
+
+internal fun TaskReminderRow.toModel(): TaskReminder = TaskReminder(
+    id = id,
+    taskId = task_id,
+    type = type.toReminderType(),
+    minuteOffset = minute_offset?.toInt(),
+    atMillis = at_millis,
+    auto = auto.isSet(),
+)
+
+internal fun HabitReminderRow.toModel(): HabitReminder = HabitReminder(
+    id = id,
+    habitId = habit_id,
+    time = time,
 )
 
 internal fun SavedViewRow.toModel(): SavedView = SavedView(
