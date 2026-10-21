@@ -34,6 +34,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,6 +99,11 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
     var deadlineChoice by remember { mutableStateOf(0) } // 0 sem, 1 hoje, 2 amanhã, 3 +7d, 4 +30d
     var duration by remember { mutableStateOf<Int?>(null) }
     var reminder by remember { mutableStateOf<Int?>(null) }
+    // Fase A (desvio vínculo): hábito vinculado — concluir a tarefa
+    // marca o hábito do dia. Até aqui habitId só existia no modelo.
+    val habits by deps.habits.habitsFlow()
+        .collectAsState(initial = emptyList())
+    var habitId by remember { mutableStateOf<String?>(null) }
     var note by remember { mutableStateOf("") }
     var subs by remember { mutableStateOf<List<String>>(emptyList()) }
     var subText by remember { mutableStateOf("") }
@@ -472,6 +478,36 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 }
             }
 
+            SheetSectionLabel("Hábito vinculado")
+            if (habits.isEmpty()) {
+                Text(
+                    text = "Você ainda não tem hábitos — crie um na aba " +
+                        "Hábitos para poder vincular.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    PickChip("Nenhum", habitId == null) { habitId = null }
+                    habits.forEach { habit ->
+                        PickChip(habit.name, habitId == habit.id) {
+                            habitId = habit.id
+                        }
+                    }
+                }
+                if (habitId != null) {
+                    Text(
+                        text = "Concluir a tarefa marca esse hábito no " +
+                            "dia do prazo (hoje ou ontem).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             SheetSectionLabel("Subtarefas")
             subs.forEachIndexed { index, sub ->
                 Row(
@@ -587,6 +623,7 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                                 deadlineDate = deadline,
                                 durationMinutes = duration,
                                 reminderMinutesBefore = reminder,
+                                habitId = habitId,
                                 subtaskTitles = subs,
                             ),
                         )

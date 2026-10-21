@@ -43,6 +43,7 @@ import app.constancia.domain.durationLabel
 import app.constancia.domain.prioName
 import app.constancia.domain.reminderLabel
 import app.constancia.domain.rescheduleDate
+import app.constancia.domain.rescheduleDateFrom
 import app.constancia.domain.rescheduleLabel
 import app.constancia.domain.subtaskProgress
 import app.constancia.model.TaskItem
@@ -50,6 +51,7 @@ import app.constancia.model.toLocalDate
 import app.constancia.theme.constanciaExtra
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
 /** Cor da prioridade (código semântico do protótipo): P1 vermelha, P2 âmbar/chama, P3 azul. */
@@ -83,6 +85,8 @@ fun TodoRow(
     onCyclePriority: () -> Unit,
     onDelete: () -> Unit,
     onReschedule: (String) -> Unit,
+    // R2.3 (Fase A): concluir registrando a conclusão como de ontem.
+    onCompleteYesterday: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -414,6 +418,13 @@ fun TodoRow(
                             onClick = onPostpone,
                         )
                     }
+                    // R2.3: concluir com a data de conclusão de ontem.
+                    if (!task.done) {
+                        TagAction(
+                            text = "Concluir como de ontem",
+                            onClick = onCompleteYesterday,
+                        )
+                    }
                     // Item 1: chips de reagendamento rápido.
                     if (!task.done) {
                         RescheduleTarget.entries.forEach { target ->
@@ -423,6 +434,43 @@ fun TodoRow(
                                     onReschedule(
                                         rescheduleDate(target, today)
                                             .toString(),
+                                    )
+                                },
+                            )
+                        }
+                        // R5.1: chips relativos à DATA DA TAREFA.
+                        val taskDate = task.dueDate?.toLocalDate()
+                        if (taskDate != null) {
+                            TagAction(
+                                text = "+3 dias da data",
+                                onClick = {
+                                    onReschedule(
+                                        rescheduleDateFrom(
+                                            RescheduleTarget.PLUS_3_DAYS,
+                                            taskDate,
+                                        ).toString(),
+                                    )
+                                },
+                            )
+                            TagAction(
+                                text = "+1 semana da data",
+                                onClick = {
+                                    onReschedule(
+                                        rescheduleDateFrom(
+                                            RescheduleTarget.PLUS_1_WEEK,
+                                            taskDate,
+                                        ).toString(),
+                                    )
+                                },
+                            )
+                            TagAction(
+                                text = "+1 mês da data",
+                                onClick = {
+                                    onReschedule(
+                                        rescheduleDateFrom(
+                                            RescheduleTarget.NEXT_MONTH,
+                                            taskDate,
+                                        ).toString(),
                                     )
                                 },
                             )
@@ -490,6 +538,14 @@ fun TodoRowWithActions(
         },
         onReschedule = { ymd ->
             scope.launch { deps.tasks.setDueDate(task.id, ymd) }
+        },
+        onCompleteYesterday = {
+            scope.launch {
+                deps.tasks.setDone(
+                    task.id, true,
+                    today.minus(kotlinx.datetime.DatePeriod(days = 1)),
+                )
+            }
         },
         modifier = modifier,
     )
