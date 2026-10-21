@@ -28,8 +28,13 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,19 +58,23 @@ import app.constancia.domain.TaskSortMode
 import app.constancia.domain.TaskView
 import app.constancia.domain.WEEKDAYS_ISO_PT
 import app.constancia.domain.applySort
-import app.constancia.domain.doneTasks
 import app.constancia.domain.doneTodayTasks
 import app.constancia.domain.encodeRepeatSpec
 import app.constancia.domain.entradaTasks
+import app.constancia.domain.feitasTasks
 import app.constancia.domain.groupByOf
+import app.constancia.domain.groupByValue
 import app.constancia.domain.groupTasks
 import app.constancia.domain.overdueTasks
 import app.constancia.domain.repeatLabel
 import app.constancia.domain.savedViewTasks
+import app.constancia.domain.sortModeOf
 import app.constancia.domain.taskCounts
 import app.constancia.domain.todayTasks
 import app.constancia.domain.upcomingGroupTitle
 import app.constancia.domain.upcomingGroups
+import app.constancia.domain.withOccurrenceHistory
+import app.constancia.model.CompletionReversal
 import app.constancia.model.SavedView
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
@@ -122,7 +131,72 @@ fun TasksScreen(
     val templates by deps.tasks.templatesFlow().collectAsState(initial = emptyList())
     val activeView = savedViews.firstOrNull { it.id == savedViewId }
 
-    val counts = taskCounts(tasks, todayDate)
+    // Fase B (R1.1): histórico de ocorrências concluídas das séries —
+    // completa a visão Feitas e o contador dela.
+    val history by deps.tasks.occurrenceHistoryFlow()
+        .collectAsState(initial = emptyList())
+
+    // Fase B (R8.1): opções de vista persistidas POR VISÃO. A chave é a
+    // visão ativa; o que está gravado volta aos chips ao abrir a tela,
+    // ao girar o celular e ao trocar de aba (antes era só remember).
+    val viewKey = if (activeView != null) {
+        "saved:" + activeView.id
+    } else {
+        "view:" + view.name
+    }
+    val storedOptions by deps.tasks.viewOptionsFlow(viewKey)
+        .collectAsState(initial = null)
+    LaunchedEffect(viewKey, storedOptions) {
+        val stored = storedOptions ?: return@LaunchedEffect
+        if (stored.viewKey != viewKey) return@LaunchedEffect
+        sortMode = sortModeOf(stored.sortMode)
+        // Vista salva agrupa pela própria definição; as demais, pelo chip.
+        if (activeView == null) groupBy = groupByOf(stored.groupBy)
+    }
+
+    fun persistViewOptions(
+        newSortMode: TaskSortMode = sortMode,
+        newGroupBy: TaskGroupBy = groupBy,
+    ) {
+        scope.launch {
+            deps.tasks.setViewOptions(
+                viewKey, groupByValue(newGroupBy), newSortMode.name,
+            )
+        }
+    }
+
+    // Fase B (R2.2): desfazer conclusão — snackbar com ação (~8s) e o
+    // botão "Desfazer conclusão" na visão Feitas enquanto houver pacote.
+    val snackbarHostState = remember { SnackbarHostState() }
+    var lastReversal by remember { mutableStateOf<CompletionReversal?>(null) }
+
+    fun onTaskCompleted(reversal: CompletionReversal?) {
+        if (reversal == null) return
+        lastReversal = reversal
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = "Tarefa concluída",
+                actionLabel = "Desfazer",
+                withDismissAction = true,
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                deps.tasks.undoCompletion(reversal)
+                if (lastReversal == reversal) lastReversal = null
+            }
+        }
+    }
+
+    fun undoLastCompletion() {
+        val reversal = lastReversal ?: return
+        lastReversal = null
+        scope.launch {
+            deps.tasks.undoCompletion(reversal)
+            snackbarHostState.currentSnackbarData?.dismiss()
+        }
+    }
+
+    val counts = taskCounts(withOccurrenceHistory(tasks, history), todayDate)
     val overdue = overdueTasks(tasks, todayDate)
     val dueTodayCount = tasks.count {
         !it.done && it.dueDate == today
@@ -156,6 +230,25 @@ fun TasksScreen(
 
     @Composable
     fun rowFor(task: TaskItem) {
+        if (task.id.startsWith("hist:")) {
+            // R1.1: ocorrência do histórico sem linha viva — registro
+            // consolidado, somente leitura (sem ações nem expansão).
+            TodoRow(
+                task = task,
+                today = todayDate,
+                habitName = null,
+                expanded = false,
+                onToggleExpand = {},
+                onToggleDone = {},
+                onSubtaskToggle = { _, _ -> },
+                onMoveToday = {},
+                onPostpone = {},
+                onCyclePriority = {},
+                onDelete = {},
+                onReschedule = {},
+            )
+            return
+        }
         TodoRowWithActions(
             task = task,
             today = todayDate,
@@ -166,11 +259,13 @@ fun TasksScreen(
             },
             deps = deps,
             scope = scope,
+            onCompleted = ::onTaskCompleted,
         )
     }
 
+    Box(modifier = modifier.fillMaxSize()) {
     LazyColumn(
-        modifier = modifier.fillMaxSize().testTag("tasks_list"),
+        modifier = Modifier.fillMaxSize().testTag("tasks_list"),
         contentPadding = PaddingValues(
             start = 20.dp, top = 10.dp, end = 20.dp, bottom = 118.dp,
         ),
@@ -301,11 +396,13 @@ fun TasksScreen(
                         TaskSortMode.DUE -> "Prazo"
                     },
                     onClick = {
-                        sortMode = when (sortMode) {
+                        val newMode = when (sortMode) {
                             TaskSortMode.SMART -> TaskSortMode.PRIORITY
                             TaskSortMode.PRIORITY -> TaskSortMode.DUE
                             TaskSortMode.DUE -> TaskSortMode.SMART
                         }
+                        sortMode = newMode
+                        persistViewOptions(newSortMode = newMode)
                     },
                 )
                 OptionChip(
@@ -316,12 +413,14 @@ fun TasksScreen(
                         TaskGroupBy.DATE -> "Data"
                     },
                     onClick = {
-                        groupBy = when (groupBy) {
+                        val newGroup = when (groupBy) {
                             TaskGroupBy.NONE -> TaskGroupBy.PROJECT
                             TaskGroupBy.PROJECT -> TaskGroupBy.PRIORITY
                             TaskGroupBy.PRIORITY -> TaskGroupBy.DATE
                             TaskGroupBy.DATE -> TaskGroupBy.NONE
                         }
+                        groupBy = newGroup
+                        persistViewOptions(newGroupBy = newGroup)
                     },
                 )
                 OptionChip(
@@ -571,9 +670,37 @@ fun TasksScreen(
             }
 
             TaskView.FEITAS -> {
-                val list = applySort(doneTasks(tasks), sortMode, todayDate)
+                // R1.1: feitas vivas + ocorrências órfãs do histórico.
+                val list = applySort(
+                    feitasTasks(tasks, history), sortMode, todayDate,
+                )
                 item {
                     GroupLabel(label = "Feitas", count = list.size)
+                }
+                // R2.2: desfazer a última conclusão, direto da Feitas.
+                if (lastReversal != null) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 10.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                )
+                                .testTag("undo_completion")
+                                .clickable { undoLastCompletion() }
+                                .padding(vertical = 11.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "Desfazer conclusão",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme
+                                    .onPrimaryContainer,
+                            )
+                        }
+                    }
                 }
                 if (list.isEmpty()) {
                     item {
@@ -613,6 +740,15 @@ fun TasksScreen(
                 }
             }
         }
+    }
+
+        // R2.2: snackbar do desfazer, flutuando acima da barra inferior.
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(start = 20.dp, end = 20.dp, bottom = 118.dp),
+        )
     }
 
     if (showNewView) {

@@ -506,6 +506,9 @@ fun TodoRowWithActions(
     deps: app.constancia.AppDeps,
     scope: kotlinx.coroutines.CoroutineScope,
     modifier: Modifier = Modifier,
+    // R2.2 (Fase B): chamado ao concluir, com o pacote de reversão —
+    // a tela usa para oferecer o "Desfazer" (snackbar/botão).
+    onCompleted: (app.constancia.model.CompletionReversal?) -> Unit = {},
 ) {
     TodoRow(
         task = task,
@@ -514,7 +517,10 @@ fun TodoRowWithActions(
         expanded = expanded,
         onToggleExpand = onToggleExpand,
         onToggleDone = {
-            scope.launch { deps.tasks.setDone(task.id, !task.done) }
+            scope.launch {
+                val reversal = deps.tasks.setDone(task.id, !task.done)
+                if (!task.done) onCompleted(reversal)
+            }
         },
         onSubtaskToggle = { subId, done ->
             scope.launch { deps.tasks.setSubtaskDone(subId, done) }
@@ -541,10 +547,11 @@ fun TodoRowWithActions(
         },
         onCompleteYesterday = {
             scope.launch {
-                deps.tasks.setDone(
+                val reversal = deps.tasks.setDone(
                     task.id, true,
                     today.minus(kotlinx.datetime.DatePeriod(days = 1)),
                 )
+                onCompleted(reversal)
             }
         },
         modifier = modifier,

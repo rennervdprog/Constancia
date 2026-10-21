@@ -12,8 +12,10 @@ import android.os.Build
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import app.constancia.data.local.PrefsRepositoryImpl
 import app.constancia.db.ConstanciaDb
+import app.constancia.domain.asTaskItem
 import app.constancia.domain.dailyReviewSummary
 import app.constancia.domain.dailyReviewText
+import app.constancia.domain.orphanOccurrences
 import app.constancia.domain.reminderInstantMillis
 import app.constancia.model.todayYmd
 import app.constancia.model.toLocalDate
@@ -258,7 +260,29 @@ class DailyReviewReceiver : BroadcastReceiver() {
                             completedAt = row.completed_at,
                         )
                     }
-                    val summary = dailyReviewSummary(tasks, todayYmd().toLocalDate())
+                    // Fase B (R1.1): conclusões preservadas no histórico
+                    // de ocorrências também entram no resumo do dia.
+                    val history = db.constanciaDbQueries
+                        .selectOccurrenceHistory().executeAsList()
+                        .map { row ->
+                            app.constancia.model.TaskOccurrence(
+                                id = row.id,
+                                sourceTaskId = row.source_task_id,
+                                occurrenceDueDate = row.occurrence_due_date,
+                                title = row.title,
+                                priority = row.priority.toInt(),
+                                deadlineDate = row.deadline_date,
+                                durationMinutes = row.duration_minutes
+                                    ?.toInt(),
+                                completedAt = row.completed_at,
+                            )
+                        }
+                    val summaryTasks = tasks +
+                        orphanOccurrences(tasks, history)
+                            .map { it.asTaskItem() }
+                    val summary = dailyReviewSummary(
+                        summaryTasks, todayYmd().toLocalDate(),
+                    )
                     val (title, body) = dailyReviewText(summary)
                     postNotification(context, DAILY_REVIEW_REQUEST, title, body)
                 } finally {

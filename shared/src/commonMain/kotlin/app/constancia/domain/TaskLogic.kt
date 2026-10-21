@@ -4,6 +4,7 @@ import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
+import app.constancia.model.TaskOccurrence
 import app.constancia.model.TaskProject
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.isoToAppDay
@@ -433,6 +434,71 @@ fun groupByOf(value: String): TaskGroupBy = when (value) {
     "date" -> TaskGroupBy.DATE
     else -> TaskGroupBy.NONE
 }
+
+/** Inverso de [groupByOf]: o valor persistido de cada agrupamento. */
+fun groupByValue(groupBy: TaskGroupBy): String = when (groupBy) {
+    TaskGroupBy.PROJECT -> "project"
+    TaskGroupBy.PRIORITY -> "priority"
+    TaskGroupBy.DATE -> "date"
+    TaskGroupBy.NONE -> "none"
+}
+
+/** Converte o sortMode salvo (nome do enum) de volta ao enum. */
+fun sortModeOf(value: String): TaskSortMode =
+    TaskSortMode.entries.firstOrNull { it.name == value } ?: TaskSortMode.SMART
+
+// ---------------------------------------------------------------------
+// Fase B (R1.1) — histórico de ocorrências: a visão Feitas e os
+// relatórios leem do histórico o que a linha viva não guarda mais.
+// ---------------------------------------------------------------------
+
+/**
+ * Ocorrências do histórico que NÃO estão representadas por uma linha
+ * viva concluída (mesma tarefa, mesmo prazo, ainda feita). São essas que
+ * completam as listas/relatórios: a linha viva apagada (ou desmarcada
+ * depois que o desfazer expirou) não some da memória do app.
+ */
+fun orphanOccurrences(
+    tasks: List<TaskItem>,
+    history: List<TaskOccurrence>,
+): List<TaskOccurrence> = history.filter { occ ->
+    tasks.none { task ->
+        task.id == occ.sourceTaskId && task.done &&
+            task.dueDate == occ.occurrenceDueDate
+    }
+}
+
+/** Snapshot do histórico como tarefa feita (para listas e contagens). */
+fun TaskOccurrence.asTaskItem(): TaskItem = TaskItem(
+    id = "hist:" + id,
+    title = title,
+    dueTime = null,
+    done = true,
+    date = occurrenceDueDate ?: completedAt.take(10),
+    project = project,
+    priority = priority,
+    dueDate = occurrenceDueDate,
+    deadlineDate = deadlineDate,
+    durationMinutes = durationMinutes,
+    completedAt = completedAt,
+)
+
+/**
+ * Tarefas + ocorrências órfãs do histórico como itens feitos — a base
+ * dos relatórios e das metas: conclusões preservadas contam mesmo sem a
+ * linha viva.
+ */
+fun withOccurrenceHistory(
+    tasks: List<TaskItem>,
+    history: List<TaskOccurrence>,
+): List<TaskItem> = tasks + orphanOccurrences(tasks, history).map { it.asTaskItem() }
+
+/** Visão Feitas: as feitas vivas + as órfãs do histórico (R1.1). */
+fun feitasTasks(
+    tasks: List<TaskItem>,
+    history: List<TaskOccurrence>,
+): List<TaskItem> = doneTasks(tasks) +
+    orphanOccurrences(tasks, history).map { it.asTaskItem() }
 
 /** Chave de ordenação por horário: "HH:mm"; sem horário vai para o fim ("99:99"). */
 fun timeSortKey(time: String?): String =

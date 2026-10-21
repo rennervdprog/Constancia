@@ -105,6 +105,7 @@ import app.constancia.domain.periodSummary
 import app.constancia.domain.quarterWindow
 import app.constancia.domain.rateOf
 import app.constancia.domain.sleepLagPattern
+import app.constancia.domain.withOccurrenceHistory
 import app.constancia.domain.yearWindow
 import app.constancia.export.shareTextFile
 import app.constancia.model.Checkin
@@ -164,6 +165,14 @@ fun ReportsScreen(
     val habits by deps.habits.habitsFlow().collectAsState(initial = emptyList())
     val diaryEntries by deps.diary.allEntriesFlow().collectAsState(initial = emptyList())
     val allTasks by deps.tasks.allTasksFlow().collectAsState(initial = emptyList())
+    // Fase B (R1.1): os relatórios de tarefas leem também o histórico
+    // de ocorrências — conclusões preservadas contam mesmo sem a linha
+    // viva (apagada ou desmarcada depois do desfazer).
+    val taskHistory by deps.tasks.occurrenceHistoryFlow()
+        .collectAsState(initial = emptyList())
+    val reportTasks = remember(allTasks, taskHistory) {
+        withOccurrenceHistory(allTasks, taskHistory)
+    }
     val isPro by deps.prefs.isProFlow().collectAsState(initial = false)
     val today = remember { Clock.System.todayIn(timeZone) }
     // Janela dobrada: período atual + anterior (deltas) no mesmo fluxo.
@@ -199,14 +208,14 @@ fun ReportsScreen(
             todayOverride = today.minus(DatePeriod(days = period.days)),
         )
     }
-    val summary = remember(allTasks, diaryEntries, data, prevData) {
-        periodSummary(allTasks, diaryEntries, data, prevData)
+    val summary = remember(reportTasks, diaryEntries, data, prevData) {
+        periodSummary(reportTasks, diaryEntries, data, prevData)
     }
-    val review = remember(allTasks, data, prevData) {
-        periodReview(allTasks, data, prevData)
+    val review = remember(reportTasks, data, prevData) {
+        periodReview(reportTasks, data, prevData)
     }
-    val sleepPattern = remember(diaryEntries, allTasks) {
-        sleepLagPattern(diaryEntries, allTasks, today)
+    val sleepPattern = remember(diaryEntries, reportTasks) {
+        sleepLagPattern(diaryEntries, reportTasks, today)
     }
     // Padrões e destaques não dependem do período selecionado: usam uma
     // janela larga própria (400 dias, como a aba Hábitos).
@@ -214,17 +223,17 @@ fun ReportsScreen(
     val wideCheckins by remember(wideFrom) {
         deps.checkins.checkinsInRangeFlow(wideFrom, toYmd)
     }.collectAsState(initial = emptyList())
-    val morningPattern = remember(diaryEntries, habits, wideCheckins, allTasks) {
-        morningHabitPattern(diaryEntries, habits, wideCheckins, allTasks, today)
+    val morningPattern = remember(diaryEntries, habits, wideCheckins, reportTasks) {
+        morningHabitPattern(diaryEntries, habits, wideCheckins, reportTasks, today)
     }
-    val xray = remember(allTasks) { overdueXray(allTasks, today) }
-    val yearHl = remember(habits, wideCheckins, allTasks, diaryEntries, data) {
+    val xray = remember(reportTasks) { overdueXray(reportTasks, today) }
+    val yearHl = remember(habits, wideCheckins, reportTasks, diaryEntries, data) {
         val (yFrom, yTo) = yearWindow(today)
-        periodHighlights(habits, wideCheckins, allTasks, diaryEntries, yFrom, yTo, data)
+        periodHighlights(habits, wideCheckins, reportTasks, diaryEntries, yFrom, yTo, data)
     }
-    val quarterHl = remember(habits, wideCheckins, allTasks, diaryEntries, data) {
+    val quarterHl = remember(habits, wideCheckins, reportTasks, diaryEntries, data) {
         val (qFrom, qTo) = quarterWindow(today)
-        periodHighlights(habits, wideCheckins, allTasks, diaryEntries, qFrom, qTo, data)
+        periodHighlights(habits, wideCheckins, reportTasks, diaryEntries, qFrom, qTo, data)
     }
     val summaryText = remember(data) { buildSummary(data) }
     val cs = MaterialTheme.colorScheme

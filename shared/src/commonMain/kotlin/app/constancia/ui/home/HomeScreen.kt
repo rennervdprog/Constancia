@@ -98,6 +98,7 @@ import app.constancia.domain.sleepLagPattern
 import app.constancia.domain.subtaskProgress
 import app.constancia.domain.timeSortKey
 import app.constancia.domain.weekFractions
+import app.constancia.domain.withOccurrenceHistory
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
@@ -185,6 +186,10 @@ fun HomeScreen(
     val statuses by statusFlow.collectAsState(initial = emptyList())
     val habits by deps.habits.habitsFlow().collectAsState(initial = emptyList())
     val allTasks by deps.tasks.allTasksFlow().collectAsState(initial = emptyList())
+    // Fase B (R1.1): as contagens de conclusão leem também o histórico
+    // de ocorrências (conclusões preservadas sem a linha viva).
+    val taskHistory by deps.tasks.occurrenceHistoryFlow()
+        .collectAsState(initial = emptyList())
     val rangeFrom = remember { todayDate.minus(DatePeriod(days = 35)).toString() }
     val checkins by deps.checkins.checkinsInRangeFlow(rangeFrom, today)
         .collectAsState(initial = emptyList())
@@ -254,7 +259,9 @@ fun HomeScreen(
             if (isToday && dailyGoal > 0) {
                 item {
                     val goalCounts =
-                        app.constancia.domain.completionCountsByDay(allTasks)
+                        app.constancia.domain.completionCountsByDay(
+                            withOccurrenceHistory(allTasks, taskHistory),
+                        )
                     val forgiven =
                         app.constancia.domain.goalForgivenDates(
                             goalPauses, today,
