@@ -295,8 +295,11 @@ class RepositoryWriteFlowTest {
 
     // Migração 4 -> 5 (Fase B): cria as tabelas do histórico de
     // ocorrências e das opções de vista sem perder as tarefas.
-    // A base é montada como no teste de migração existente (tabelas da
-    // v2 escritas à mão + migrate), parando na v4 antes do salto final.
+    // A base é a mesma do teste de migração existente (tabelas da v2
+    // escritas à mão) e a cadeia sobe de uma vez: a 5.sqm roda por
+    // último, sobre o estado v4 que as migrações 2-4 produziram — é a
+    // transição 4->5 exercida (a chamada migrate em duas etapas não
+    // reaplica arquivos neste setup do SQLDelight).
     @Test
     fun migration4To5AddsHistoryAndViewOptions() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
@@ -321,9 +324,8 @@ class RepositoryWriteFlowTest {
                 "VALUES('t1', 'Tarefa da v4', NULL, 0, '2026-10-20', 'agora', 0)",
             0,
         )
-        // Sobe até a v4 (sem as tabelas da Fase B) e só então o salto 4->5.
-        ConstanciaDb.Schema.migrate(driver, 1, 4)
-        ConstanciaDb.Schema.migrate(driver, 4, 5)
+
+        ConstanciaDb.Schema.migrate(driver, 1, ConstanciaDb.Schema.version)
 
         val db = ConstanciaDb(driver)
         val q = db.constanciaDbQueries
