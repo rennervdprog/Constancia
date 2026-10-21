@@ -14,6 +14,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -623,12 +624,16 @@ private fun HeroPanel(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Em telas estreitas o anel encolhe p/ o breakdown não apertar
+            // os rótulos ("Hábitos" não pode quebrar no meio da palavra).
+            BoxWithConstraints {
+                val ringSize = if (maxWidth < 300.dp) 88.dp else 104.dp
+                Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    modifier = Modifier.size(104.dp),
+                    modifier = Modifier.size(ringSize),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Canvas(modifier = Modifier.size(104.dp)) {
+                    Canvas(modifier = Modifier.size(ringSize)) {
                         drawCircle(
                             color = Color.White.copy(alpha = 0.18f),
                             style = Stroke(width = 9.dp.toPx()),
@@ -663,7 +668,7 @@ private fun HeroPanel(
                         )
                     }
                 }
-                Spacer(Modifier.width(18.dp))
+                Spacer(Modifier.width(if (ringSize < 104.dp) 12.dp else 18.dp))
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(9.dp),
@@ -683,6 +688,7 @@ private fun HeroPanel(
                         label = "Diário",
                         value = if (diaryDone) "feito" else "por fazer",
                     )
+                }
                 }
             }
             Spacer(Modifier.height(16.dp))

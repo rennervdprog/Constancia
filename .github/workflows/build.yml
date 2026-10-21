@@ -124,3 +124,16 @@ jobs:
           name: ui-test-screenshots
           path: uitest-screenshots/
           if-no-files-found: warn
+
+      # Relatórios dos testes instrumentados (XML/HTML com o stack trace
+      # completo de cada falha) — sem isso, o log do console só mostra
+      # a primeira linha da exceção e o diagnóstico fica no escuro.
+      - name: Upload UI test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-reports
+          path: |
+            androidApp/build/outputs/androidTest-results/
+            androidApp/build/reports/androidTests/
+          if-no-files-found: warn
