@@ -445,10 +445,12 @@ private fun ProCard(isPro: Boolean, onClick: () -> Unit) {
                     Spacer(Modifier.weight(1f))
                     Box(
                         modifier = Modifier
+                            .widthIn(min = 88.dp)
                             .clip(RoundedCornerShape(9.dp))
                             .background(Color.White)
                             .clickable(onClick = onClick)
                             .padding(horizontal = 12.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = "Conhecer",
@@ -457,6 +459,8 @@ private fun ProCard(isPro: Boolean, onClick: () -> Unit) {
                                 fontWeight = FontWeight.ExtraBold,
                             ),
                             color = Color(0xFF2A0A54),
+                            maxLines = 1,
+                            softWrap = false,
                         )
                     }
                 }

@@ -260,10 +260,11 @@ fun DiaryScreen(
                             Text(
                                 text = MOOD_LABELS[m - 1],
                                 style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                 ),
                                 color = scheme.onSurfaceVariant,
+                                maxLines = 1,
                             )
                         }
                     }
