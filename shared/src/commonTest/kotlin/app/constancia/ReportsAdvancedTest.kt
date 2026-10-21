@@ -299,6 +299,37 @@ class ReportsAdvancedTest {
         assertNull(r.totalDeltaLabel)
     }
 
+    @Test
+    fun periodReview_completionSeriesSeparatesDueFromCompletion() {
+        // Janela atual: 14/10 a 20/10 (semana de TODAY = ter 20/10).
+        val (cur, prev) = weekReports()
+        val tasks = listOf(
+            // Prazo qui 15, concluída na qui 15: entra nas DUAS séries.
+            task("t1", "2026-10-15", done = true)
+                .copy(completedAt = "2026-10-15T10:00:00Z"),
+            // Prazo qui 15, concluída só na seg 19: prazo=qui,
+            // conclusão=seg, e conta como tardia.
+            task("t2", "2026-10-15", done = true)
+                .copy(completedAt = "2026-10-19T09:00:00Z"),
+            // Prazo sáb 10 (FORA da janela), concluída sex 16 (dentro):
+            // só aparece na série pela conclusão — também tardia.
+            task("t3", "2026-10-10", done = true)
+                .copy(completedAt = "2026-10-16T09:00:00Z"),
+            // Pendente: não entra em série nenhuma.
+            task("t4", "2026-10-19"),
+        )
+        val r = periodReview(tasks, cur, prev)
+        // Série PELO PRAZO (a de sempre): as duas de quinta.
+        assertEquals(2, r.doneByWeekday[3]) // qui
+        // Série PELA CONCLUSÃO: seg 1, qui 1, sex 1.
+        assertEquals(1, r.doneByCompletionWeekday[0]) // seg
+        assertEquals(1, r.doneByCompletionWeekday[3]) // qui
+        assertEquals(1, r.doneByCompletionWeekday[4]) // sex
+        assertEquals(3, r.completionTotal)
+        // Tardias: a de seg (prazo qui) e a de sex (prazo sáb anterior).
+        assertEquals(2, r.lateCompletions)
+    }
+
     // -- Raio-X de atrasos -----------------------------------------------------
 
     @Test

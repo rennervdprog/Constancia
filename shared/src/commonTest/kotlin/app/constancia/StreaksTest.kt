@@ -1,8 +1,11 @@
 package app.constancia
 
+import app.constancia.domain.bestStreak
 import app.constancia.domain.currentStreak
 import app.constancia.domain.doneDatesFor
 import app.constancia.domain.forgivenDates
+import app.constancia.domain.habitStreakInfo
+import app.constancia.domain.isDueOn
 import app.constancia.domain.weekDoneCount
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
@@ -10,6 +13,7 @@ import app.constancia.model.Habit
 import app.constancia.model.PauseInterval
 import app.constancia.model.Session
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import app.constancia.model.toLocalDate
@@ -202,5 +206,104 @@ class StreaksTest {
             setOf("2026-10-10", "2026-10-11", "2026-10-12"),
             forgivenDates(intervals, "2026-10-18"),
         )
+    }
+
+    // ---------- FASE D: descanso planejado (R13.1) ----------
+    // Out/2026: 16=sex, 17=sáb, 18=dom, 19=seg, 20=ter. ISO: sáb=6, dom=7.
+
+    @Test
+    fun ignoreWeekdays_weekendDoesNotBreakDailyStreak() {
+        val h = habit()
+        // Sex, seg e ter feitos; o fim de semana NÃO foi feito.
+        val done = setOf("2026-10-16", "2026-10-19", "2026-10-20")
+        // Sem descanso: o sábado quebra e a sequência é 2 (seg+ter).
+        assertEquals(2, currentStreak(h, done, "2026-10-20", TZ))
+        // Com sáb+dom de descanso: atravessa perdoado — 3 (sex+seg+ter).
+        assertEquals(
+            3,
+            currentStreak(h, done, "2026-10-20", TZ, emptySet(), setOf(6, 7)),
+        )
+    }
+
+    @Test
+    fun ignoreWeekdays_ignoredDayDoesNotCount() {
+        val h = habit()
+        // Só a sexta foi feita; hoje é segunda (20/10 é ter; uso 19/10 seg).
+        val done = setOf("2026-10-16")
+        // Sem descanso: domingo sem feito quebra antes da sexta -> 0.
+        assertEquals(0, currentStreak(h, done, "2026-10-19", TZ))
+        // Com descanso: sáb/dom são atravessados e a sexta conta -> 1.
+        // (Os dias de descanso em si NÃO somam na sequência.)
+        assertEquals(
+            1,
+            currentStreak(h, done, "2026-10-19", TZ, emptySet(), setOf(6, 7)),
+        )
+    }
+
+    @Test
+    fun ignoreWeekdays_bestStreakBridgesWeekends() {
+        val h = habit()
+        // Sex 9, seg 12 a sex 16, seg 19: duas pontes de fim de semana.
+        val done = setOf(
+            "2026-10-09", "2026-10-12", "2026-10-13", "2026-10-14",
+            "2026-10-15", "2026-10-16", "2026-10-19",
+        )
+        assertEquals(5, bestStreak(h, done))
+        assertEquals(7, bestStreak(h, done, emptySet(), setOf(6, 7)))
+    }
+
+    @Test
+    fun ignoreWeekdays_notDueOnRestDay() {
+        val daily = habit().copy(ignoreWeekdays = setOf(6, 7))
+        // Sábado de descanso: não é devido. Segunda: devido.
+        assertEquals(false, isDueOn(daily, LocalDate(2026, 10, 17), null))
+        assertEquals(true, isDueOn(daily, LocalDate(2026, 10, 19), null))
+        // WEEKLY_X não usa descanso (a meta é semanal): sábado é devido.
+        val weekly = habit(frequencyType = FrequencyType.WEEKLY_X)
+            .copy(ignoreWeekdays = setOf(6, 7))
+        assertEquals(true, isDueOn(weekly, LocalDate(2026, 10, 17), null))
+    }
+
+    // ---------- FASE D: sequência como objeto (R13.2) ----------
+
+    @Test
+    fun habitStreakInfo_dailyReportsStartEndAndBest() {
+        val h = habit().copy(ignoreWeekdays = setOf(6, 7))
+        val done = setOf(
+            // Corrida antiga: sex 25/09 a ter 29/09 (5 dias seguidos).
+            "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28",
+            "2026-09-29",
+            // Corrida atual: sex 16, seg 19, ter 20 (finde de descanso).
+            "2026-10-16", "2026-10-19", "2026-10-20",
+        )
+        val info = habitStreakInfo(h, done, emptySet(), "2026-10-20")
+        assertEquals(3, info.count)
+        assertEquals(LocalDate(2026, 10, 16), info.start)
+        assertEquals(LocalDate(2026, 10, 20), info.end)
+        assertEquals(5, info.best)
+    }
+
+    @Test
+    fun habitStreakInfo_weeklyReportsWeekBoundaries() {
+        val h = habit(frequencyType = FrequencyType.WEEKLY_X, weeklyTarget = 3)
+        val done = setOf(
+            "2026-10-07", "2026-10-09", "2026-10-11", // semana 05-11/10
+            "2026-10-14", "2026-10-16", "2026-10-18", // semana 12-18/10
+        )
+        val info = habitStreakInfo(h, done, emptySet(), "2026-10-18")
+        assertEquals(2, info.count)
+        // Extremos = segunda da semana mais antiga e domingo da mais nova.
+        assertEquals(LocalDate(2026, 10, 5), info.start)
+        assertEquals(LocalDate(2026, 10, 18), info.end)
+        assertEquals(2, info.best)
+    }
+
+    @Test
+    fun habitStreakInfo_zeroWhenNothingDone() {
+        val info = habitStreakInfo(habit(), emptySet(), emptySet(), "2026-10-20")
+        assertEquals(0, info.count)
+        assertEquals(null, info.start)
+        assertEquals(null, info.end)
+        assertEquals(0, info.best)
     }
 }

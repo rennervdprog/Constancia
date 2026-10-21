@@ -1,7 +1,10 @@
 package app.constancia
 
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import app.constancia.AppDeps
+import app.constancia.data.LocalSyncRepository
 import app.constancia.data.PrefsRepository
+import app.constancia.data.local.ChallengeRepositoryImpl
 import app.constancia.data.local.CheckinRepositoryImpl
 import app.constancia.data.local.DiaryRepositoryImpl
 import app.constancia.data.local.HabitRepositoryImpl
@@ -947,7 +950,7 @@ class RepositoryWriteFlowTest {
             0,
         )
 
-        assertEquals(8L, ConstanciaDb.Schema.version)
+        assertEquals(9L, ConstanciaDb.Schema.version)
         ConstanciaDb.Schema.migrate(driver, 7, ConstanciaDb.Schema.version)
 
         val q = ConstanciaDb(driver).constanciaDbQueries
@@ -963,6 +966,135 @@ class RepositoryWriteFlowTest {
         assertEquals(1, h1.size)
         assertEquals("07:30", h1.single().time)
         assertEquals(0, q.selectRemindersForHabit("h2").executeAsList().size)
+    }
+
+    // ---- Fase D: descanso por hábito (R13.1) + modo férias (R13.4) ----
+
+    @Test
+    fun migration8To9AddsIgnoreWeekdays() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        // Base no formato v8 (hábito completo, sem ignore_weekdays).
+        driver.execute(
+            null,
+            "CREATE TABLE habit(" +
+                "id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, icon TEXT NOT NULL, " +
+                "color INTEGER NOT NULL, goal_type TEXT NOT NULL, " +
+                "target_quantity REAL NOT NULL DEFAULT 1.0, " +
+                "quantity_unit TEXT NOT NULL DEFAULT '', " +
+                "quantity_step REAL NOT NULL DEFAULT 1.0, " +
+                "show_in_today INTEGER NOT NULL DEFAULT 0, " +
+                "show_in_calendar INTEGER NOT NULL DEFAULT 0, " +
+                "frequency_type TEXT NOT NULL, " +
+                "days_of_week TEXT NOT NULL DEFAULT '', " +
+                "weekly_target INTEGER NOT NULL DEFAULT 7, session TEXT NOT NULL, " +
+                "reminder_enabled INTEGER NOT NULL DEFAULT 0, " +
+                "reminder_time TEXT NOT NULL DEFAULT '', " +
+                "paused INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0, " +
+                "created_at TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO habit(id, name, icon, color, goal_type, frequency_type, " +
+                "session, created_at) " +
+                "VALUES('h1', 'Meditar', 'lotus', 1, 'BINARY', 'DAILY', 'MANHA', 'agora')",
+            0,
+        )
+
+        assertEquals(9L, ConstanciaDb.Schema.version)
+        ConstanciaDb.Schema.migrate(driver, 8, ConstanciaDb.Schema.version)
+
+        val q = ConstanciaDb(driver).constanciaDbQueries
+        val h = q.selectHabitById("h1").executeAsOne()
+        assertEquals("Meditar", h.name) // dado antigo preservado
+        assertEquals("", h.ignore_weekdays) // descanso nasce vazio
+    }
+
+    @Test
+    fun habitIgnoreWeekdaysRoundTrips() = runBlocking {
+        val db = testDb()
+        val habits = HabitRepositoryImpl(db, CheckinRepositoryImpl(db))
+        habits.save(habit(id = "h1").copy(ignoreWeekdays = setOf(6, 7)))
+        assertEquals(setOf(6, 7), habits.getById("h1")!!.ignoreWeekdays)
+        // Atualizar sem descanso limpa a coluna (csv vazio).
+        habits.save(habit(id = "h1"))
+        assertEquals(emptySet(), habits.getById("h1")!!.ignoreWeekdays)
+    }
+
+    @Test
+    fun vacationMode_pausesEverythingAndRestoresOnlyWhatItTouched() =
+        runBlocking {
+            val db = testDb()
+            val checkins = CheckinRepositoryImpl(db)
+            val habits = HabitRepositoryImpl(db, checkins)
+            val prefs = FakePrefs()
+            val tasks = TaskRepositoryImpl(db, checkins, null, prefs)
+            val deps = AppDeps(
+                habits = habits,
+                checkins = checkins,
+                tasks = tasks,
+                diary = DiaryRepositoryImpl(db),
+                challenges = ChallengeRepositoryImpl(db),
+                sync = LocalSyncRepository(),
+                prefs = prefs,
+            )
+            val today = todayYmd(TimeZone.UTC)
+            habits.save(habit(id = "h1"))
+            habits.save(habit(id = "h2"))
+            habits.setPaused("h2", true) // pausa MANUAL anterior
+
+            deps.setVacationMode(true, today)
+
+            // Congelou os dois sistemas: hábitos pausados (com intervalo
+            // aberto = dias perdoados) e pausa da meta aberta.
+            assertTrue(habits.getById("h1")!!.paused)
+            assertTrue(habits.getById("h2")!!.paused)
+            assertTrue(habits.pauseIntervals("h1").any { it.endDate == null })
+            assertTrue(tasks.goalPausesFlow().first().any { it.endDate == null })
+            assertEquals(setOf("h1"), prefs.vacationHabitIdsFlow().first())
+            assertTrue(prefs.vacationGoalPauseOpenedFlow().first())
+            assertTrue(prefs.vacationModeFlow().first())
+
+            deps.setVacationMode(false, today)
+
+            // Descongelar restaura SÓ o que as férias tocaram.
+            assertFalse(habits.getById("h1")!!.paused) // retomado
+            assertTrue(habits.getById("h2")!!.paused) // manual: intocado
+            assertTrue(
+                tasks.goalPausesFlow().first().none { it.endDate == null },
+            )
+            assertFalse(prefs.vacationModeFlow().first())
+        }
+
+    @Test
+    fun vacationMode_keepsPreexistingGoalPause() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        val prefs = FakePrefs()
+        val tasks = TaskRepositoryImpl(db, checkins, null, prefs)
+        val deps = AppDeps(
+            habits = habits,
+            checkins = checkins,
+            tasks = tasks,
+            diary = DiaryRepositoryImpl(db),
+            challenges = ChallengeRepositoryImpl(db),
+            sync = LocalSyncRepository(),
+            prefs = prefs,
+        )
+        val today = todayYmd(TimeZone.UTC)
+        habits.save(habit(id = "h1"))
+        tasks.setGoalPaused(true, today) // pausa MANUAL da meta
+
+        deps.setVacationMode(true, today)
+        // As férias NÃO reivindicam a pausa que já existia.
+        assertFalse(prefs.vacationGoalPauseOpenedFlow().first())
+        assertTrue(habits.getById("h1")!!.paused)
+
+        deps.setVacationMode(false, today)
+        assertFalse(habits.getById("h1")!!.paused) // hábito retomado
+        // A pausa manual da meta continua aberta.
+        assertTrue(tasks.goalPausesFlow().first().any { it.endDate == null })
     }
 
     @Test
