@@ -71,6 +71,7 @@ import app.constancia.domain.computeDiaryPattern
 import app.constancia.domain.dateLinePt
 import app.constancia.domain.diaryMatchesQuery
 import app.constancia.domain.diaryStreak
+import app.constancia.domain.doneDatesFor
 import app.constancia.domain.promptIndexFor
 import app.constancia.model.DiaryEntry
 import app.constancia.model.isoDayNumberCompat
@@ -165,6 +166,24 @@ fun DiaryScreen(
         val d = it.date.toLocalDate()
         d.year == viewYear && d.monthNumber == viewMonth
     }.associateBy { it.date.toLocalDate().dayOfMonth }
+
+    // TickTick item 4 (opt-in por hábito): dias feitos de hábitos com
+    // "marcar no calendário" viram pontinhos na cor do hábito, sob o
+    // número do dia — desligado por padrão, não polui quem não ligou.
+    val calendarDots = remember(habits, checkins) {
+        val byHabit = checkins.groupBy { it.habitId }
+        val map = mutableMapOf<String, List<Long>>()
+        habits.filter { it.showInCalendar }.forEach { h ->
+            val done = doneDatesFor(
+                h,
+                byHabit[h.id].orEmpty().map { it.date to it.quantity },
+            )
+            done.forEach { ymd ->
+                map[ymd] = (map[ymd] ?: emptyList()) + h.color
+            }
+        }
+        map
+    }
 
     val history = entries
         .filter { diaryMatchesQuery(it, query, todayDate) }
@@ -662,21 +681,48 @@ fun DiaryScreen(
                                                     },
                                                 contentAlignment = Alignment.Center,
                                             ) {
-                                                Text(
-                                                    text = dayNum.toString(),
-                                                    style = MaterialTheme.typography
-                                                        .bodySmall.copy(
-                                                            fontSize = 12.5.sp,
-                                                            fontWeight = FontWeight.Bold,
-                                                        ),
-                                                    color = when {
-                                                        isFuture -> scheme.onSurfaceVariant
-                                                            .copy(alpha = 0.45f)
-                                                        moodOfDay == 3 -> scheme.onSurface
-                                                        moodOfDay != null -> Color.White
-                                                        else -> scheme.onSurface
-                                                    },
-                                                )
+                                                val dotColors = calendarDots[
+                                                    dayDate.toString()
+                                                ].orEmpty()
+                                                Column(
+                                                    horizontalAlignment =
+                                                        Alignment.CenterHorizontally,
+                                                ) {
+                                                    Text(
+                                                        text = dayNum.toString(),
+                                                        style = MaterialTheme.typography
+                                                            .bodySmall.copy(
+                                                                fontSize = 12.5.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                            ),
+                                                        color = when {
+                                                            isFuture -> scheme
+                                                                .onSurfaceVariant
+                                                                .copy(alpha = 0.45f)
+                                                            moodOfDay == 3 -> scheme.onSurface
+                                                            moodOfDay != null -> Color.White
+                                                            else -> scheme.onSurface
+                                                        },
+                                                    )
+                                                    if (dotColors.isNotEmpty()) {
+                                                        Spacer(Modifier.height(2.dp))
+                                                        Row(
+                                                            horizontalArrangement =
+                                                                Arrangement.spacedBy(3.dp),
+                                                        ) {
+                                                            dotColors.take(3).forEach { c ->
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .size(5.dp)
+                                                                        .clip(CircleShape)
+                                                                        .background(
+                                                                            Color(c),
+                                                                        ),
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }

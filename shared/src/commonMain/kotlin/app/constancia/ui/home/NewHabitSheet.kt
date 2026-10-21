@@ -27,6 +27,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -67,7 +68,10 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var goalType by remember { mutableStateOf(GoalType.BINARY) }
     var targetText by remember { mutableStateOf("8") }
+    var stepText by remember { mutableStateOf("1") }
     var unit by remember { mutableStateOf("copos") }
+    var showInToday by remember { mutableStateOf(false) }
+    var showInCalendar by remember { mutableStateOf(false) }
     var iconKey by remember { mutableStateOf(HABIT_ICON_KEYS[0]) }
     var colorValue by remember { mutableStateOf(HabitPalette[0].value.toLong()) }
     var freqType by remember { mutableStateOf(FrequencyType.DAILY) }
@@ -149,6 +153,32 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(16.dp),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = stepText,
+                        onValueChange = { raw ->
+                            stepText = raw.filter { c -> c.isDigit() || c == '.' || c == ',' }
+                                .take(5)
+                        },
+                        label = { Text("Passo") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                        ),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                    Text(
+                        text = "Cada toque no + soma um passo (ex.: 1 copo, 250 ml, 0,5 km).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
@@ -342,6 +372,43 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 tagPrefix = "session_opt",
             )
 
+            // Integração opt-in (TickTick item 4): desligado por padrão.
+            SheetSectionLabel("Integração")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Sempre mostrar no Hoje",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = "Aparece no seu dia mesmo fora dos dias programados.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = showInToday, onCheckedChange = { showInToday = it })
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Marcar no calendário do diário",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = "Os dias feitos viram marquinhas coloridas no calendário.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = showInCalendar, onCheckedChange = { showInCalendar = it })
+            }
+
             Spacer(Modifier.height(4.dp))
             // CTA: largura total, raio 18dp, padding vertical 16dp, fundo primary,
             // texto onPrimary Sora 16/700 (titleLarge).
@@ -364,6 +431,11 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                                     goalType = goalType,
                                     targetQuantity = targetText.toDoubleOrNull() ?: 1.0,
                                     quantityUnit = unit.trim().ifEmpty { "vezes" },
+                                    quantityStep = stepText.replace(',', '.')
+                                        .toDoubleOrNull()
+                                        ?.takeIf { it > 0.0 } ?: 1.0,
+                                    showInToday = showInToday,
+                                    showInCalendar = showInCalendar,
                                     frequencyType = freqType,
                                     daysOfWeek = if (freqType == FrequencyType.DAYS_OF_WEEK) {
                                         days.sorted()

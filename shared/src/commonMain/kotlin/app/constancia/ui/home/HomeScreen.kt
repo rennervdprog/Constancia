@@ -99,6 +99,7 @@ import app.constancia.domain.subtaskProgress
 import app.constancia.domain.timeSortKey
 import app.constancia.domain.weekFractions
 import app.constancia.domain.withOccurrenceHistory
+import app.constancia.model.CheckinStatus
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
@@ -208,8 +209,12 @@ fun HomeScreen(
 
     val active = statuses.filter { !it.habit.paused }
     val paused = statuses.filter { it.habit.paused }
-    val dueToday = active.filter { isDueOn(it.habit, selectedDate, createdFrom(it.habit)) }
-    val doneCount = dueToday.count { it.isDoneToday }
+    // TickTick item 4: hábito com opt-in "sempre no Hoje" aparece no
+    // fluxo do dia mesmo fora dos dias devidos (marcável direto daqui).
+    val visibleHabits = active.filter {
+        it.habit.showInToday || isDueOn(it.habit, selectedDate, createdFrom(it.habit))
+    }
+    val doneCount = visibleHabits.count { it.isDoneToday }
     val bestStreak = statuses.maxOfOrNull { it.currentStreak } ?: 0
 
     val dayTasks = dayFlowTasks(allTasks, selectedDate)
@@ -246,7 +251,7 @@ fun HomeScreen(
             item {
                 HeroPanel(
                     habitsDone = doneCount,
-                    habitsTotal = dueToday.size,
+                    habitsTotal = visibleHabits.size,
                     tasksDone = tasksDone,
                     tasksTotal = dayTasks.size,
                     diaryDone = selEntry != null,
@@ -291,7 +296,7 @@ fun HomeScreen(
             }
 
             Session.entries.forEach { session ->
-                val sessionHabits = dueToday.filter { it.habit.session == session }
+                val sessionHabits = visibleHabits.filter { it.habit.session == session }
                 val sessionTasks = dayTasks.filter { it.session == session }
                 val showDiaryRow = session == Session.NOITE
                 if (sessionHabits.isNotEmpty() || sessionTasks.isNotEmpty() || showDiaryRow) {
@@ -1203,16 +1208,82 @@ private fun HabitSessionRow(
                     target = habit.targetQuantity,
                     unit = habit.quantityUnit,
                     onDecrease = {
-                        val next = (currentQty - 1.0).coerceAtLeast(0.0)
+                        val next = (currentQty - habit.quantityStep).coerceAtLeast(0.0)
                         scope.launch { deps.checkins.setQuantity(habit.id, dateYmd, next) }
                     },
                     onIncrease = {
                         scope.launch {
-                            deps.checkins.setQuantity(habit.id, dateYmd, currentQty + 1.0)
+                            deps.checkins.setQuantity(
+                                habit.id, dateYmd, currentQty + habit.quantityStep,
+                            )
                         }
                     },
                 )
             }
+        }
+        // TickTick item 4: pular o dia é um registro — não quebra a
+        // sequência. Some quando o dia já está feito.
+        val skippedDay = status.todayCheckin?.status == CheckinStatus.SKIPPED
+        if (skippedDay || !status.isDoneToday) {
+            HabitSkipRow(
+                skipped = skippedDay,
+                onSkip = { scope.launch { deps.checkins.skip(habit.id, dateYmd) } },
+                onUnskip = { scope.launch { deps.checkins.unskip(habit.id, dateYmd) } },
+            )
+        }
+    }
+}
+
+/**
+ * Linha do "pular" na Hoje: chip "Pulado hoje" + Desfazer quando o dia
+ * foi pulado; ação discreta "Pular hoje" quando ainda não foi feito.
+ */
+@Composable
+private fun HabitSkipRow(
+    skipped: Boolean,
+    onSkip: () -> Unit,
+    onUnskip: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.padding(start = 54.dp, top = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (skipped) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(scheme.surfaceVariant)
+                    .padding(horizontal = 10.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    text = "Pulado hoje — sequência protegida",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Desfazer",
+                style = MaterialTheme.typography.labelLarge,
+                color = scheme.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onUnskip)
+                    .padding(4.dp),
+            )
+        } else {
+            Text(
+                text = "Pular hoje",
+                style = MaterialTheme.typography.labelMedium,
+                color = scheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onSkip)
+                    .padding(4.dp),
+            )
         }
     }
 }
@@ -1734,7 +1805,7 @@ private fun FocusTimerDialog(
                 deps.checkins.setQuantity(
                     habit.id,
                     today,
-                    (status.todayCheckin?.quantity ?: 0.0) + 1.0,
+                    (status.todayCheckin?.quantity ?: 0.0) + habit.quantityStep,
                 )
             }
         }

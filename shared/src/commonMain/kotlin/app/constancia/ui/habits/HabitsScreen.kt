@@ -27,14 +27,19 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,19 +51,30 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
+import app.constancia.domain.CycleState
 import app.constancia.domain.DOW_SHORT
 import app.constancia.domain.HeatCell
 import app.constancia.domain.completionRateLast30
+import app.constancia.domain.cycleDoneDays
+import app.constancia.domain.cycleState
+import app.constancia.domain.cycleStreak
+import app.constancia.domain.doneDatesFor
 import app.constancia.domain.heatGrid
 import app.constancia.domain.isDueOn
+import app.constancia.domain.skippedDatesFor
+import app.constancia.model.Checkin
+import app.constancia.model.CheckinStatus
 import app.constancia.model.FrequencyType
 import app.constancia.model.Habit
+import app.constancia.model.HabitCycle
+import app.constancia.model.HabitRecord
 import app.constancia.model.HabitStatus
 import app.constancia.model.Session
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
 import app.constancia.model.todayYmd
 import app.constancia.theme.constanciaExtra
+import app.constancia.ui.common.SegmentedRow
 import app.constancia.ui.common.TileCard
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
@@ -120,6 +136,10 @@ fun HabitsScreen(
     val habits by deps.habits.habitsFlow().collectAsState(initial = emptyList())
     val statuses by deps.habits.todayStatusFlow().collectAsState(initial = emptyList())
     val checkins by deps.checkins.checkinsInRangeFlow(rangeFrom, today)
+        .collectAsState(initial = emptyList())
+    // TickTick itens 2 e 3: ciclos e log de todos os hábitos.
+    val allCycles by deps.habits.allCyclesFlow().collectAsState(initial = emptyList())
+    val allRecords by deps.checkins.allRecordsFlow()
         .collectAsState(initial = emptyList())
 
     val statusByHabit = statuses.associateBy { it.habit.id }
@@ -238,8 +258,26 @@ fun HabitsScreen(
                         runCatching { habit.createdAt.take(10).toLocalDate() }
                             .getOrNull(),
                     ),
+                    habitCheckins = habitCheckins,
+                    cycles = allCycles.filter { it.habitId == habit.id },
+                    records = allRecords.filter { it.habitId == habit.id },
+                    todayYmdStr = today,
                     onCheck = {
                         scope.launch { deps.checkins.toggle(habit.id, today) }
+                    },
+                    onSkip = {
+                        scope.launch { deps.checkins.skip(habit.id, today) }
+                    },
+                    onUnskip = {
+                        scope.launch { deps.checkins.unskip(habit.id, today) }
+                    },
+                    onStartCycle = { days ->
+                        scope.launch { deps.habits.startCycle(habit.id, days, today) }
+                    },
+                    onSaveRecord = { content, emoji ->
+                        scope.launch {
+                            deps.checkins.saveRecord(habit.id, today, content, emoji)
+                        }
                     },
                 )
             }
@@ -332,7 +370,15 @@ private fun HabitCard(
     grid: List<List<HeatCell>>,
     todayRow: Int,
     dueToday: Boolean,
+    habitCheckins: List<Checkin>,
+    cycles: List<HabitCycle>,
+    records: List<HabitRecord>,
+    todayYmdStr: String,
     onCheck: () -> Unit,
+    onSkip: () -> Unit,
+    onUnskip: () -> Unit,
+    onStartCycle: (Int) -> Unit,
+    onSaveRecord: (String, String?) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
@@ -500,7 +546,11 @@ private fun HabitCard(
                     week.forEachIndexed { rowIdx, cell ->
                         val color = when (cell) {
                             // Cor do próprio hábito (semântica), não a da marca.
+                            // Parcial = progresso sem bater a meta (mais
+                            // claro); pulado = registro neutro bem claro.
                             HeatCell.DONE -> habitColor
+                            HeatCell.PARTIAL -> habitColor.copy(alpha = 0.45f)
+                            HeatCell.SKIPPED -> habitColor.copy(alpha = 0.18f)
                             HeatCell.MISSED -> extra.heatEmpty
                             HeatCell.OFF -> extra.heatEmpty
                             HeatCell.FUTURE -> Color.Transparent
@@ -547,5 +597,442 @@ private fun HabitCard(
                 color = scheme.onSurfaceVariant,
             )
         }
+
+        if (!habit.paused) {
+            // TickTick item 4: pular hoje (registro que protege a sequência).
+            val skippedToday = status?.todayCheckin?.status == CheckinStatus.SKIPPED
+            if (dueToday || doneToday || skippedToday) {
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (skippedToday) {
+                        Text(
+                            text = "Pulado hoje — sequência protegida",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = scheme.primary,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "Desfazer",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = scheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = onUnskip)
+                                .padding(4.dp),
+                        )
+                    } else if (!doneToday) {
+                        Text(
+                            text = "Não vai dar hoje?",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "Pular hoje",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = scheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = onSkip)
+                                .padding(4.dp),
+                        )
+                    }
+                }
+            }
+
+            // TickTick item 2: ciclo/temporada do hábito.
+            HabitCycleSection(
+                habit = habit,
+                cycles = cycles,
+                habitCheckins = habitCheckins,
+                todayYmdStr = todayYmdStr,
+                onStartCycle = onStartCycle,
+            )
+
+            // TickTick item 3: log do hábito (nota + emoji do dia).
+            HabitLogSection(
+                records = records,
+                todayYmdStr = todayYmdStr,
+                onSaveRecord = onSaveRecord,
+            )
+        }
+    }
+}
+
+private val CYCLE_DAY_OPTIONS = listOf(7, 21, 30, 66, 90)
+
+/**
+ * Seção de ciclo do cartão do hábito: progresso do ciclo ativo com a
+ * sequência dentro dele; celebração + "próximo ciclo" quando conclui;
+ * convite discreto quando não há ciclo. Ciclos concluídos ficam
+ * contados aqui — são o histórico permanente do hábito.
+ */
+@Composable
+private fun HabitCycleSection(
+    habit: Habit,
+    cycles: List<HabitCycle>,
+    habitCheckins: List<Checkin>,
+    todayYmdStr: String,
+    onStartCycle: (Int) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val habitColor = Color(habit.color)
+    val doneDates = doneDatesFor(habit, habitCheckins.map { it.date to it.quantity })
+    val skipped = skippedDatesFor(habitCheckins)
+    val sorted = cycles.sortedBy { it.startDate }
+    val completedCount = sorted.count { it.completedAt != null }
+    val active = sorted.lastOrNull {
+        cycleState(it, doneDates, todayYmdStr) == CycleState.ACTIVE
+    }
+    val latest = sorted.lastOrNull()
+    var showDialog by remember(habit.id) { mutableStateOf(false) }
+
+    Spacer(Modifier.height(14.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Ciclo",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        if (completedCount > 0) {
+            Text(
+                text = "🏆 " + completedCount.toString() +
+                    if (completedCount == 1) " ciclo concluído" else " ciclos concluídos",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = scheme.secondary,
+            )
+        }
+    }
+    Spacer(Modifier.height(7.dp))
+    when {
+        active != null -> {
+            val doneInCycle = cycleDoneDays(active, doneDates)
+            val streakInCycle = cycleStreak(active, doneDates, skipped, todayYmdStr)
+            val end = active.endDate.toLocalDate()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = doneInCycle.toString() + " de " +
+                        active.targetDays.toString() + " dias",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = scheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "termina " + end.dayOfMonth.toString() + "/" +
+                        end.monthNumber.toString(),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(7.dp))
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(scheme.outline),
+            ) {
+                val frac = if (active.targetDays > 0) {
+                    doneInCycle.toFloat() / active.targetDays
+                } else {
+                    0f
+                }
+                Box(
+                    modifier = Modifier.fillMaxWidth(frac.coerceIn(0f, 1f))
+                        .height(8.dp)
+                        .background(habitColor, RoundedCornerShape(99.dp)),
+                )
+            }
+            if (streakInCycle > 0) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "sequência no ciclo · " + streakInCycle.toString() +
+                        if (streakInCycle == 1) " dia" else " dias",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+        }
+        latest != null && latest.completedAt != null -> {
+            // Celebração: o ciclo fechou e fica no histórico.
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(scheme.primaryContainer)
+                    .padding(13.dp),
+            ) {
+                Text(
+                    text = "🎉 Ciclo concluído!",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = scheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.height(3.dp))
+                Text(
+                    text = "Você completou o ciclo de " +
+                        latest.targetDays.toString() +
+                        " dias. Ele fica guardado no seu histórico.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.height(9.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(scheme.primary)
+                        .clickable { onStartCycle(latest.targetDays) }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                ) {
+                    Text(
+                        text = "Começar próximo ciclo",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = scheme.onPrimary,
+                    )
+                }
+            }
+        }
+        latest != null -> {
+            // Último ciclo expirou sem bater a meta.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "O ciclo terminou sem bater a meta.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "Tentar de novo",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onStartCycle(latest.targetDays) }
+                        .padding(4.dp),
+                )
+            }
+        }
+        else -> {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Trabalhe em temporadas curtas, com linha de chegada.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "Iniciar ciclo",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.primary,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showDialog = true }
+                        .padding(4.dp),
+                )
+            }
+        }
+    }
+
+    if (showDialog) {
+        var selectedIdx by remember(habit.id) {
+            mutableStateOf(CYCLE_DAY_OPTIONS.indexOf(30).coerceAtLeast(0))
+        }
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            containerColor = scheme.surface,
+            title = {
+                Text("Novo ciclo", style = MaterialTheme.typography.titleMedium)
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Quantos dias de meta neste ciclo? A temporada " +
+                            "começa hoje e dura o mesmo número de dias.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    SegmentedRow(
+                        options = CYCLE_DAY_OPTIONS.map { it.toString() },
+                        selectedIndex = selectedIdx,
+                        onSelect = { selectedIdx = it },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDialog = false
+                        onStartCycle(CYCLE_DAY_OPTIONS[selectedIdx])
+                    },
+                ) { Text("Começar ciclo") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text("Cancelar") }
+            },
+        )
+    }
+}
+
+private val RECORD_EMOJIS =
+    listOf("💧", "🏃", "📖", "🧘", "💪", "😴", "🍎", "✍️", "🎯", "🌿")
+
+/**
+ * Seção do log do hábito: nota + emoji de hoje e os registros recentes.
+ * O dado fica em tabela própria (habit_record) — a aba Padrões poderá
+ * cruzar humor por hábito a partir dele.
+ */
+@Composable
+private fun HabitLogSection(
+    records: List<HabitRecord>,
+    todayYmdStr: String,
+    onSaveRecord: (String, String?) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val todayRecord = records.firstOrNull { it.date == todayYmdStr }
+    val recent = records.filter { it.date != todayYmdStr }.take(3)
+    var showDialog by remember { mutableStateOf(false) }
+
+    Spacer(Modifier.height(14.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Diário do hábito",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = if (todayRecord != null) "Editar nota" else "Anotar hoje",
+            style = MaterialTheme.typography.labelLarge,
+            color = scheme.primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { showDialog = true }
+                .padding(4.dp),
+        )
+    }
+    if (todayRecord != null &&
+        (todayRecord.content.isNotBlank() || todayRecord.emoji != null)
+    ) {
+        Spacer(Modifier.height(6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (todayRecord.emoji != null) {
+                Text(text = todayRecord.emoji, fontSize = 17.sp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(
+                text = todayRecord.content,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurface,
+            )
+        }
+    } else if (recent.isEmpty()) {
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "Uma frase sobre o hábito hoje vira memória depois.",
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+        )
+    }
+    recent.forEach { record ->
+        Spacer(Modifier.height(6.dp))
+        val d = record.date.toLocalDate()
+        Text(
+            text = d.dayOfMonth.toString() + "/" + d.monthNumber.toString() +
+                (record.emoji?.let { " · $it" } ?: "") +
+                if (record.content.isNotBlank()) {
+                    " · " + record.content.take(60)
+                } else {
+                    ""
+                },
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+    }
+
+    if (showDialog) {
+        var text by remember { mutableStateOf(todayRecord?.content ?: "") }
+        var emoji by remember { mutableStateOf(todayRecord?.emoji) }
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            containerColor = scheme.surface,
+            title = {
+                Text("Diário do hábito", style = MaterialTheme.typography.titleMedium)
+            },
+            text = {
+                Column {
+                    // Duas fileiras de 5: cabe em 320dp sem estourar.
+                    RECORD_EMOJIS.chunked(5).forEach { emojiRow ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            emojiRow.forEach { e ->
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(
+                                            if (emoji == e) {
+                                                scheme.primaryContainer
+                                            } else {
+                                                scheme.surfaceVariant
+                                            },
+                                        )
+                                        .clickable {
+                                            emoji = if (emoji == e) null else e
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(text = e, fontSize = 16.sp)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(6.dp))
+                    }
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = { if (it.length <= 140) text = it },
+                        label = { Text("Como foi hoje?") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        minLines = 2,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDialog = false
+                        onSaveRecord(text.trim(), emoji)
+                    },
+                ) { Text("Salvar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) { Text("Cancelar") }
+            },
+        )
     }
 }
