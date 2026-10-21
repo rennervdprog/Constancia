@@ -21,6 +21,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -105,15 +109,25 @@ private fun RowScope.SegmentedChip(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
+        // Linha única sempre (reteste 2026-10-21): com 5 opções o
+        // rótulo quebrava em 2 linhas e o chip crescia. Em telas
+        // estreitas (320dp) ele nem cabe na fonte cheia — aí a fonte
+        // encolhe um pouco até caber, em vez de cortar o texto.
+        val baseLabelSize = MaterialTheme.typography.labelLarge.fontSize
+        var labelSize by remember(label, baseLabelSize) {
+            mutableStateOf(baseLabelSize)
+        }
         Text(
             text = label,
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelLarge.copy(fontSize = labelSize),
             color = if (selected) scheme.onSurface else scheme.onSurfaceVariant,
-            // Linha única sempre: com 5 opções ("Sem prazo", "+30 dias"…)
-            // o rótulo quebrava em 2 linhas e o chip crescia (reteste
-            // 2026-10-21).
             maxLines = 1,
             softWrap = false,
+            onTextLayout = { result ->
+                if (result.hasVisualOverflow && labelSize > 10.5.sp) {
+                    labelSize = (labelSize.value * 0.92f).sp
+                }
+            },
         )
     }
 }
