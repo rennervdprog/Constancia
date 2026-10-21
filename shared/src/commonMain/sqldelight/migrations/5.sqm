@@ -1,0 +1,26 @@
+-- Migração 4 -> 5: Fase B do Plano de Elevação (memória do sistema).
+-- R1.1: histórico de ocorrências — ao concluir uma tarefa recorrente, um
+-- snapshot da ocorrência fica guardado aqui (a linha viva segue sendo a
+-- ocorrência atual; o histórico preserva a conclusão mesmo se a linha
+-- for apagada ou desmarcada depois).
+CREATE TABLE task_occurrence_history(
+  id TEXT NOT NULL PRIMARY KEY,
+  source_task_id TEXT NOT NULL, -- id da tarefa (série) que gerou a ocorrência
+  occurrence_due_date TEXT, -- yyyy-MM-dd do prazo da ocorrência ou null
+  title TEXT NOT NULL,
+  project TEXT NOT NULL DEFAULT 'entrada', -- entrada|pessoal|trabalho|casa|saude
+  priority INTEGER NOT NULL DEFAULT 2, -- 1=P1, 2=P2, 3=P3
+  deadline_date TEXT, -- yyyy-MM-dd ou null
+  duration_minutes INTEGER, -- duração estimada ou null
+  completed_at TEXT NOT NULL -- instante ISO da conclusão
+);
+CREATE INDEX occurrence_history_source ON task_occurrence_history(source_task_id);
+
+-- R8.1: opções de vista (agrupar/ordenar) persistidas POR VISÃO — antes
+-- viviam só em remember na TasksScreen e sumiam ao girar/trocar de aba.
+-- view_key: 'view:ENTRADA'|'view:HOJE'|'view:PROXIMOS'|'view:FEITAS'|'saved:<id>'
+CREATE TABLE view_options(
+  view_key TEXT NOT NULL PRIMARY KEY,
+  group_by TEXT NOT NULL DEFAULT 'none', -- none|project|priority|date
+  sort_mode TEXT NOT NULL DEFAULT 'SMART' -- SMART|PRIORITY|DUE
+);

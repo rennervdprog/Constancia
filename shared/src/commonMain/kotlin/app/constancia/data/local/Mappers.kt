@@ -9,6 +9,8 @@ import app.constancia.db.Saved_view as SavedViewRow
 import app.constancia.db.Subtask as SubtaskRow
 import app.constancia.db.Task_goal_pause as GoalPauseRow
 import app.constancia.db.Task_item as TaskItemRow
+import app.constancia.db.Task_occurrence_history as TaskOccurrenceRow
+import app.constancia.db.View_options as ViewOptionsRow
 import app.constancia.db.Task_template as TaskTemplateRow
 import app.constancia.db.Task_template_item as TaskTemplateItemRow
 import app.constancia.model.Challenge
@@ -24,9 +26,11 @@ import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
+import app.constancia.model.TaskOccurrence
 import app.constancia.model.TaskProject
 import app.constancia.model.TaskTemplate
 import app.constancia.model.TaskTemplateItem
+import app.constancia.model.TaskViewOptions
 
 // Conversoes entidade SQLDelight -> modelo de dominio.
 // Colunas INTEGER do SQLite chegam como Long; flags 0/1 viram Boolean.
@@ -119,6 +123,24 @@ internal fun GoalPauseRow.toModel(): GoalPause = GoalPause(
     id = id,
     startDate = start_date,
     endDate = end_date,
+)
+
+internal fun TaskOccurrenceRow.toModel(): TaskOccurrence = TaskOccurrence(
+    id = id,
+    sourceTaskId = source_task_id,
+    occurrenceDueDate = occurrence_due_date,
+    title = title,
+    project = project.toTaskProject(),
+    priority = priority.toInt(),
+    deadlineDate = deadline_date,
+    durationMinutes = duration_minutes?.toInt(),
+    completedAt = completed_at,
+)
+
+internal fun ViewOptionsRow.toModel(): TaskViewOptions = TaskViewOptions(
+    viewKey = view_key,
+    groupBy = group_by,
+    sortMode = sort_mode,
 )
 
 internal fun SubtaskRow.toModel(): Subtask = Subtask(

@@ -96,6 +96,32 @@ CREATE TABLE task_goal_pause(
   end_date TEXT -- yyyy-MM-dd (inclusive) ou null = pausa aberta
 );
 
+-- Histórico de ocorrências concluídas de tarefas recorrentes (R1.1,
+-- Fase B): snapshot gravado na conclusão, ANTES de gerar a próxima
+-- ocorrência. A visão Feitas e os relatórios leem daqui o que a linha
+-- viva não guarda mais (linha apagada/desmarcada).
+CREATE TABLE task_occurrence_history(
+  id TEXT NOT NULL PRIMARY KEY,
+  source_task_id TEXT NOT NULL, -- id da tarefa (série) que gerou a ocorrência
+  occurrence_due_date TEXT, -- yyyy-MM-dd do prazo da ocorrência ou null
+  title TEXT NOT NULL,
+  project TEXT NOT NULL DEFAULT 'entrada', -- entrada|pessoal|trabalho|casa|saude
+  priority INTEGER NOT NULL DEFAULT 2, -- 1=P1, 2=P2, 3=P3
+  deadline_date TEXT, -- yyyy-MM-dd ou null
+  duration_minutes INTEGER, -- duração estimada ou null
+  completed_at TEXT NOT NULL -- instante ISO da conclusão
+);
+CREATE INDEX occurrence_history_source ON task_occurrence_history(source_task_id);
+
+-- Opções de vista persistidas por visão (R8.1, Fase B): agrupar/ordenar
+-- sobrevivem a girar o celular e a trocar de aba.
+-- view_key: 'view:ENTRADA'|'view:HOJE'|'view:PROXIMOS'|'view:FEITAS'|'saved:<id>'
+CREATE TABLE view_options(
+  view_key TEXT NOT NULL PRIMARY KEY,
+  group_by TEXT NOT NULL DEFAULT 'none', -- none|project|priority|date
+  sort_mode TEXT NOT NULL DEFAULT 'SMART' -- SMART|PRIORITY|DUE
+);
+
 CREATE TABLE subtask(
   id TEXT NOT NULL PRIMARY KEY,
   task_id TEXT NOT NULL REFERENCES task_item(id) ON DELETE CASCADE,
@@ -241,6 +267,27 @@ UPDATE task_item SET reminder_minutes_before = ? WHERE id = ?;
 deleteTask:
 DELETE FROM task_item WHERE id = ?;
 
+-- Histórico de ocorrências (R1.1, Fase B)
+insertOccurrenceHistory:
+INSERT INTO task_occurrence_history(id, source_task_id, occurrence_due_date,
+  title, project, priority, deadline_date, duration_minutes, completed_at)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+selectOccurrenceHistory:
+SELECT * FROM task_occurrence_history ORDER BY completed_at DESC, id ASC;
+
+deleteOccurrenceHistory:
+DELETE FROM task_occurrence_history WHERE id = ?;
+
+-- Opções de vista por visão (R8.1, Fase B)
+selectViewOptions:
+SELECT * FROM view_options ORDER BY view_key ASC;
+
+-- INSERT OR REPLACE (upsert compatível com o SQLite do minSdk 24).
+upsertViewOptions:
+INSERT OR REPLACE INTO view_options(view_key, group_by, sort_mode)
+VALUES(?, ?, ?);
+
 -- Reagendamento em massa (item 1): todas as pendentes vencidas antes
 -- de :hoje ganham o novo prazo :alvo (e o "date" acompanha).
 countOverdueTasks:
@@ -309,6 +356,9 @@ VALUES(?, ?, ?, ?, ?, ?);
 
 setSubtaskDone:
 UPDATE subtask SET done = ? WHERE id = ?;
+
+deleteSubtasksForTask:
+DELETE FROM subtask WHERE task_id = ?;
 
 -- Diário
 selectDiaryForDate:

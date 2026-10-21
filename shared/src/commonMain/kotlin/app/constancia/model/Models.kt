@@ -157,6 +157,65 @@ data class GoalPause(
     val endDate: String?, // yyyy-MM-dd (inclusive) ou null = pausa aberta
 )
 
+/**
+ * R1.1 (Fase B): snapshot de uma ocorrência concluída de tarefa
+ * recorrente, gravado no histórico na hora da conclusão — antes de a
+ * próxima ocorrência nascer. Preserva a conclusão mesmo se a linha viva
+ * for apagada ou desmarcada depois do desfazer expirar.
+ */
+data class TaskOccurrence(
+    val id: String,
+    val sourceTaskId: String,
+    val occurrenceDueDate: String?, // yyyy-MM-dd ou null (série sem prazo)
+    val title: String,
+    val project: TaskProject = TaskProject.ENTRADA,
+    val priority: Int = 2,
+    val deadlineDate: String? = null,
+    val durationMinutes: Int? = null,
+    val completedAt: String, // instante ISO da conclusão
+)
+
+/** Estado de uma subtarefa antes da conclusão (para o pacote de reversão). */
+data class SubtaskState(
+    val subtaskId: String,
+    val done: Boolean,
+)
+
+/** Check-in de hábito gerado por uma conclusão de tarefa vinculada:
+ *  [previousQuantity] é a quantidade de hoje ANTES da conclusão
+ *  (null = não havia check-in; o desfazer apaga o check-in criado). */
+data class HabitCheckinReversal(
+    val habitId: String,
+    val date: String, // yyyy-MM-dd do check-in afetado
+    val previousQuantity: Double?,
+)
+
+/**
+ * R2.2 (Fase B): pacote de reversão de UMA conclusão de tarefa — tudo o
+ * que o desfazer precisa para deixar o banco como estava antes:
+ * a ocorrência gerada (apagar), o snapshot no histórico (apagar), o
+ * check-in de hábito gerado (reverter) e o estado das subtarefas.
+ */
+data class CompletionReversal(
+    val taskId: String,
+    val taskTitle: String,
+    val spawnedTaskId: String? = null,
+    val historyId: String? = null,
+    val habitCheckin: HabitCheckinReversal? = null,
+    val subtaskStates: List<SubtaskState> = emptyList(),
+)
+
+/**
+ * R8.1 (Fase B): opções de vista persistidas (agrupar/ordenar) de UMA
+ * visão. groupBy no formato das vistas salvas (none|project|priority|
+ * date); sortMode é o nome do enum TaskSortMode (SMART|PRIORITY|DUE).
+ */
+data class TaskViewOptions(
+    val viewKey: String,
+    val groupBy: String = "none",
+    val sortMode: String = "SMART",
+)
+
 data class DiaryEntry(
     val id: String,
     val date: String, // yyyy-MM-dd
