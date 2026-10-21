@@ -276,6 +276,11 @@ private fun stepOnce(rule: RepeatRule, from: LocalDate): LocalDate =
  * Próxima ocorrência da série. Com base na CONCLUSÃO, a âncora é a
  * conclusão (concluir atrasado empurra a série); com base no PRAZO, é o
  * prazo atual. Retorna null se a próxima cair depois do término.
+ *
+ * R4.1 (Fase A do Plano de Elevação): avança em LAÇO até a primeira
+ * data ESTRITAMENTE depois de max(âncora, conclusão) — concluir uma
+ * diária muitos dias atrasada NÃO pode gerar ocorrência já vencida
+ * (antes era um passo só a partir da âncora). Guarda de 1000 iterações.
  */
 fun nextOccurrence(
     rule: RepeatRule,
@@ -287,7 +292,12 @@ fun nextOccurrence(
     } else {
         dueDate
     }
-    val next = stepOnce(rule, anchor)
+    val threshold = maxOf(anchor, completedOn)
+    var next = stepOnce(rule, anchor)
+    var guard = 0
+    while (next <= threshold && guard++ < 1000) {
+        next = stepOnce(rule, next)
+    }
     val ends = rule.endsOn
     return if (ends != null && next > ends) null else next
 }

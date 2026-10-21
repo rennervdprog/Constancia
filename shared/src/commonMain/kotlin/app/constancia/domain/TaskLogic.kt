@@ -179,15 +179,41 @@ fun upcomingGroupTitle(day: LocalDate, today: LocalDate): String {
  * "A cada 2 semanas" -> +14 dias; "Mensal" -> mesmo dia do mês seguinte
  * (com clamp no fim do mês); "Anual" -> mesmo dia do ano seguinte.
  * Null quando não repete ou não tem prazo.
+ *
+ * Sem informação de "hoje", equivale a um passo a partir do prazo
+ * (a ocorrência gerada é sempre depois do próprio prazo).
  */
-fun nextRepeatDate(repeatRule: String, dueDate: LocalDate): LocalDate? = when (repeatRule) {
-    REPEAT_DAILY -> dueDate.plus(DatePeriod(days = 1))
-    REPEAT_WEEKLY -> dueDate.plus(DatePeriod(days = 7))
-    REPEAT_BIWEEKLY -> dueDate.plus(DatePeriod(days = 14))
-    REPEAT_MONTHLY -> dueDate.plus(DatePeriod(months = 1))
-    REPEAT_YEARLY -> dueDate.plus(DatePeriod(years = 1))
+fun nextRepeatDate(repeatRule: String, dueDate: LocalDate): LocalDate? =
+    nextRepeatDate(repeatRule, dueDate, dueDate)
+
+/**
+ * R4.1 (Fase A): como [nextRepeatDate], mas avança em LAÇO até a
+ * primeira data depois de max(prazo, hoje) — concluir atrasado além de
+ * um período não gera ocorrência já vencida. Guarda de 1000 iterações.
+ */
+fun nextRepeatDate(
+    repeatRule: String,
+    dueDate: LocalDate,
+    today: LocalDate,
+): LocalDate? {
+    var next = stepRepeatDate(repeatRule, dueDate) ?: return null
+    val floor = maxOf(dueDate, today)
+    var guard = 0
+    while (next <= floor && guard++ < 1000) {
+        next = stepRepeatDate(repeatRule, next) ?: return null
+    }
+    return next
+}
+
+/** Um passo da recorrência legada (rótulo solto) a partir de [from]. */
+private fun stepRepeatDate(repeatRule: String, from: LocalDate): LocalDate? = when (repeatRule) {
+    REPEAT_DAILY -> from.plus(DatePeriod(days = 1))
+    REPEAT_WEEKLY -> from.plus(DatePeriod(days = 7))
+    REPEAT_BIWEEKLY -> from.plus(DatePeriod(days = 14))
+    REPEAT_MONTHLY -> from.plus(DatePeriod(months = 1))
+    REPEAT_YEARLY -> from.plus(DatePeriod(years = 1))
     REPEAT_WEEKDAYS -> {
-        var d = dueDate.plus(DatePeriod(days = 1))
+        var d = from.plus(DatePeriod(days = 1))
         // ISO: 6=sábado, 7=domingo.
         while (d.isoDayNumberCompat() >= 6) d = d.plus(DatePeriod(days = 1))
         d
@@ -200,7 +226,11 @@ fun nextRepeatDate(repeatRule: String, dueDate: LocalDate): LocalDate? = when (r
 // ---------------------------------------------------------------------
 
 /** Alvos dos chips de reagendamento do Todoist. */
-enum class RescheduleTarget { WEEKEND, NEXT_WEEK, PLUS_3_DAYS, PLUS_1_WEEK }
+enum class RescheduleTarget {
+    WEEKEND, NEXT_WEEK, PLUS_3_DAYS, PLUS_1_WEEK,
+    // Fase A (R5.2): fim da semana corrente e mesmo dia do mês que vem.
+    LATER_THIS_WEEK, NEXT_MONTH,
+}
 
 /** Data resultante de um chip de reagendamento a partir de hoje. */
 fun rescheduleDate(target: RescheduleTarget, today: LocalDate): LocalDate =
@@ -217,6 +247,30 @@ fun rescheduleDate(target: RescheduleTarget, today: LocalDate): LocalDate =
             val delta = (8 - today.isoDayNumberCompat()) % 7
             today.plus(DatePeriod(days = if (delta == 0) 7 else delta))
         }
+        RescheduleTarget.LATER_THIS_WEEK -> {
+            // Sexta-feira desta semana (hoje, se já for sexta; sábado e
+            // domingo caem na sexta da semana seguinte). ISO: sexta = 5.
+            val delta = (5 - today.isoDayNumberCompat() + 7) % 7
+            today.plus(DatePeriod(days = delta))
+        }
+        RescheduleTarget.NEXT_MONTH ->
+            // Mesmo dia do mês que vem (plus de meses já faz o clamp).
+            today.plus(DatePeriod(months = 1))
+    }
+
+/**
+ * R5.1 (Fase A): alvo calculado a partir de uma data-base arbitrária —
+ * na UI, a DATA DA TAREFA ("+3 dias da data", "+1 mês da data"). Os
+ * alvos relativos puros (+3d, +1sem, mês que vem) somam sobre a base;
+ * os de semana (fim de semana, semana que vem, ainda esta semana) são
+ * relativos à semana da própria base.
+ */
+fun rescheduleDateFrom(target: RescheduleTarget, base: LocalDate): LocalDate =
+    when (target) {
+        RescheduleTarget.PLUS_3_DAYS -> base.plus(DatePeriod(days = 3))
+        RescheduleTarget.PLUS_1_WEEK -> base.plus(DatePeriod(days = 7))
+        RescheduleTarget.NEXT_MONTH -> base.plus(DatePeriod(months = 1))
+        else -> rescheduleDate(target, base)
     }
 
 /** Rótulo curto de cada chip de reagendamento. */
@@ -225,6 +279,8 @@ fun rescheduleLabel(target: RescheduleTarget): String = when (target) {
     RescheduleTarget.NEXT_WEEK -> "Semana que vem"
     RescheduleTarget.PLUS_3_DAYS -> "+3 dias"
     RescheduleTarget.PLUS_1_WEEK -> "+1 semana"
+    RescheduleTarget.LATER_THIS_WEEK -> "Ainda esta semana"
+    RescheduleTarget.NEXT_MONTH -> "Mês que vem"
 }
 
 // ---------------------------------------------------------------------

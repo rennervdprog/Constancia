@@ -31,7 +31,7 @@ data class QuickSpan(
     val label: String, // rótulo do reconhecimento ("Amanhã", "P1", "#Casa"...)
 ) {
     /** Chave estável do trecho (para o "desfazer" da UI). */
-    val key: String get() = "$kind:$start:$end"
+    val key: String get() = "$kind:$start:$end:$text"
 }
 
 data class QuickAddParse(
@@ -107,16 +107,41 @@ private data class Candidate(
     val repeat: RepeatRule? = null,
 )
 
+/**
+ * R3.2 (Fase A): mascara os trechos entre crases (escape literal do
+ * Dateist) ANTES do parse — texto entre `crases` é literal e NUNCA vira
+ * data/hora/prioridade/projeto/recorrência. A máscara substitui cada
+ * caractere do trecho (e as próprias crases) por um marcador neutro,
+ * mantendo o comprimento: todos os índices seguem 1:1 com o original.
+ * Crase sem par mascara até o fim do texto.
+ */
+private fun maskBacktickSpans(text: String): String {
+    val sb = StringBuilder(text.length)
+    var inside = false
+    for (c in text) {
+        when {
+            c == '`' -> {
+                inside = !inside
+                sb.append('\u0001')
+            }
+            inside -> sb.append('\u0001')
+            else -> sb.append(c)
+        }
+    }
+    return sb.toString()
+}
+
 fun parseQuickAdd(
     text: String,
     today: LocalDate,
     ignored: Set<String> = emptySet(),
 ): QuickAddParse {
-    val norm = normalizePt(text)
+    val norm = normalizePt(maskBacktickSpans(text))
     val candidates = mutableListOf<Candidate>()
 
     fun add(candidate: Candidate) {
-        val key = "${candidate.kind}:${candidate.start}:${candidate.end}"
+        val key = "${candidate.kind}:${candidate.start}:${candidate.end}:" +
+            text.substring(candidate.start, candidate.end)
         if (key !in ignored) candidates.add(candidate)
     }
 
@@ -342,7 +367,8 @@ fun parseQuickAdd(
         cursor = span.end
     }
     sb.append(text, cursor, text.length)
-    val title = cleanQuickTitle(sb.toString())
+    // R3.2: as crases de escape somem do título; o conteúdo fica literal.
+    val title = cleanQuickTitle(sb.toString().replace("`", ""))
 
     val parsedDate = accepted.firstOrNull {
         it.kind == QuickSpanKind.DATE

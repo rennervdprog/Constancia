@@ -145,6 +145,65 @@ class RepeatRuleTest {
         assertEquals(LocalDate(2026, 10, 27), nextOccurrence(byDue, oct20, sexta))
     }
 
+    // Fase A — R4.1: atraso maior que um período NÃO gera vencida -------
+    @Test
+    fun dailyCompletedTenDaysLateLandsInFuture() {
+        val rule = RepeatRule(RepeatFreq.DAILY, 1)
+        assertEquals(
+            LocalDate(2026, 10, 22), // prazo 11/out, concluída 21/out
+            nextOccurrence(
+                rule, LocalDate(2026, 10, 11), LocalDate(2026, 10, 21),
+            ),
+        )
+    }
+
+    @Test
+    fun weeklyCompletedThreeWeeksLateLandsInFuture() {
+        val rule = RepeatRule(RepeatFreq.WEEKLY, 1)
+        assertEquals(
+            // 30/set + 7, 14, 21 (== dia da conclusão), 28
+            LocalDate(2026, 10, 28),
+            nextOccurrence(
+                rule, LocalDate(2026, 9, 30), LocalDate(2026, 10, 21),
+            ),
+        )
+    }
+
+    @Test
+    fun monthlyOrdinalCompletedLateLandsInFuture() {
+        val segundas = RepeatRule(
+            RepeatFreq.MONTHLY, 1, monthWeek = 2, monthWeekday = 1,
+        )
+        assertEquals(
+            // 2ª segunda de dez (a de novembro já ficou para trás)
+            LocalDate(2026, 12, 14),
+            nextOccurrence(
+                segundas, LocalDate(2026, 10, 12), LocalDate(2026, 11, 21),
+            ),
+        )
+    }
+
+    @Test
+    fun lateCompletionStillRespectsEndsOn() {
+        val curta = RepeatRule(
+            RepeatFreq.DAILY, 1, endsOn = LocalDate(2026, 10, 15),
+        )
+        assertNull( // a próxima futura (22/out) cai depois do término
+            nextOccurrence(
+                curta, LocalDate(2026, 10, 11), LocalDate(2026, 10, 21),
+            ),
+        )
+        val longa = RepeatRule(
+            RepeatFreq.DAILY, 1, endsOn = LocalDate(2026, 10, 25),
+        )
+        assertEquals(
+            LocalDate(2026, 10, 22),
+            nextOccurrence(
+                longa, LocalDate(2026, 10, 11), LocalDate(2026, 10, 21),
+            ),
+        )
+    }
+
     @Test
     fun legacyConversion() {
         assertEquals(

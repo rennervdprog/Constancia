@@ -8,6 +8,7 @@ import app.constancia.domain.TaskGroupBy
 import app.constancia.domain.groupTasks
 import app.constancia.domain.nextRepeatDate
 import app.constancia.domain.rescheduleDate
+import app.constancia.domain.rescheduleDateFrom
 import app.constancia.domain.savedViewTasks
 import app.constancia.domain.sortSmart
 import app.constancia.model.SavedView
@@ -97,6 +98,61 @@ class TaskLogic2Test {
         assertEquals(
             LocalDate(2026, 10, 27),
             rescheduleDate(RescheduleTarget.PLUS_1_WEEK, today),
+        )
+    }
+
+    // Fase A — R5.1/R5.2: alvos novos e chips a partir da data da tarefa -
+    @Test
+    fun rescheduleLaterThisWeekNextMonthAndFromTaskDate() {
+        assertEquals( // terça -> sexta desta semana
+            LocalDate(2026, 10, 23),
+            rescheduleDate(RescheduleTarget.LATER_THIS_WEEK, today),
+        )
+        assertEquals( // sábado -> sexta da semana seguinte
+            LocalDate(2026, 10, 30),
+            rescheduleDate(
+                RescheduleTarget.LATER_THIS_WEEK, LocalDate(2026, 10, 24),
+            ),
+        )
+        assertEquals(
+            LocalDate(2026, 11, 20),
+            rescheduleDate(RescheduleTarget.NEXT_MONTH, today),
+        )
+        assertEquals( // clamp: 31 de jan -> 28 de fev
+            LocalDate(2026, 2, 28),
+            rescheduleDate(
+                RescheduleTarget.NEXT_MONTH, LocalDate(2026, 1, 31),
+            ),
+        )
+        val taskDate = LocalDate(2026, 10, 15)
+        assertEquals(
+            LocalDate(2026, 10, 18),
+            rescheduleDateFrom(RescheduleTarget.PLUS_3_DAYS, taskDate),
+        )
+        assertEquals(
+            LocalDate(2026, 10, 22),
+            rescheduleDateFrom(RescheduleTarget.PLUS_1_WEEK, taskDate),
+        )
+        assertEquals(
+            LocalDate(2026, 11, 15),
+            rescheduleDateFrom(RescheduleTarget.NEXT_MONTH, taskDate),
+        )
+    }
+
+    // Fase A — R4.1 no caminho legado ------------------------------------
+    @Test
+    fun legacyNextRepeatDateSkipsOverdue() {
+        assertEquals(
+            LocalDate(2026, 10, 22),
+            nextRepeatDate(
+                "Todo dia", LocalDate(2026, 10, 11), LocalDate(2026, 10, 21),
+            ),
+        )
+        assertEquals(
+            LocalDate(2026, 10, 28),
+            nextRepeatDate(
+                "Semanal", LocalDate(2026, 9, 30), LocalDate(2026, 10, 21),
+            ),
         )
     }
 

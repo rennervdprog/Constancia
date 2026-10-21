@@ -185,4 +185,20 @@ class QuickAddParserTest {
         assertNull(parse.dueDate)
         assertNull(parse.repeat)
     }
+
+    // Fase A — R3.2: escape literal com crases ---------------------------
+    @Test
+    fun backtickSpanIsNeverParsed() {
+        val parse = parseQuickAdd("Pagar `amanhã` p1", today)
+        assertNull(parse.dueDate) // "amanhã" entre crases é texto literal
+        assertEquals(1, parse.priority) // fora das crases, o parse é normal
+        assertEquals(1, parse.spans.size)
+        // As crases somem do título; o conteúdo continua lá, literal.
+        assertEquals("Pagar amanhã", parse.title)
+
+        val soCrases = parseQuickAdd("`sexta` comprar pão", today)
+        assertNull(soCrases.dueDate)
+        assertEquals(0, soCrases.spans.size)
+        assertEquals("sexta comprar pão", soCrases.title)
+    }
 }
