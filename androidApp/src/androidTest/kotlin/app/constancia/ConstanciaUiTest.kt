@@ -159,6 +159,7 @@ class ConstanciaUiTest {
         shot("01_habitos")
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         composeRule.onNodeWithText("Tudo o resto do Constância").assertIsDisplayed()
+        shot("01_mais")
         // Diário mora dentro da Mais.
         composeRule.onNodeWithTag("mais_diario").performScrollTo().performClick()
         composeRule.onNodeWithText("Como foi o seu dia?")

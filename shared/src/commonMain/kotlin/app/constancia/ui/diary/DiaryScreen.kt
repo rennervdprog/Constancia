@@ -928,12 +928,16 @@ private fun HistoryRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (entry.photoUri != null) {
-            DiaryPhotoImage(
-                photoUri = entry.photoUri,
+            Box(
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(14.dp)),
-            )
+            ) {
+                DiaryPhotoImage(
+                    photoUri = entry.photoUri,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         } else {
             Box(
                 modifier = Modifier.size(52.dp)

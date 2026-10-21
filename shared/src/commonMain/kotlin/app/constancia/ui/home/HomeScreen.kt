@@ -697,10 +697,11 @@ private fun HeroPanel(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = if (diaryDone) {
-                        "Editar o diário de hoje"
-                    } else {
-                        "Registrar o dia de hoje"
+                    text = when {
+                        diaryDone && isToday -> "Editar o diário de hoje"
+                        diaryDone -> "Editar o diário do dia"
+                        isToday -> "Registrar o dia de hoje"
+                        else -> "Registrar o dia"
                     },
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontSize = 14.sp,
