@@ -7,9 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -214,41 +212,19 @@ class ConstanciaUiTest {
     @Test
     fun checkinNoCirculo_marcaHabito() {
         createHabit("Ler")
-        shot("03_apos_criar")
         dismissAnrIfPresent()
         // O herói conta hábito + diário: faltam 2 itens antes do check.
         awaitText("Faltam 2 itens pra fechar o dia", "home_list")
-        shot("03_apos_await")
-        // O clique no check pode ser engolido pelo diálogo de ANR do sistema
-        // ou se perder no emulador lento: tenta de novo se o herói não mudar
-        // (espera entre tentativas p/ não desmarcar um check que só demorou).
-        var tries = 0
-        while (!nodesWith("Falta 1 item pra fechar o dia") && tries < 3) {
-            dismissAnrIfPresent()
-            runCatching {
-                composeRule.onAllNodesWithTag("habit_check")[0].performClick()
-            }
-            shot("03_click" + (tries + 1))
-            composeRule.waitForIdle()
-            val deadline = System.currentTimeMillis() + 6000
-            while (
-                !nodesWith("Falta 1 item pra fechar o dia") &&
-                System.currentTimeMillis() < deadline
-            ) {
-                Thread.sleep(300)
-            }
-            tries++
-        }
-        if (!nodesWith("Falta 1 item pra fechar o dia")) {
-            // Diagnóstico: despeja a árvore de semântica no erro p/ o
-            // relatório XML mostrar o estado real da tela na falha.
-            val tree = runCatching {
-                composeRule.onRoot().printToString()
-            }.getOrElse { "árvore indisponível: $it" }
-            throw AssertionError(
-                "Herói não mostrou 'Falta 1 item pra fechar o dia' após " +
-                    "os cliques no check. Árvore de semântica:\n" + tree,
-            )
+        // O check da primeira sessão nasce ATRÁS da barra flutuante (a
+        // lista ainda não rolou): sem subir um pouco, o toque no check
+        // cai na aba "Mais" e o teste navega p/ longe da Hoje. Sobe a
+        // lista ~110px — o check sai da zona da barra e o herói (onde
+        // está o texto esperado) continua composto na semântica.
+        device.swipe(160, 470, 160, 360, 12)
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("habit_check")[0].performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Falta 1 item pra fechar o dia")
         }
         shot("03_checkin_marcado")
     }
