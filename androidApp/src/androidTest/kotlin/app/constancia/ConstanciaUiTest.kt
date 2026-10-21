@@ -214,9 +214,11 @@ class ConstanciaUiTest {
     @Test
     fun checkinNoCirculo_marcaHabito() {
         createHabit("Ler")
+        shot("03_apos_criar")
         dismissAnrIfPresent()
         // O herói conta hábito + diário: faltam 2 itens antes do check.
         awaitText("Faltam 2 itens pra fechar o dia", "home_list")
+        shot("03_apos_await")
         // O clique no check pode ser engolido pelo diálogo de ANR do sistema
         // ou se perder no emulador lento: tenta de novo se o herói não mudar
         // (espera entre tentativas p/ não desmarcar um check que só demorou).
@@ -226,6 +228,7 @@ class ConstanciaUiTest {
             runCatching {
                 composeRule.onAllNodesWithTag("habit_check")[0].performClick()
             }
+            shot("03_click" + (tries + 1))
             composeRule.waitForIdle()
             val deadline = System.currentTimeMillis() + 6000
             while (
