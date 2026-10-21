@@ -1575,6 +1575,98 @@ private fun ReviewSection(review: PeriodReview, period: ReportPeriod) {
                 color = extra.ink3,
             )
         }
+        // R10.3 (Fase D): a SEGUNDA série da revisão — conclusões pelo
+        // dia em que foram feitas (conclusão), lado a lado com a série
+        // pelo dia planejado (prazo) do gráfico acima.
+        if (review.completionTotal > 0) {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Pelo prazo × pela conclusão",
+                style = MaterialTheme.typography.titleSmall,
+                color = cs.onBackground,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = if (review.lateCompletions > 0) {
+                    review.completionTotal.toString() +
+                        " conclusões no período · " +
+                        review.lateCompletions.toString() +
+                        " depois do dia planejado"
+                } else {
+                    review.completionTotal.toString() +
+                        " conclusões no período · todas no dia planejado"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = extra.ink3,
+            )
+            Spacer(Modifier.height(10.dp))
+            val maxSeries = maxOf(
+                review.doneByWeekday.maxOrNull() ?: 0,
+                review.doneByCompletionWeekday.maxOrNull() ?: 0,
+                1,
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                labels.forEachIndexed { i, label ->
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp),
+                            modifier = Modifier.height(56.dp),
+                        ) {
+                            ReviewBar(
+                                frac = review.doneByWeekday[i].toFloat() / maxSeries,
+                                color = cs.primary,
+                            )
+                            ReviewBar(
+                                frac = review.doneByCompletionWeekday[i].toFloat() /
+                                    maxSeries,
+                                color = extra.amber,
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            label,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = extra.ink3,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(8.dp)
+                            .clip(CircleShape)
+                            .background(cs.primary),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        "pelo prazo",
+                        fontSize = 11.sp,
+                        color = extra.ink3,
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(8.dp)
+                            .clip(CircleShape)
+                            .background(extra.amber),
+                    )
+                    Spacer(Modifier.width(5.dp))
+                    Text(
+                        "pela conclusão",
+                        fontSize = 11.sp,
+                        color = extra.ink3,
+                    )
+                }
+            }
+        }
     }
 }
 

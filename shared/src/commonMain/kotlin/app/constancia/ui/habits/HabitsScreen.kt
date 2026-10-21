@@ -542,6 +542,20 @@ private fun HabitCard(
                         .background(habitColor, RoundedCornerShape(99.dp)),
                 )
             }
+            // R13.2 (Fase D): desde quando a sequência vem + o recorde.
+            val caption = status?.streakInfo?.let {
+                app.constancia.domain.streakCaption(it)
+            }
+            if (caption != null) {
+                Spacer(Modifier.height(7.dp))
+                Text(
+                    text = caption,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.5.sp,
+                    ),
+                    color = scheme.onSurfaceVariant,
+                )
+            }
         }
 
         // Mapa de calor: 18 colunas (semanas) × 7 linhas (dom..sáb),

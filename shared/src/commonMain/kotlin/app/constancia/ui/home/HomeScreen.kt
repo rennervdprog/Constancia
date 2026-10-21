@@ -203,6 +203,9 @@ fun HomeScreen(
         .collectAsState(initial = 0)
     val goalPauses by deps.tasks.goalPausesFlow()
         .collectAsState(initial = emptyList())
+    // Fase D (R10.1): dias de descanso fixos da meta (ISO 1..7).
+    val goalIgnoreWeekdays by deps.prefs.goalIgnoreWeekdaysFlow()
+        .collectAsState(initial = emptySet())
 
     val hour = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
     val greeting = greetingFor(hour)
@@ -267,21 +270,33 @@ fun HomeScreen(
                         app.constancia.domain.completionCountsByDay(
                             withOccurrenceHistory(allTasks, taskHistory),
                         )
+                    val metDates = app.constancia.domain.dailyGoalMetDates(
+                        goalCounts, dailyGoal,
+                    )
+                    // R10.1: pausas + dias de descanso fixos perdoam.
                     val forgiven =
+                        app.constancia.domain.goalForgivenDates(
+                            goalPauses, today, goalIgnoreWeekdays,
+                        )
+                    // "Em pausa hoje" é só a pausa de verdade; o dia de
+                    // descanso tem texto próprio no cartão.
+                    val pauseForgiven =
                         app.constancia.domain.goalForgivenDates(
                             goalPauses, today,
                         )
+                    // R10.2: a sequência da meta como objeto (c/ recorde).
+                    val goalInfo = app.constancia.domain.dailyGoalStreakInfo(
+                        metDates, forgiven, today,
+                    )
                     TaskGoalCard(
                         doneToday = goalCounts[today] ?: 0,
                         goal = dailyGoal,
-                        streak = app.constancia.domain.dailyGoalStreak(
-                            app.constancia.domain.dailyGoalMetDates(
-                                goalCounts, dailyGoal,
-                            ),
-                            forgiven,
-                            today,
-                        ),
-                        pausedToday = forgiven.contains(today),
+                        streak = goalInfo.count,
+                        streakCaption = app.constancia.domain
+                            .streakCaption(goalInfo),
+                        pausedToday = pauseForgiven.contains(today),
+                        restToday = todayDate.isoDayNumberCompat() in
+                            goalIgnoreWeekdays,
                     )
                 }
             }
@@ -2057,6 +2072,10 @@ private fun TaskGoalCard(
     goal: Int,
     streak: Int,
     pausedToday: Boolean,
+    // Fase D: legenda da sequência como objeto ("desde 3 de out ·
+    // recorde 21") e o dia de descanso fixo da meta (R10.1).
+    streakCaption: String? = null,
+    restToday: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
@@ -2108,10 +2127,25 @@ private fun TaskGoalCard(
                 )
             }
         }
+        // R10.2: desde quando a sequência vem + o recorde dela.
+        if (streakCaption != null) {
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = streakCaption,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
+        }
         Spacer(Modifier.height(8.dp))
         when {
             pausedToday -> Text(
                 text = "Meta em pausa hoje — a sequência está protegida.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant,
+            )
+            restToday -> Text(
+                text = "Hoje é dia de descanso da meta — não conta " +
+                    "nem quebra a sequência.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurfaceVariant,
             )

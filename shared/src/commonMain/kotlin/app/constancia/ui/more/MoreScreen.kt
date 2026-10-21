@@ -1,5 +1,6 @@
 package app.constancia.ui.more
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +39,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -108,6 +111,11 @@ fun MoreScreen(
     // Fase C (R6.2): lembrete automático das tarefas com horário.
     val autoReminderMinutes by deps.prefs.autoReminderMinutesFlow()
         .collectAsState(initial = -1)
+    // Fase D: dias de descanso fixos da meta (R10.1) e modo férias (R13.4).
+    val goalIgnoreWeekdays by deps.prefs.goalIgnoreWeekdaysFlow()
+        .collectAsState(initial = emptySet())
+    val vacationMode by deps.prefs.vacationModeFlow()
+        .collectAsState(initial = false)
     var reviewTimeText by remember { mutableStateOf<String?>(null) }
 
     val bestStreak = statuses.maxOfOrNull { it.currentStreak } ?: 0
@@ -389,6 +397,65 @@ fun MoreScreen(
                             onCheckedChange = { paused ->
                                 scope.launch {
                                     deps.tasks.setGoalPaused(paused, today)
+                                }
+                            },
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Dias de descanso da meta",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        "Nesses dias a meta não conta nem quebra a " +
+                            "sequência — sem precisar pausar toda semana.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    IsoWeekdayChips(
+                        selected = goalIgnoreWeekdays,
+                        onToggle = { day ->
+                            scope.launch {
+                                deps.prefs.setGoalIgnoreWeekdays(
+                                    if (day in goalIgnoreWeekdays) {
+                                        goalIgnoreWeekdays - day
+                                    } else {
+                                        goalIgnoreWeekdays + day
+                                    },
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+            item {
+                StackCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconTile(
+                            icon = Icons.Filled.WbSunny,
+                            tint = extra.tintSun,
+                            iconColor = extra.sunColor,
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Modo férias",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "Pausa a meta e todos os hábitos de uma " +
+                                    "vez. As sequências ficam protegidas " +
+                                    "até você voltar.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = vacationMode,
+                            onCheckedChange = { enabled ->
+                                scope.launch {
+                                    deps.setVacationMode(enabled, today)
                                 }
                             },
                         )
@@ -889,6 +956,54 @@ private fun SecondaryButton(
 }
 
 /** Linha de ajuste com stepper − / + (metas de tarefas, item 2). */
+/** Letras dos dias na ordem ISO (1=segunda .. 7=domingo). */
+private val ISO_DAY_LETTERS = listOf("S", "T", "Q", "Q", "S", "S", "D")
+
+/**
+ * Fase D (R10.1): seletor de dias da semana em círculos de 40dp —
+ * mesmo desenho dos dias do formulário de hábito. [selected] guarda
+ * dias ISO (1=segunda .. 7=domingo); tocar alterna o dia.
+ */
+@Composable
+private fun IsoWeekdayChips(
+    selected: Set<Int>,
+    onToggle: (Int) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+    ) {
+        (1..7).forEach { isoDay ->
+            val isSelected = isoDay in selected
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        if (isSelected) scheme.primary else scheme.surface,
+                        CircleShape,
+                    )
+                    .then(
+                        if (isSelected) Modifier
+                        else Modifier.border(
+                            BorderStroke(1.5.dp, scheme.outline),
+                            CircleShape,
+                        ),
+                    )
+                    .clickable { onToggle(isoDay) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = ISO_DAY_LETTERS[isoDay - 1],
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (isSelected) scheme.onPrimary
+                    else scheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun GoalStepperRow(
     label: String,

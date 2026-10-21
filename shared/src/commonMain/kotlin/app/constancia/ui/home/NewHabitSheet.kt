@@ -62,6 +62,9 @@ import kotlinx.coroutines.launch
 // Nomes dos dias na ordem do app: 1=domingo .. 7=sábado.
 private val DAY_LETTERS = listOf("D", "S", "T", "Q", "Q", "S", "S")
 
+// Letras na ordem ISO (1=segunda .. 7=domingo), para os dias de descanso.
+private val ISO_DAY_LETTERS = listOf("S", "T", "Q", "Q", "S", "S", "D")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
@@ -82,6 +85,8 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
     var freqType by remember { mutableStateOf(FrequencyType.DAILY) }
     var weeklyTarget by remember { mutableStateOf(3) }
     var days by remember { mutableStateOf((1..7).toSet()) }
+    // Fase D (R13.1): dias de descanso planejados, ISO (1=seg..7=dom).
+    var ignoreDays by remember { mutableStateOf<Set<Int>>(emptySet()) }
     var session by remember { mutableStateOf(Session.MANHA) }
     var saving by remember { mutableStateOf(false) }
 
@@ -369,6 +374,59 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 FrequencyType.DAILY -> Unit
             }
 
+            // R13.1 (Fase D): descanso planejado — o hábito não é
+            // devido nesses dias e a sequência fica protegida (o fim
+            // de semana fora do hábito, sem pausa manual). A meta
+            // semanal (WEEKLY_X) não usa: ela já é flexível por dia.
+            if (freqType != FrequencyType.WEEKLY_X) {
+                SheetSectionLabel("Dias de descanso")
+                Text(
+                    text = "Nesses dias o hábito não é devido — " +
+                        "e a sequência fica protegida.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    (1..7).forEach { isoDay ->
+                        val selected = isoDay in ignoreDays
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(
+                                    if (selected) scheme.primary
+                                    else scheme.surface,
+                                    CircleShape,
+                                )
+                                .then(
+                                    if (selected) Modifier
+                                    else Modifier.border(
+                                        BorderStroke(1.5.dp, scheme.outline),
+                                        CircleShape,
+                                    ),
+                                )
+                                .clickable {
+                                    ignoreDays = if (selected) {
+                                        ignoreDays - isoDay
+                                    } else {
+                                        ignoreDays + isoDay
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = ISO_DAY_LETTERS[isoDay - 1],
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (selected) scheme.onPrimary
+                                else scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
             SheetSectionLabel("Sessão do dia")
             SegmentedRow(
                 options = listOf("Manhã", "Tarde", "Noite"),
@@ -523,6 +581,13 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                                         days.sorted()
                                     } else {
                                         emptyList()
+                                    },
+                                    ignoreWeekdays = if (
+                                        freqType == FrequencyType.WEEKLY_X
+                                    ) {
+                                        emptySet()
+                                    } else {
+                                        ignoreDays
                                     },
                                     weeklyTarget = weeklyTarget,
                                     session = session,
