@@ -428,34 +428,37 @@ private fun ProCard(isPro: Boolean, onClick: () -> Unit) {
                     Text(
                         text = "R$ 119,90/ano",
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 15.sp,
+                            fontSize = 14.sp,
                             fontWeight = FontWeight.ExtraBold,
                         ),
                         color = Color.White,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "R$ 191,88",
                         style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                         ),
                         color = Color(0xFFA78BDB),
                         textDecoration = TextDecoration.LineThrough,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                     Spacer(Modifier.weight(1f))
                     Box(
                         modifier = Modifier
-                            .widthIn(min = 88.dp)
                             .clip(RoundedCornerShape(9.dp))
                             .background(Color.White)
                             .clickable(onClick = onClick)
-                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                            .padding(horizontal = 11.dp, vertical = 7.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
                             text = "Conhecer",
                             style = MaterialTheme.typography.labelLarge.copy(
-                                fontSize = 12.5.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold,
                             ),
                             color = Color(0xFF2A0A54),
