@@ -331,7 +331,8 @@ class RepositoryWriteFlowTest {
             null,
             "CREATE TABLE habit(id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL DEFAULT '', " +
                 "reminder_enabled INTEGER NOT NULL DEFAULT 0, " +
-                "reminder_time TEXT NOT NULL DEFAULT '')",
+                "reminder_time TEXT NOT NULL DEFAULT '', " +
+                "created_at TEXT NOT NULL DEFAULT '')",
             0,
         )
         driver.execute(
@@ -589,7 +590,8 @@ class RepositoryWriteFlowTest {
             null,
             "CREATE TABLE habit(id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL DEFAULT '', " +
                 "reminder_enabled INTEGER NOT NULL DEFAULT 0, " +
-                "reminder_time TEXT NOT NULL DEFAULT '')",
+                "reminder_time TEXT NOT NULL DEFAULT '', " +
+                "created_at TEXT NOT NULL DEFAULT '')",
             0,
         )
         driver.execute(
