@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
@@ -371,5 +372,58 @@ class ConstanciaUiTest {
         composeRule.onNodeWithText("Relatórios sem limite de tempo").assertExists()
         composeRule.onNodeWithText("Relatórios sem limite de tempo").performScrollTo()
         shot("10_mais_banner_pro")
+    }
+
+    @Test
+    fun reteste_editarHabito_abreFolhaPreenchidaESalvaNoMesmoCartao() {
+        // Bug nº 4 do reteste 2026-10-21: não existia editar hábito.
+        createHabit("Beber água")
+        composeRule.onNodeWithTag("tab_HABITOS").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
+        // Cartão com tile (ícone + cor do hábito, bug nº 2) e ação Editar.
+        shot("11_habitos_cartao")
+        composeRule.onNodeWithText("Editar").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Editar hábito") }
+        composeRule.onNodeWithText("Salvar alterações").assertExists()
+        // A folha abre PREENCHIDA com o nome atual.
+        composeRule.onNodeWithText("Beber água").assertExists()
+        shot("11_editar_habito")
+        // Renomear e salvar = update no mesmo cartão (segue 1 hábito só).
+        composeRule.onNodeWithTag("habit_name_field")
+            .performTextReplacement("Beber água gelada")
+        composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água gelada") }
+        composeRule.onNodeWithText("hábitos ativos").assertIsDisplayed()
+        shot("11_habito_editado")
+    }
+
+    @Test
+    fun reteste_formTarefa_mascaraDeHoraEChipSemPrazo() {
+        // Bugs nº 3 (horário sem máscara) e nº 5 (chip "Sem prazo"
+        // quebrando em 2 linhas) do reteste 2026-10-21.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_task").performClick()
+        composeRule.onNodeWithTag("task_name_field").performTextInput("Ligar para o cliente")
+        // Digitar só números formata sozinho: 930 -> "09:30".
+        composeRule.onNodeWithTag("task_time_field").performScrollTo()
+            .performTextInput("930")
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("09:30") }
+        runCatching { device.pressBack() } // fecha o teclado virtual
+        composeRule.waitForIdle()
+        // "Sem prazo" em UMA linha: a altura do texto é a de uma linha
+        // (comparada com "+30 dias", do mesmo grupo de chips).
+        composeRule.onNodeWithText("Sem prazo").performScrollTo()
+        composeRule.waitForIdle()
+        val semPrazo = composeRule.onNodeWithText("Sem prazo")
+            .fetchSemanticsNode().boundsInRoot
+        val mais30 = composeRule.onNodeWithText("+30 dias")
+            .fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(
+            "chip 'Sem prazo' quebrou em 2 linhas: ${semPrazo.height} vs ${mais30.height}",
+            semPrazo.height <= mais30.height * 1.5f,
+        )
+        shot("12_form_prazo")
     }
 }

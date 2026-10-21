@@ -266,7 +266,7 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number,
                     ),
-                    modifier = Modifier.width(110.dp),
+                    modifier = Modifier.width(110.dp).testTag("task_time_field"),
                     shape = RoundedCornerShape(12.dp),
                 )
             }

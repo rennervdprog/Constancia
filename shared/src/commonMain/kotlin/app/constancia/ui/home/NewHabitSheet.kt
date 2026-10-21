@@ -68,11 +68,11 @@ private val DAY_LETTERS = listOf("D", "S", "T", "Q", "Q", "S", "S")
 // Letras na ordem ISO (1=segunda .. 7=domingo), para os dias de descanso.
 private val ISO_DAY_LETTERS = listOf("S", "T", "Q", "Q", "S", "S", "D")
 
-@OptIn(ExperimentalMaterial3Api::class)
 /** Quantidade como texto de formulário: inteiro sem o ".0" ("2", "0,5"→"0.5"). */
 private fun fmtQty(v: Double): String =
     if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewHabitSheet(
     deps: AppDeps,
