@@ -6,7 +6,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.isRoot
-import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -200,7 +199,7 @@ class ConstanciaUiTest {
             val roots = composeRule.onAllNodes(isRoot()).fetchSemanticsNodes()
             System.err.println("APPABRE_ROOTS: " + roots.size)
             roots.forEachIndexed { idx, node ->
-                System.err.println("ROOT[$idx] bounds=" + node.boundsInRoot)
+                System.err.println("ROOT[$idx] bounds=" + node?.boundsInRoot)
             }
             throw e
         }
