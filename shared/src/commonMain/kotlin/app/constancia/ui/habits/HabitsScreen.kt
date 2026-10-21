@@ -142,6 +142,9 @@ fun HabitsScreen(
     val allCycles by deps.habits.allCyclesFlow().collectAsState(initial = emptyList())
     val allRecords by deps.checkins.allRecordsFlow()
         .collectAsState(initial = emptyList())
+    // Fase C: lembretes (vários por hábito) de todos os hábitos.
+    val allHabitReminders by deps.habits.allHabitRemindersFlow()
+        .collectAsState(initial = emptyList())
 
     val statusByHabit = statuses.associateBy { it.habit.id }
     val checkinDays30 = checkins
@@ -262,6 +265,8 @@ fun HabitsScreen(
                     habitCheckins = habitCheckins,
                     cycles = allCycles.filter { it.habitId == habit.id },
                     records = allRecords.filter { it.habitId == habit.id },
+                    habitReminders = allHabitReminders
+                        .filter { it.habitId == habit.id },
                     todayYmdStr = today,
                     onCheck = {
                         scope.launch { deps.checkins.toggle(habit.id, today) }
@@ -278,6 +283,11 @@ fun HabitsScreen(
                     onSaveRecord = { content, emoji ->
                         scope.launch {
                             deps.checkins.saveRecord(habit.id, today, content, emoji)
+                        }
+                    },
+                    onSetHabitReminders = { times ->
+                        scope.launch {
+                            deps.habits.setHabitReminders(habit.id, times)
                         }
                     },
                 )
@@ -374,12 +384,14 @@ private fun HabitCard(
     habitCheckins: List<Checkin>,
     cycles: List<HabitCycle>,
     records: List<HabitRecord>,
+    habitReminders: List<app.constancia.model.HabitReminder>,
     todayYmdStr: String,
     onCheck: () -> Unit,
     onSkip: () -> Unit,
     onUnskip: () -> Unit,
     onStartCycle: (Int) -> Unit,
     onSaveRecord: (String, String?) -> Unit,
+    onSetHabitReminders: (List<String>) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
@@ -658,6 +670,13 @@ private fun HabitCard(
                 records = records,
                 todayYmdStr = todayYmdStr,
                 onSaveRecord = onSaveRecord,
+            )
+
+            // Fase C: lembretes múltiplos do hábito (um alarme/dia
+            // por horário, mesmo sistema das tarefas).
+            HabitRemindersSection(
+                reminders = habitReminders,
+                onSetReminders = onSetHabitReminders,
             )
         }
     }
@@ -1033,6 +1052,160 @@ private fun HabitLogSection(
             },
             dismissButton = {
                 TextButton(onClick = { showDialog = false }) { Text("Cancelar") }
+            },
+        )
+    }
+}
+
+/**
+ * Fase C — seção de lembretes do cartão do hábito: a LISTA de horários
+ * em que o app chama todo dia. Editar abre um diálogo com os horários
+ * atuais (toque remove) e um campo para adicionar novos; salvar grava
+ * a lista e reagenda os alarmes. Hábito deixa de ter lembrete único.
+ */
+@Composable
+private fun HabitRemindersSection(
+    reminders: List<app.constancia.model.HabitReminder>,
+    onSetReminders: (List<String>) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    var showDialog by remember { mutableStateOf(false) }
+    val times = reminders.map { it.time }.sorted()
+
+    Spacer(Modifier.height(14.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Lembretes",
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = if (times.isEmpty()) "Adicionar" else "Editar",
+            style = MaterialTheme.typography.labelLarge,
+            color = scheme.primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { showDialog = true }
+                .padding(4.dp),
+        )
+    }
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = if (times.isEmpty()) {
+            "Sem lembrete. Adicione um horário e o app te chama todo dia."
+        } else {
+            "Te chama todo dia às " + times.joinToString(" e às ") + "."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = scheme.onSurfaceVariant,
+    )
+
+    if (showDialog) {
+        var draft by remember { mutableStateOf(times) }
+        var timeText by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showDialog = false },
+            containerColor = scheme.surface,
+            title = {
+                Text(
+                    "Lembretes do hábito",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Um toque em cada horário, todo dia. " +
+                            "Toque num horário para remover.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    if (draft.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            draft.forEach { time ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(99.dp))
+                                        .background(scheme.primaryContainer)
+                                        .clickable { draft = draft - time }
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 7.dp,
+                                        ),
+                                ) {
+                                    Text(
+                                        text = "$time ×",
+                                        style = MaterialTheme
+                                            .typography.labelLarge,
+                                        color = scheme.onPrimaryContainer,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = timeText,
+                            onValueChange = { value ->
+                                timeText = value
+                                    .filter { c -> c.isDigit() || c == ':' }
+                                    .take(5)
+                            },
+                            placeholder = { Text("HH:mm") },
+                            singleLine = true,
+                            modifier = Modifier.width(104.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Adicionar",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = scheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    val parsed = app.constancia.domain
+                                        .parseTimeOrNull(timeText)
+                                    if (parsed != null) {
+                                        val hhmm = parsed.hour.toString()
+                                            .padStart(2, '0') + ":" +
+                                            parsed.minute.toString()
+                                                .padStart(2, '0')
+                                        if (hhmm !in draft) {
+                                            draft = (draft + hhmm).sorted()
+                                        }
+                                        timeText = ""
+                                    }
+                                }
+                                .padding(4.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onSetReminders(draft)
+                        showDialog = false
+                    },
+                ) { Text("Salvar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDialog = false }) {
+                    Text("Cancelar")
+                }
             },
         )
     }

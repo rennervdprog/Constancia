@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -72,6 +74,10 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
     var unit by remember { mutableStateOf("copos") }
     var showInToday by remember { mutableStateOf(false) }
     var showInCalendar by remember { mutableStateOf(false) }
+    // Fase C: VÁRIOS horários de lembrete por hábito ("HH:mm").
+    var reminderTimes by remember { mutableStateOf<List<String>>(emptyList()) }
+    var reminderTimeText by remember { mutableStateOf("") }
+    val habitId = remember { newId() }
     var iconKey by remember { mutableStateOf(HABIT_ICON_KEYS[0]) }
     var colorValue by remember { mutableStateOf(HabitPalette[0].value.toLong()) }
     var freqType by remember { mutableStateOf(FrequencyType.DAILY) }
@@ -409,6 +415,83 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 Switch(checked = showInCalendar, onCheckedChange = { showInCalendar = it })
             }
 
+            SheetSectionLabel("Lembretes")
+            Text(
+                text = "Um toque em cada horário, todo dia. " +
+                    "Pode adicionar quantos quiser.",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
+            if (reminderTimes.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    reminderTimes.sorted().forEach { time ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(scheme.primaryContainer)
+                                .clickable {
+                                    reminderTimes = reminderTimes - time
+                                }
+                                .padding(horizontal = 12.dp, vertical = 7.dp),
+                        ) {
+                            Text(
+                                text = "$time ×",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = scheme.onPrimaryContainer,
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = reminderTimeText,
+                    onValueChange = { value ->
+                        reminderTimeText = value
+                            .filter { c -> c.isDigit() || c == ':' }
+                            .take(5)
+                    },
+                    placeholder = { Text("HH:mm") },
+                    singleLine = true,
+                    modifier = Modifier.width(110.dp),
+                    shape = RoundedCornerShape(12.dp),
+                )
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(scheme.surfaceVariant)
+                        .border(
+                            1.dp, scheme.outline, RoundedCornerShape(99.dp),
+                        )
+                        .clickable {
+                            val parsed = app.constancia.domain
+                                .parseTimeOrNull(reminderTimeText)
+                            if (parsed != null) {
+                                val hhmm = parsed.hour.toString()
+                                    .padStart(2, '0') + ":" +
+                                    parsed.minute.toString().padStart(2, '0')
+                                if (hhmm !in reminderTimes) {
+                                    reminderTimes = reminderTimes + hhmm
+                                }
+                                reminderTimeText = ""
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                ) {
+                    Text(
+                        text = "Adicionar horário",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = scheme.onSurface,
+                    )
+                }
+            }
+
             Spacer(Modifier.height(4.dp))
             // CTA: largura total, raio 18dp, padding vertical 16dp, fundo primary,
             // texto onPrimary Sora 16/700 (titleLarge).
@@ -424,7 +507,7 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                         scope.launch {
                             deps.habits.save(
                                 Habit(
-                                    id = newId(),
+                                    id = habitId,
                                     name = name.trim(),
                                     icon = iconKey,
                                     color = colorValue,
@@ -444,13 +527,20 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                                     },
                                     weeklyTarget = weeklyTarget,
                                     session = session,
-                                    reminderEnabled = false,
-                                    reminderTime = "",
+                                    reminderEnabled = reminderTimes.isNotEmpty(),
+                                    reminderTime = reminderTimes.minOrNull() ?: "",
                                     paused = false,
                                     createdAt = "",
                                     sortOrder = 0,
                                 ),
                             )
+                            // Fase C: grava a LISTA de horários e agenda
+                            // os alarmes diários (um por horário).
+                            if (reminderTimes.isNotEmpty()) {
+                                deps.habits.setHabitReminders(
+                                    habitId, reminderTimes,
+                                )
+                            }
                             onDismiss()
                         }
                     }

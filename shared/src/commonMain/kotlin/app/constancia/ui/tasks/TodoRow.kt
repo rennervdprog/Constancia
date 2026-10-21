@@ -41,7 +41,6 @@ import app.constancia.domain.dueDateLabel
 import app.constancia.domain.dueLabel
 import app.constancia.domain.durationLabel
 import app.constancia.domain.prioName
-import app.constancia.domain.reminderLabel
 import app.constancia.domain.rescheduleDate
 import app.constancia.domain.rescheduleDateFrom
 import app.constancia.domain.rescheduleLabel
@@ -87,6 +86,8 @@ fun TodoRow(
     onReschedule: (String) -> Unit,
     // R2.3 (Fase A): concluir registrando a conclusão como de ontem.
     onCompleteYesterday: () -> Unit = {},
+    // R6.1 (Fase C): substituir a LISTA de lembretes da tarefa.
+    onSetReminders: (List<app.constancia.model.ReminderSpec>) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -96,7 +97,6 @@ fun TodoRow(
     val dueText = dueLabel(task, today)
     val deadline = task.deadlineDate
     val duration = task.durationMinutes
-    val reminder = task.reminderMinutesBefore
     val isOverdue = !task.done && task.dueDate != null &&
         task.dueDate < today.toString()
     val isDueToday = task.dueDate == today.toString()
@@ -261,11 +261,12 @@ fun TodoRow(
                             color = scheme.onSurfaceVariant,
                         )
                     }
-                    if (reminder != null) {
+                    if (task.reminders.isNotEmpty()) {
                         Text(
-                            text = "lembrete: " + reminderLabel(
-                                reminder,
-                            ).lowercase(),
+                            text = "lembrete: " + (
+                                app.constancia.domain.remindersSummary(task)
+                                    ?: ""
+                                ).lowercase(),
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontSize = 11.5.sp,
                             ),
@@ -392,6 +393,26 @@ fun TodoRow(
                             )
                         }
                     }
+                }
+                // Fase C (R6.1): a LISTA de lembretes é editável aqui,
+                // no detalhe da tarefa (relativos + horário fixo).
+                if (!task.done) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Lembretes",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    ReminderListEditor(
+                        specs = task.reminders.map {
+                            app.constancia.model.ReminderSpec(
+                                it.type, it.minuteOffset, it.atMillis,
+                            )
+                        },
+                        onChange = onSetReminders,
+                        absoluteDate = task.dueDate?.toLocalDate(),
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
                 FlowRow(
@@ -544,6 +565,9 @@ fun TodoRowWithActions(
         },
         onReschedule = { ymd ->
             scope.launch { deps.tasks.setDueDate(task.id, ymd) }
+        },
+        onSetReminders = { specs ->
+            scope.launch { deps.tasks.setTaskReminders(task.id, specs) }
         },
         onCompleteYesterday = {
             scope.launch {

@@ -105,6 +105,9 @@ fun MoreScreen(
         .collectAsState(initial = false)
     val reviewTime by deps.prefs.dailyReviewTimeFlow()
         .collectAsState(initial = "08:00")
+    // Fase C (R6.2): lembrete automático das tarefas com horário.
+    val autoReminderMinutes by deps.prefs.autoReminderMinutesFlow()
+        .collectAsState(initial = -1)
     var reviewTimeText by remember { mutableStateOf<String?>(null) }
 
     val bestStreak = statuses.maxOfOrNull { it.currentStreak } ?: 0
@@ -477,6 +480,87 @@ fun MoreScreen(
                                 modifier = Modifier.width(100.dp),
                                 shape = RoundedCornerShape(12.dp),
                             )
+                        }
+                    }
+                }
+            }
+            item {
+                StackCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconTile(
+                            icon = Icons.Filled.Notifications,
+                            tint = extra.tintSun,
+                            iconColor = extra.sunColor,
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Lembrete automático",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "Tarefa nova COM horário ganha um " +
+                                    "lembrete sozinha, mesmo sem você " +
+                                    "mexer no campo de lembrete.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = scheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        listOf(
+                            "Desligado" to -1,
+                            "Na hora" to 0,
+                            "10 min" to 10,
+                            "30 min" to 30,
+                            "1 h antes" to 60,
+                        ).forEach { (label, value) ->
+                            val selected = autoReminderMinutes == value
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(99.dp))
+                                    .background(
+                                        if (selected) {
+                                            scheme.primaryContainer
+                                        } else {
+                                            scheme.surfaceVariant
+                                        },
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (selected) {
+                                            scheme.primary
+                                        } else {
+                                            scheme.outline
+                                        },
+                                        RoundedCornerShape(99.dp),
+                                    )
+                                    .clickable {
+                                        scope.launch {
+                                            deps.prefs
+                                                .setAutoReminderMinutes(value)
+                                        }
+                                    }
+                                    .padding(
+                                        horizontal = 11.dp,
+                                        vertical = 8.dp,
+                                    ),
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme
+                                        .typography.labelLarge,
+                                    color = if (selected) {
+                                        scheme.onPrimaryContainer
+                                    } else {
+                                        scheme.onSurface
+                                    },
+                                )
+                            }
                         }
                     }
                 }

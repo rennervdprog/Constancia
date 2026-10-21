@@ -223,6 +223,10 @@ fun TasksScreen(
                     dueTime = parse.dueTime,
                     repeatRule = parse.repeat?.let { repeatLabel(it) } ?: "",
                     repeatSpec = parse.repeat?.let { encodeRepeatSpec(it) } ?: "",
+                    // R3.3 (Fase C): "!30m" vira lembrete; "por 30min"
+                    // vira a duração estimada da tarefa criada.
+                    reminderMinutesBefore = parse.reminderMinutes,
+                    durationMinutes = parse.durationMinutes,
                 ),
             )
         }

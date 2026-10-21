@@ -49,7 +49,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import app.constancia.AppDeps
-import app.constancia.domain.REMINDER_OPTIONS
 import app.constancia.domain.RepeatBase
 import app.constancia.domain.RepeatFreq
 import app.constancia.domain.RepeatRule
@@ -98,7 +97,10 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
     // Itens 8 e 9: prazo final, duração estimada e lembrete.
     var deadlineChoice by remember { mutableStateOf(0) } // 0 sem, 1 hoje, 2 amanhã, 3 +7d, 4 +30d
     var duration by remember { mutableStateOf<Int?>(null) }
-    var reminder by remember { mutableStateOf<Int?>(null) }
+    // Fase C (R6.1): o lembrete virou LISTA (relativos + absolutos).
+    var reminderSpecs by remember {
+        mutableStateOf<List<app.constancia.model.ReminderSpec>>(emptyList())
+    }
     // Fase A (desvio vínculo): hábito vinculado — concluir a tarefa
     // marca o hábito do dia. Até aqui habitId só existia no modelo.
     val habits by deps.habits.habitsFlow()
@@ -468,15 +470,17 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 }
             }
 
-            SheetSectionLabel("Lembrete")
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                REMINDER_OPTIONS.forEach { (label, value) ->
-                    PickChip(label, reminder == value) { reminder = value }
-                }
-            }
+            SheetSectionLabel("Lembretes")
+            ReminderListEditor(
+                specs = reminderSpecs,
+                onChange = { reminderSpecs = it },
+                // Sem data só há âncora absoluta se a série repetir
+                // (a primeira ocorrência ancora em hoje, como no salvar).
+                absoluteDate = when (dueChoice) {
+                    0 -> if (repeatOn) todayDate else null
+                    else -> anchorDate
+                },
+            )
 
             SheetSectionLabel("Hábito vinculado")
             if (habits.isEmpty()) {
@@ -622,7 +626,12 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                                 } ?: "",
                                 deadlineDate = deadline,
                                 durationMinutes = duration,
-                                reminderMinutesBefore = reminder,
+                                reminderMinutesBefore = reminderSpecs
+                                    .firstOrNull {
+                                        it.type ==
+                                            app.constancia.model.ReminderType.RELATIVE
+                                    }?.minuteOffset,
+                                reminders = reminderSpecs,
                                 habitId = habitId,
                                 subtaskTitles = subs,
                             ),
