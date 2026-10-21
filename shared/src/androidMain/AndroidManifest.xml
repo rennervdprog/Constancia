@@ -12,6 +12,9 @@
             android:name="app.constancia.notify.TaskReminderReceiver"
             android:exported="false" />
         <receiver
+            android:name="app.constancia.notify.HabitReminderReceiver"
+            android:exported="false" />
+        <receiver
             android:name="app.constancia.notify.DailyReviewReceiver"
             android:exported="false" />
         <receiver
