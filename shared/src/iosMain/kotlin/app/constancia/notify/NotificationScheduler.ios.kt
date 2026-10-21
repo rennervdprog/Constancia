@@ -1,12 +1,5 @@
 package app.constancia.notify
 
-import platform.Foundation.NSCalendar
-import platform.Foundation.NSCalendarUnitDay
-import platform.Foundation.NSCalendarUnitHour
-import platform.Foundation.NSCalendarUnitMinute
-import platform.Foundation.NSCalendarUnitMonth
-import platform.Foundation.NSCalendarUnitYear
-import platform.Foundation.NSDate
 import platform.Foundation.NSDateComponents
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionSound
@@ -15,6 +8,9 @@ import platform.UserNotifications.UNMutableNotificationContent
 import platform.UserNotifications.UNNotificationRequest
 import platform.UserNotifications.UNNotificationSound
 import platform.UserNotifications.UNUserNotificationCenter
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 
 /**
  * iOS: UNUserNotificationCenter. Diferença conhecida em relação ao
@@ -35,12 +31,16 @@ actual class NotificationScheduler {
         content.setTitle("Lembrete de tarefa")
         content.setBody(title)
         content.setSound(UNNotificationSound.defaultSound)
-        val date = NSDate(timeIntervalSince1970 = triggerAtMillis.toDouble() / 1000.0)
-        val components = NSCalendar.currentCalendar.components(
-            NSCalendarUnitYear or NSCalendarUnitMonth or NSCalendarUnitDay or
-                NSCalendarUnitHour or NSCalendarUnitMinute,
-            date,
-        )
+        // NSDate(timeIntervalSince1970=) não existe nestes bindings:
+        // monta os componentes a partir do instante via kotlinx-datetime.
+        val ldt = Instant.fromEpochMilliseconds(triggerAtMillis)
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+        val components = NSDateComponents()
+        components.setYear(ldt.year.toLong())
+        components.setMonth(ldt.monthNumber.toLong())
+        components.setDay(ldt.dayOfMonth.toLong())
+        components.setHour(ldt.hour.toLong())
+        components.setMinute(ldt.minute.toLong())
         val trigger = UNCalendarNotificationTrigger
             .triggerWithDateMatchingComponents(components, repeats = false)
         val request = UNNotificationRequest.requestWithIdentifier(
