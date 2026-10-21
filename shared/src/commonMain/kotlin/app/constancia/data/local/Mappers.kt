@@ -33,6 +33,7 @@ import app.constancia.model.PauseInterval
 import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
+import app.constancia.model.normalizeHabitColor
 import app.constancia.model.ReminderType
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskReminder
@@ -49,7 +50,9 @@ internal fun HabitRow.toModel(): Habit = Habit(
     id = id,
     name = name,
     icon = icon,
-    color = color,
+    // Linhas antigas guardaram o ULong empacotado do Compose no lugar
+    // do ARGB — normaliza na leitura (ver model.normalizeHabitColor).
+    color = normalizeHabitColor(color),
     goalType = goal_type.toGoalType(),
     targetQuantity = target_quantity,
     quantityUnit = quantity_unit,

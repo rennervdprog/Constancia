@@ -4,6 +4,7 @@ import app.constancia.model.Checkin
 import app.constancia.model.CheckinStatus
 import app.constancia.model.DiaryEntry
 import app.constancia.model.Habit
+import app.constancia.model.habitActiveFrom
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
 import app.constancia.model.toYmd
@@ -174,7 +175,7 @@ fun weekFractions(
         h.id to doneDatesFor(h, donePairs(checkinsByHabit[h.id].orEmpty()))
     }
     val activeFromByHabit = habits.associate { h ->
-        h.id to runCatching { h.createdAt.take(10).toLocalDate() }.getOrNull()
+        h.id to habitActiveFrom(h.createdAt)
     }
     return (0..6).map { offset ->
         val day = monday.plus(DatePeriod(days = offset))
@@ -219,7 +220,7 @@ fun heatGrid(
     val progressDates = checkins
         .filter { it.status == CheckinStatus.DONE && it.quantity > 0.0 }
         .map { it.date }.toSet()
-    val activeFrom = runCatching { habit.createdAt.take(10).toLocalDate() }.getOrNull()
+    val activeFrom = habitActiveFrom(habit.createdAt)
     return (0 until weeks).map { col ->
         (0..6).map { row ->
             val day = start.plus(DatePeriod(days = col * 7 + row))
@@ -248,7 +249,7 @@ fun completionRateLast30(
         h.id to doneDatesFor(h, donePairs(checkinsByHabit[h.id].orEmpty()))
     }
     val activeFromByHabit = habits.associate { h ->
-        h.id to runCatching { h.createdAt.take(10).toLocalDate() }.getOrNull()
+        h.id to habitActiveFrom(h.createdAt)
     }
     var due = 0
     var done = 0

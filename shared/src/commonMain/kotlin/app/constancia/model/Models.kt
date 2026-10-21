@@ -1,8 +1,10 @@
 package app.constancia.model
 
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
 import kotlin.random.Random
 
@@ -14,6 +16,22 @@ enum class GoalType { BINARY, QUANTITY }
 
 /** Frequência: todo dia, X vezes por semana, ou dias fixos da semana. */
 enum class FrequencyType { DAILY, WEEKLY_X, DAYS_OF_WEEK }
+
+/**
+ * Formato canônico de [Habit.color]: o ARGB puro num Long (0xFF0B7A55).
+ * Até o reteste de 2026-10-21, as telas gravavam outra coisa: o ULong
+ * empacotado do Compose (`Color.value`), com o ARGB nos 32 bits ALTOS
+ * e zeros embaixo — ao renderizar com `Color(long)`, a cor saía
+ * transparente (tile cinza vazio, ícone invisível). Esta normalização
+ * detecta o formato antigo (32 bits baixos zerados e algo em cima) e
+ * desce o ARGB pro lugar certo; valores já canônicos passam intactos.
+ */
+fun normalizeHabitColor(stored: Long): Long =
+    if (stored != 0L && (stored and 0xFFFF_FFFFL) == 0L) {
+        stored ushr 32
+    } else {
+        stored
+    }
 
 data class Habit(
     val id: String,
@@ -373,3 +391,21 @@ fun LocalDate.isoDayNumberCompat(): Int =
 
 /** isoDayNumberCompat(): 1=segunda..7=domingo -> 1=domingo..7=sábado (padrão do app). */
 fun isoToAppDay(isoDayNumber: Int): Int = if (isoDayNumber == 7) 1 else isoDayNumber + 1
+
+/**
+ * Primeiro dia ATIVO de um hábito, a partir do `createdAt` gravado.
+ * O valor gravado é um INSTANTE ISO em UTC ("2026-10-21T23:30:00Z");
+ * o dia que conta é o dia LOCAL desse instante — não o prefixo em
+ * UTC. Usar `take(10)` direto marcava como "criado amanhã" quem
+ * criava o hábito à noite (depois das 21h em UTC-3, o dia UTC já
+ * virou) e o hábito sumia da tela Hoje no dia da criação. Valores
+ * legados só-data ("2026-10-21") continuam aceitos pelo fallback.
+ */
+fun habitActiveFrom(
+    createdAt: String,
+    timeZone: TimeZone = TimeZone.currentSystemDefault(),
+): LocalDate? =
+    runCatching {
+        Instant.parse(createdAt).toLocalDateTime(timeZone).date
+    }.getOrNull()
+        ?: runCatching { createdAt.take(10).toLocalDate() }.getOrNull()

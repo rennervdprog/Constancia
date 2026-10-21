@@ -222,6 +222,8 @@ internal fun PickChip(label: String, selected: Boolean, onClick: () -> Unit) {
             text = label,
             style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
             color = if (selected) scheme.surface else scheme.onSurfaceVariant,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

@@ -109,6 +109,11 @@ private fun RowScope.SegmentedChip(
             text = label,
             style = MaterialTheme.typography.labelLarge,
             color = if (selected) scheme.onSurface else scheme.onSurfaceVariant,
+            // Linha única sempre: com 5 opções ("Sem prazo", "+30 dias"…)
+            // o rótulo quebrava em 2 linhas e o chip crescia (reteste
+            // 2026-10-21).
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

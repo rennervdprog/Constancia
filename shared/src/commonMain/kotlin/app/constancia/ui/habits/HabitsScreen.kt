@@ -67,6 +67,8 @@ import app.constancia.model.Checkin
 import app.constancia.model.CheckinStatus
 import app.constancia.model.FrequencyType
 import app.constancia.model.Habit
+import app.constancia.model.isoToAppDay
+import app.constancia.model.habitActiveFrom
 import app.constancia.model.HabitCycle
 import app.constancia.model.HabitRecord
 import app.constancia.model.HabitStatus
@@ -77,6 +79,8 @@ import app.constancia.model.todayYmd
 import app.constancia.theme.constanciaExtra
 import app.constancia.ui.common.SegmentedRow
 import app.constancia.ui.common.TileCard
+import app.constancia.ui.common.habitColorOf
+import app.constancia.ui.home.NewHabitSheet
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
@@ -109,6 +113,23 @@ private fun sessionSuffix(habit: Habit): String = " · sessão da " + when (habi
     Session.NOITE -> "noite"
 }
 
+/**
+ * Dias de descanso visíveis no cartão ("· folga qua"). Antes eram
+ * invisíveis em toda a UI: um hábito com folga no dia simplesmente
+ * sumia da tela Hoje sem explicação (reteste 2026-10-21, bug nº 1).
+ */
+private fun restDaysSuffix(habit: Habit): String =
+    if (habit.frequencyType == FrequencyType.WEEKLY_X ||
+        habit.ignoreWeekdays.isEmpty()
+    ) {
+        ""
+    } else {
+        " · folga " + habit.ignoreWeekdays.sorted()
+            .joinToString(", ") { iso ->
+                DOW_SHORT.getOrNull(isoToAppDay(iso) - 1)?.lowercase() ?: ""
+            }
+    }
+
 /** Meta de dias da semana atual, conforme o tipo de frequência. */
 private fun weekTargetOf(habit: Habit): Int = when (habit.frequencyType) {
     FrequencyType.WEEKLY_X -> habit.weeklyTarget
@@ -131,6 +152,8 @@ fun HabitsScreen(
     val scope = rememberCoroutineScope()
     val today = remember { todayYmd() }
     val todayDate = remember { today.toLocalDate() }
+    // Bug nº 4 (reteste 2026-10-21): hábito em edição (folha preenchida).
+    var editingHabit by remember { mutableStateOf<Habit?>(null) }
     val rangeFrom = remember {
         todayDate.minus(DatePeriod(days = 400)).toString()
     }
@@ -259,8 +282,7 @@ fun HabitsScreen(
                     dueToday = isDueOn(
                         habit,
                         todayDate,
-                        runCatching { habit.createdAt.take(10).toLocalDate() }
-                            .getOrNull(),
+                        habitActiveFrom(habit.createdAt),
                     ),
                     habitCheckins = habitCheckins,
                     cycles = allCycles.filter { it.habitId == habit.id },
@@ -285,6 +307,7 @@ fun HabitsScreen(
                             deps.checkins.saveRecord(habit.id, today, content, emoji)
                         }
                     },
+                    onEdit = { editingHabit = habit },
                     onSetHabitReminders = { times ->
                         scope.launch {
                             deps.habits.setHabitReminders(habit.id, times)
@@ -328,6 +351,16 @@ fun HabitsScreen(
                 )
             }
         }
+    }
+
+    // Bug nº 4 do reteste 2026-10-21: editar hábito (folha preenchida,
+    // update no mesmo id).
+    editingHabit?.let { habit ->
+        NewHabitSheet(
+            deps = deps,
+            onDismiss = { editingHabit = null },
+            editing = habit,
+        )
     }
 }
 
@@ -392,10 +425,11 @@ private fun HabitCard(
     onStartCycle: (Int) -> Unit,
     onSaveRecord: (String, String?) -> Unit,
     onSetHabitReminders: (List<String>) -> Unit,
+    onEdit: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
-    val habitColor = Color(habit.color)
+    val habitColor = habitColorOf(habit.color)
     val weekly = habit.frequencyType == FrequencyType.WEEKLY_X
     val streak = status?.currentStreak ?: 0
     val doneToday = status?.isDoneToday == true
@@ -430,11 +464,22 @@ private fun HabitCard(
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = frequencyShort(habit) + sessionSuffix(habit),
+                    text = frequencyShort(habit) + sessionSuffix(habit) +
+                        restDaysSuffix(habit),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )
             }
+            Text(
+                text = "Editar",
+                style = MaterialTheme.typography.labelLarge,
+                color = scheme.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onEdit)
+                    .testTag("habit_edit_" + habit.id)
+                    .padding(8.dp),
+            )
             if (!habit.paused && (dueToday || doneToday)) {
                 Box(
                     modifier = Modifier.size(38.dp)
@@ -713,7 +758,7 @@ private fun HabitCycleSection(
     onStartCycle: (Int) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    val habitColor = Color(habit.color)
+    val habitColor = habitColorOf(habit.color)
     val doneDates = doneDatesFor(habit, donePairs(habitCheckins))
     val skipped = skippedDatesFor(habitCheckins)
     val sorted = cycles.sortedBy { it.startDate }

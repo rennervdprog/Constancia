@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.constancia.AppDeps
 import app.constancia.domain.RepeatBase
@@ -258,10 +259,13 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 OutlinedTextField(
                     value = timeText,
                     onValueChange = { v ->
-                        timeText = v.filter { c -> c.isDigit() || c == ':' }.take(5)
+                        timeText = app.constancia.domain.maskTimeText(v)
                     },
                     placeholder = { Text("HH:mm") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                    ),
                     modifier = Modifier.width(110.dp),
                     shape = RoundedCornerShape(12.dp),
                 )

@@ -1,6 +1,8 @@
 package app.constancia.ui.more
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -514,36 +516,30 @@ fun MoreScreen(
                             OutlinedTextField(
                                 value = reviewTimeText ?: reviewTime,
                                 onValueChange = { value ->
-                                    val clean = value.filter { c ->
-                                        c.isDigit() || c == ':'
-                                    }.take(5)
+                                    val clean =
+                                        app.constancia.domain.maskTimeText(value)
                                     reviewTimeText = clean
-                                    if (clean.matches(
-                                            Regex("^\\d{1,2}:\\d{2}$"),
-                                        )
-                                    ) {
-                                        val parts = clean.split(":")
-                                        val hour = parts[0].toIntOrNull()
-                                        val minute = parts[1].toIntOrNull()
-                                        if (hour != null && minute != null &&
-                                            hour in 0..23 && minute in 0..59
-                                        ) {
-                                            val hhmm = hour.toString()
-                                                .padStart(2, '0') + ":" +
-                                                minute.toString()
-                                                    .padStart(2, '0')
-                                            scope.launch {
-                                                deps.prefs
-                                                    .setDailyReviewTime(hhmm)
-                                                NotificationScheduler()
-                                                    .scheduleDailyReview(
-                                                        hour, minute,
-                                                    )
-                                            }
+                                    val parsed = app.constancia.domain
+                                        .parseTimeOrNull(clean)
+                                    if (parsed != null && clean.length == 5) {
+                                        val hhmm = parsed.hour.toString()
+                                            .padStart(2, '0') + ":" +
+                                            parsed.minute.toString()
+                                                .padStart(2, '0')
+                                        scope.launch {
+                                            deps.prefs
+                                                .setDailyReviewTime(hhmm)
+                                            NotificationScheduler()
+                                                .scheduleDailyReview(
+                                                    parsed.hour, parsed.minute,
+                                                )
                                         }
                                     }
                                 },
                                 singleLine = true,
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Number,
+                                ),
                                 modifier = Modifier.width(100.dp),
                                 shape = RoundedCornerShape(12.dp),
                             )

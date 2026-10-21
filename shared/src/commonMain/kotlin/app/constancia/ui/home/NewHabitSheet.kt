@@ -50,12 +50,15 @@ import app.constancia.AppDeps
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.first
 import app.constancia.model.Session
 import app.constancia.model.newId
 import app.constancia.theme.HabitPalette
 import app.constancia.ui.common.HABIT_ICON_KEYS
 import app.constancia.ui.common.SegmentedRow
 import app.constancia.ui.common.SheetSectionLabel
+import app.constancia.ui.common.argbLongOf
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
 
@@ -66,29 +69,68 @@ private val DAY_LETTERS = listOf("D", "S", "T", "Q", "Q", "S", "S")
 private val ISO_DAY_LETTERS = listOf("S", "T", "Q", "Q", "S", "S", "D")
 
 @OptIn(ExperimentalMaterial3Api::class)
+/** Quantidade como texto de formulário: inteiro sem o ".0" ("2", "0,5"→"0.5"). */
+private fun fmtQty(v: Double): String =
+    if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
+
 @Composable
-fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
+fun NewHabitSheet(
+    deps: AppDeps,
+    onDismiss: () -> Unit,
+    // Reteste 2026-10-21 (bug nº 4): editar hábito não existia. Com
+    // [editing] preenchido, a folha abre com os valores do hábito e
+    // salvar faz UPDATE no mesmo id (check-ins, sequência, ciclos e
+    // histórico ficam intactos — o update do repositório nem toca
+    // paused/archived/created_at).
+    editing: Habit? = null,
+) {
     val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
-    var goalType by remember { mutableStateOf(GoalType.BINARY) }
-    var targetText by remember { mutableStateOf("8") }
-    var stepText by remember { mutableStateOf("1") }
-    var unit by remember { mutableStateOf("copos") }
-    var showInToday by remember { mutableStateOf(false) }
-    var showInCalendar by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf(editing?.name ?: "") }
+    var goalType by remember { mutableStateOf(editing?.goalType ?: GoalType.BINARY) }
+    var targetText by remember {
+        mutableStateOf(editing?.let { fmtQty(it.targetQuantity) } ?: "8")
+    }
+    var stepText by remember {
+        mutableStateOf(editing?.let { fmtQty(it.quantityStep) } ?: "1")
+    }
+    var unit by remember { mutableStateOf(editing?.quantityUnit ?: "copos") }
+    var showInToday by remember { mutableStateOf(editing?.showInToday ?: false) }
+    var showInCalendar by remember { mutableStateOf(editing?.showInCalendar ?: false) }
     // Fase C: VÁRIOS horários de lembrete por hábito ("HH:mm").
     var reminderTimes by remember { mutableStateOf<List<String>>(emptyList()) }
     var reminderTimeText by remember { mutableStateOf("") }
-    val habitId = remember { newId() }
-    var iconKey by remember { mutableStateOf(HABIT_ICON_KEYS[0]) }
-    var colorValue by remember { mutableStateOf(HabitPalette[0].value.toLong()) }
-    var freqType by remember { mutableStateOf(FrequencyType.DAILY) }
-    var weeklyTarget by remember { mutableStateOf(3) }
-    var days by remember { mutableStateOf((1..7).toSet()) }
+    val habitId = remember { editing?.id ?: newId() }
+    var iconKey by remember {
+        mutableStateOf(
+            editing?.icon?.takeIf { it in HABIT_ICON_KEYS } ?: HABIT_ICON_KEYS[0],
+        )
+    }
+    var colorValue by remember {
+        mutableStateOf(editing?.color ?: argbLongOf(HabitPalette[0]))
+    }
+    var freqType by remember {
+        mutableStateOf(editing?.frequencyType ?: FrequencyType.DAILY)
+    }
+    var weeklyTarget by remember { mutableStateOf(editing?.weeklyTarget ?: 3) }
+    var days by remember {
+        mutableStateOf(
+            editing?.daysOfWeek?.ifEmpty { (1..7).toList() }?.toSet() ?: (1..7).toSet(),
+        )
+    }
     // Fase D (R13.1): dias de descanso planejados, ISO (1=seg..7=dom).
-    var ignoreDays by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    var session by remember { mutableStateOf(Session.MANHA) }
+    var ignoreDays by remember {
+        mutableStateOf(editing?.ignoreWeekdays ?: emptySet())
+    }
+    var session by remember { mutableStateOf(editing?.session ?: Session.MANHA) }
     var saving by remember { mutableStateOf(false) }
+
+    // Edição: semeia a lista de lembretes com os horários gravados.
+    LaunchedEffect(habitId) {
+        if (editing != null) {
+            reminderTimes = deps.habits.habitRemindersFlow(habitId)
+                .first().map { it.time }
+        }
+    }
 
     val scheme = MaterialTheme.colorScheme
 
@@ -111,7 +153,7 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Novo hábito",
+                    text = if (editing != null) "Editar hábito" else "Novo hábito",
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f),
                 )
@@ -239,7 +281,7 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 HabitPalette.forEach { color ->
-                    val selected = color.value.toLong() == colorValue
+                    val selected = argbLongOf(color) == colorValue
                     Box(
                         modifier = Modifier
                             .size(40.dp)
@@ -249,7 +291,7 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                                 if (selected) Modifier.border(3.dp, scheme.primary, CircleShape)
                                 else Modifier,
                             )
-                            .clickable { colorValue = color.value.toLong() },
+                            .clickable { colorValue = argbLongOf(color) },
                     )
                 }
             }
@@ -509,12 +551,14 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 OutlinedTextField(
                     value = reminderTimeText,
                     onValueChange = { value ->
-                        reminderTimeText = value
-                            .filter { c -> c.isDigit() || c == ':' }
-                            .take(5)
+                        reminderTimeText =
+                            app.constancia.domain.maskTimeText(value)
                     },
                     placeholder = { Text("HH:mm") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                    ),
                     modifier = Modifier.width(110.dp),
                     shape = RoundedCornerShape(12.dp),
                 )
@@ -593,14 +637,17 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                                     session = session,
                                     reminderEnabled = reminderTimes.isNotEmpty(),
                                     reminderTime = reminderTimes.minOrNull() ?: "",
-                                    paused = false,
-                                    createdAt = "",
-                                    sortOrder = 0,
+                                    paused = editing?.paused ?: false,
+                                    createdAt = editing?.createdAt ?: "",
+                                    sortOrder = editing?.sortOrder ?: 0,
                                 ),
                             )
                             // Fase C: grava a LISTA de horários e agenda
-                            // os alarmes diários (um por horário).
-                            if (reminderTimes.isNotEmpty()) {
+                            // os alarmes diários (um por horário). Na
+                            // edição sincroniza SEMPRE (lista vazia limpa
+                            // os lembretes); na criação, só quando há
+                            // horários.
+                            if (editing != null || reminderTimes.isNotEmpty()) {
                                 deps.habits.setHabitReminders(
                                     habitId, reminderTimes,
                                 )
@@ -613,7 +660,7 @@ fun NewHabitSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = "Criar hábito",
+                    text = if (editing != null) "Salvar alterações" else "Criar hábito",
                     style = MaterialTheme.typography.titleLarge,
                     color = scheme.onPrimary,
                 )

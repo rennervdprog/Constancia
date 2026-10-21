@@ -49,6 +49,7 @@ import app.constancia.model.newId
 import app.constancia.model.toLocalDate
 import app.constancia.model.todayYmd
 import app.constancia.theme.HabitPalette
+import app.constancia.ui.common.argbLongOf
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
 
@@ -86,9 +87,9 @@ fun ChallengesScreen(deps: AppDeps, modifier: Modifier = Modifier) {
                                 newId(),
                                 challenge.habitName,
                                 challenge.habitIcon,
-                                // Long de verdade: 0xFF0B7A55 como Int vira
-                                // negativo e o Color() sai cinza/quebrado.
-                                HabitPalette[0].value.toLong(),
+                                // ARGB Long canônico (0xFF0B7A55) — o
+                                // formato que Habit.color guarda e lê.
+                                argbLongOf(HabitPalette[0]),
                                 GoalType.BINARY,
                                 1.0,
                                 "",

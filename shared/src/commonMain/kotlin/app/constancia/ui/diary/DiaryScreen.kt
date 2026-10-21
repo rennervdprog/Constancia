@@ -81,6 +81,7 @@ import app.constancia.model.todayYmd
 import app.constancia.theme.constanciaExtra
 import app.constancia.ui.common.BackRow
 import app.constancia.ui.common.CtaButton
+import app.constancia.ui.common.habitColorOf
 import app.constancia.ui.common.moodColor
 import app.constancia.ui.common.MoodFace
 import kotlin.math.roundToInt
@@ -717,7 +718,7 @@ fun DiaryScreen(
                                                                         .size(5.dp)
                                                                         .clip(CircleShape)
                                                                         .background(
-                                                                            Color(c),
+                                                                            habitColorOf(c),
                                                                         ),
                                                                 )
                                                             }

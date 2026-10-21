@@ -103,6 +103,7 @@ import app.constancia.model.CheckinStatus
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
+import app.constancia.model.habitActiveFrom
 import app.constancia.model.HabitStatus
 import app.constancia.model.Session
 import app.constancia.model.TaskItem
@@ -111,6 +112,7 @@ import app.constancia.model.todayYmd
 import app.constancia.model.toLocalDate
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.theme.constanciaExtra
+import app.constancia.ui.common.habitColorOf
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -142,8 +144,7 @@ private fun fmtQty(value: Double): String {
     return if (value == asLong.toDouble()) asLong.toString() else value.toString()
 }
 
-private fun createdFrom(habit: Habit) =
-    runCatching { habit.createdAt.take(10).toLocalDate() }.getOrNull()
+private fun createdFrom(habit: Habit) = habitActiveFrom(habit.createdAt)
 
 /** Frequência curta da linha do hábito ("todo dia", "seg, qua e sex"). */
 private fun freqShort(habit: Habit, weekDone: Int): String = when (habit.frequencyType) {
@@ -1111,7 +1112,7 @@ private fun HabitSessionRow(
 ) {
     val scheme = MaterialTheme.colorScheme
     val habit = status.habit
-    val habitColor = Color(habit.color)
+    val habitColor = habitColorOf(habit.color)
     val isQuantity = habit.goalType == GoalType.QUANTITY
     val currentQty = status.todayCheckin?.quantity ?: 0.0
     Column(
@@ -1743,7 +1744,7 @@ private fun PausedSection(
                             modifier = Modifier
                                 .size(36.dp)
                                 .background(
-                                    Color(habit.color).copy(alpha = 0.15f),
+                                    habitColorOf(habit.color).copy(alpha = 0.15f),
                                     RoundedCornerShape(12.dp),
                                 )
                                 .padding(8.dp),
@@ -1752,7 +1753,7 @@ private fun PausedSection(
                             Icon(
                                 habitIcon(habit.icon),
                                 contentDescription = null,
-                                tint = Color(habit.color),
+                                tint = habitColorOf(habit.color),
                                 modifier = Modifier.size(20.dp),
                             )
                         }

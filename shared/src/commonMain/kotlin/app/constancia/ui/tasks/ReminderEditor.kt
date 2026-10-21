@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.constancia.domain.REMINDER_OPTIONS
 import app.constancia.domain.parseTimeOrNull
@@ -109,12 +111,13 @@ fun ReminderListEditor(
                 OutlinedTextField(
                     value = absTimeText,
                     onValueChange = { value ->
-                        absTimeText = value
-                            .filter { c -> c.isDigit() || c == ':' }
-                            .take(5)
+                        absTimeText = app.constancia.domain.maskTimeText(value)
                     },
                     placeholder = { Text("HH:mm") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                    ),
                     modifier = Modifier.width(104.dp),
                     shape = RoundedCornerShape(12.dp),
                 )

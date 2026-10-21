@@ -5,6 +5,7 @@ import app.constancia.model.DiaryEntry
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
+import app.constancia.model.habitActiveFrom
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.isoToAppDay
 import app.constancia.model.toLocalDate
@@ -163,7 +164,7 @@ fun computeReport(
         h.id to satisfiedDates(h, doneDatesFor(h, pairs))
     }
     val activeFromByHabit = habits.associate { h ->
-        h.id to runCatching { h.createdAt.take(10).toLocalDate() }.getOrNull()
+        h.id to habitActiveFrom(h.createdAt)
     }
     fun dueOn(h: Habit, d: LocalDate): Boolean =
         isDueOn(h, d, activeFromByHabit[h.id])

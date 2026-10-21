@@ -122,6 +122,7 @@ import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.isoToAppDay
 import app.constancia.theme.constanciaExtra
 import app.constancia.ui.common.BackRow
+import app.constancia.ui.common.habitColorOf
 import app.constancia.ui.common.habitIcon
 import app.constancia.ui.common.moodColor
 import app.constancia.ui.tasks.priorityColor
@@ -799,7 +800,7 @@ private fun HabitRow(hr: HabitReport) {
     var expanded by remember { mutableStateOf(false) }
     val cs = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
-    val habitColor = Color(hr.habit.color)
+    val habitColor = habitColorOf(hr.habit.color)
     Column(
         Modifier
             .fillMaxWidth()

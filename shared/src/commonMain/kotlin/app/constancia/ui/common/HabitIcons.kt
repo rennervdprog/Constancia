@@ -13,7 +13,9 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.SelfImprovement
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.Work
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import app.constancia.model.normalizeHabitColor
 
 // Catálogo de ícones disponíveis na criação/edição de hábitos.
 // A chave é o que fica salvo em Habit.icon.
@@ -38,3 +40,15 @@ fun habitIcon(key: String): ImageVector = when (key) {
     "music" -> Icons.Filled.MusicNote
     else -> Icons.Filled.Check
 }
+
+/**
+ * Cor renderizável de um hábito a partir do Long gravado. Passa pela
+ * normalização do modelo (linhas antigas guardaram o ULong empacotado
+ * do Compose, que renderizava transparente) e usa `Color(Int)` — o
+ * ARGB clássico, sem ambiguidade de empacotamento.
+ */
+fun habitColorOf(stored: Long): Color =
+    Color(normalizeHabitColor(stored).toInt())
+
+/** ARGB Long canônico (0xFF0B7A55) de uma cor — o formato de Habit.color. */
+fun argbLongOf(color: Color): Long = (color.value shr 32).toLong()
