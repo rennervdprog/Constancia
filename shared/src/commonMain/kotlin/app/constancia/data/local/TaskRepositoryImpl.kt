@@ -5,7 +5,11 @@ import app.cash.sqldelight.coroutines.mapToList
 import app.constancia.data.CheckinRepository
 import app.constancia.data.TaskRepository
 import app.constancia.db.ConstanciaDb
+import app.constancia.domain.encodeRepeatSpec
+import app.constancia.domain.effectiveRepeatSpec
+import app.constancia.domain.nextOccurrence
 import app.constancia.domain.nextRepeatDate
+import app.constancia.domain.repeatLabel
 import app.constancia.model.GoalPause
 import app.constancia.model.GoalType
 import app.constancia.model.NewTask
@@ -390,10 +394,19 @@ class TaskRepositoryImpl(
      * Tarefa recorrente concluída -> cria a próxima ocorrência (mesmos
      * campos, subtarefas zeradas), se ainda não existir uma igual no dia.
      * O prazo final acompanha deslocado pelo mesmo intervalo do prazo.
+     * Com regra estruturada (item 7), a próxima sai de nextOccurrence
+     * (base prazo × conclusão, término) e a série passa a carregar a
+     * spec normalizada; sem spec, vale o nextRepeatDate legado.
      */
     private suspend fun spawnNextOccurrence(task: TaskItem) {
         val due = task.dueDate ?: return
-        val next = nextRepeatDate(task.repeatRule, due.toLocalDate()) ?: return
+        val dueDate = due.toLocalDate()
+        val spec = effectiveRepeatSpec(task.repeatSpec, task.repeatRule, dueDate)
+        val next = if (spec != null) {
+            nextOccurrence(spec, dueDate, todayYmd().toLocalDate())
+        } else {
+            nextRepeatDate(task.repeatRule, dueDate)
+        } ?: return
         val nextYmd = next.toYmd()
         val already = withContext(Dispatchers.Default) {
             queries.selectTasksForDate(nextYmd, nextYmd).executeAsList().any {
@@ -402,7 +415,7 @@ class TaskRepositoryImpl(
             }
         }
         if (already) return
-        val shiftDays = next.toEpochDays() - due.toLocalDate().toEpochDays()
+        val shiftDays = next.toEpochDays() - dueDate.toEpochDays()
         val nextDeadline = task.deadlineDate?.toLocalDate()
             ?.plus(DatePeriod(days = shiftDays.toInt()))?.toYmd()
         add(
@@ -414,13 +427,13 @@ class TaskRepositoryImpl(
                 dueDate = nextYmd,
                 session = task.session,
                 dueTime = task.dueTime,
-                repeatRule = task.repeatRule,
+                repeatRule = if (spec != null) repeatLabel(spec) else task.repeatRule,
                 habitId = task.habitId,
                 subtaskTitles = task.subtasks.map { it.title },
                 deadlineDate = nextDeadline,
                 durationMinutes = task.durationMinutes,
                 reminderMinutesBefore = task.reminderMinutesBefore,
-                repeatSpec = task.repeatSpec,
+                repeatSpec = if (spec != null) encodeRepeatSpec(spec) else "",
             ),
         )
     }

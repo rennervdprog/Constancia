@@ -1,5 +1,6 @@
 package app.constancia.domain
 
+import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
@@ -35,7 +36,13 @@ data class SubProgress(val done: Int, val total: Int) {
 const val REPEAT_DAILY = "Todo dia"
 const val REPEAT_WEEKDAYS = "Seg a Sex"
 const val REPEAT_WEEKLY = "Semanal"
-val REPEAT_OPTIONS = listOf("", REPEAT_DAILY, REPEAT_WEEKDAYS, REPEAT_WEEKLY)
+const val REPEAT_BIWEEKLY = "A cada 2 semanas"
+const val REPEAT_MONTHLY = "Mensal"
+const val REPEAT_YEARLY = "Anual"
+val REPEAT_OPTIONS = listOf(
+    "", REPEAT_DAILY, REPEAT_WEEKDAYS, REPEAT_WEEKLY,
+    REPEAT_BIWEEKLY, REPEAT_MONTHLY, REPEAT_YEARLY,
+)
 
 /** "P1"/"P2"/"P3" a partir da prioridade 1..3. */
 fun prioCode(priority: Int): String = "P" + priority.coerceIn(1, 3)
@@ -168,12 +175,17 @@ fun upcomingGroupTitle(day: LocalDate, today: LocalDate): String {
 
 /**
  * Próxima ocorrência de uma tarefa recorrente a partir do prazo atual.
- * "Todo dia" -> +1 dia; "Semanal" -> +7 dias; "Seg a Sex" -> próximo dia útil.
+ * "Todo dia" -> +1 dia; "Semanal" -> +7 dias; "Seg a Sex" -> próximo dia útil;
+ * "A cada 2 semanas" -> +14 dias; "Mensal" -> mesmo dia do mês seguinte
+ * (com clamp no fim do mês); "Anual" -> mesmo dia do ano seguinte.
  * Null quando não repete ou não tem prazo.
  */
 fun nextRepeatDate(repeatRule: String, dueDate: LocalDate): LocalDate? = when (repeatRule) {
     REPEAT_DAILY -> dueDate.plus(DatePeriod(days = 1))
     REPEAT_WEEKLY -> dueDate.plus(DatePeriod(days = 7))
+    REPEAT_BIWEEKLY -> dueDate.plus(DatePeriod(days = 14))
+    REPEAT_MONTHLY -> dueDate.plus(DatePeriod(months = 1))
+    REPEAT_YEARLY -> dueDate.plus(DatePeriod(years = 1))
     REPEAT_WEEKDAYS -> {
         var d = dueDate.plus(DatePeriod(days = 1))
         // ISO: 6=sábado, 7=domingo.
@@ -181,6 +193,182 @@ fun nextRepeatDate(repeatRule: String, dueDate: LocalDate): LocalDate? = when (r
         d
     }
     else -> null
+}
+
+// ---------------------------------------------------------------------
+// Item 1 — reagendamento rápido (chips) e em massa.
+// ---------------------------------------------------------------------
+
+/** Alvos dos chips de reagendamento do Todoist. */
+enum class RescheduleTarget { WEEKEND, NEXT_WEEK, PLUS_3_DAYS, PLUS_1_WEEK }
+
+/** Data resultante de um chip de reagendamento a partir de hoje. */
+fun rescheduleDate(target: RescheduleTarget, today: LocalDate): LocalDate =
+    when (target) {
+        RescheduleTarget.PLUS_3_DAYS -> today.plus(DatePeriod(days = 3))
+        RescheduleTarget.PLUS_1_WEEK -> today.plus(DatePeriod(days = 7))
+        RescheduleTarget.WEEKEND -> {
+            // Próximo sábado (hoje, se já for sábado). ISO: sábado = 6.
+            val delta = (6 - today.isoDayNumberCompat() + 7) % 7
+            today.plus(DatePeriod(days = delta))
+        }
+        RescheduleTarget.NEXT_WEEK -> {
+            // Segunda-feira da semana que vem (sempre no futuro).
+            val delta = (8 - today.isoDayNumberCompat()) % 7
+            today.plus(DatePeriod(days = if (delta == 0) 7 else delta))
+        }
+    }
+
+/** Rótulo curto de cada chip de reagendamento. */
+fun rescheduleLabel(target: RescheduleTarget): String = when (target) {
+    RescheduleTarget.WEEKEND -> "Fim de semana"
+    RescheduleTarget.NEXT_WEEK -> "Semana que vem"
+    RescheduleTarget.PLUS_3_DAYS -> "+3 dias"
+    RescheduleTarget.PLUS_1_WEEK -> "+1 semana"
+}
+
+// ---------------------------------------------------------------------
+// Item 4 — agrupar e ordenar as listas.
+// ---------------------------------------------------------------------
+
+enum class TaskSortMode { SMART, PRIORITY, DUE }
+
+enum class TaskGroupBy { NONE, PROJECT, PRIORITY, DATE }
+
+data class TaskGroup(val title: String, val tasks: List<TaskItem>)
+
+/**
+ * Ordenação "inteligente" (padrão do Todoist): pendentes antes das
+ * feitas; entre as pendentes, atrasadas -> hoje -> futuras -> sem data;
+ * dentro do balde, prazo, prioridade e horário.
+ */
+fun sortSmart(tasks: List<TaskItem>, today: LocalDate): List<TaskItem> {
+    val todayYmd = today.toYmd()
+    fun bucket(t: TaskItem): Int = when {
+        t.done -> 4
+        t.dueDate == null -> 3
+        t.dueDate < todayYmd -> 0
+        t.dueDate == todayYmd -> 1
+        else -> 2
+    }
+    return tasks.sortedWith(
+        compareBy(
+            { bucket(it) },
+            { it.dueDate ?: "9999-99-99" },
+            { it.priority },
+            { timeSortKey(it.dueTime) },
+        ),
+    )
+}
+
+/** Ordenação por prazo puro (sem data por último; feitas por último). */
+fun sortByDue(tasks: List<TaskItem>): List<TaskItem> =
+    tasks.sortedWith(
+        compareBy(
+            { if (it.done) 1 else 0 },
+            { it.dueDate ?: "9999-99-99" },
+            { it.priority },
+            { timeSortKey(it.dueTime) },
+        ),
+    )
+
+/** Aplica o modo de ordenação escolhido sobre uma lista já filtrada. */
+fun applySort(
+    tasks: List<TaskItem>,
+    mode: TaskSortMode,
+    today: LocalDate,
+): List<TaskItem> = when (mode) {
+    TaskSortMode.SMART -> sortSmart(tasks, today)
+    TaskSortMode.PRIORITY -> sortByPrio(tasks)
+    TaskSortMode.DUE -> sortByDue(tasks)
+}
+
+/**
+ * Agrupa uma lista (já ordenada) por projeto, prioridade ou data.
+ * Grupos vazios são omitidos; a ordem dos grupos é a natural de cada eixo.
+ */
+fun groupTasks(
+    tasks: List<TaskItem>,
+    groupBy: TaskGroupBy,
+    today: LocalDate,
+): List<TaskGroup> = when (groupBy) {
+    TaskGroupBy.NONE -> if (tasks.isEmpty()) emptyList()
+    else listOf(TaskGroup("", tasks))
+
+    TaskGroupBy.PROJECT -> TaskProject.entries.mapNotNull { project ->
+        val inGroup = tasks.filter { it.project == project }
+        if (inGroup.isEmpty()) null else TaskGroup(project.label, inGroup)
+    }
+
+    TaskGroupBy.PRIORITY -> (1..3).mapNotNull { prio ->
+        val inGroup = tasks.filter { it.priority == prio }
+        if (inGroup.isEmpty()) null
+        else TaskGroup(prioCode(prio) + " · " + prioName(prio), inGroup)
+    }
+
+    TaskGroupBy.DATE -> {
+        val todayYmd = today.toYmd()
+        val groups = mutableListOf<TaskGroup>()
+        val overdue = tasks.filter {
+            it.dueDate != null && it.dueDate < todayYmd
+        }
+        if (overdue.isNotEmpty()) groups.add(TaskGroup("Atrasadas", overdue))
+        val dueToday = tasks.filter { it.dueDate == todayYmd }
+        if (dueToday.isNotEmpty()) groups.add(TaskGroup("Hoje", dueToday))
+        val tomorrow = today.plus(DatePeriod(days = 1))
+        val dueTomorrow = tasks.filter { it.dueDate == tomorrow.toYmd() }
+        if (dueTomorrow.isNotEmpty()) groups.add(TaskGroup("Amanhã", dueTomorrow))
+        val later = tasks.filter {
+            it.dueDate != null && it.dueDate > tomorrow.toYmd()
+        }
+        later.mapNotNull { task -> task.dueDate?.let { it to task } }
+            .groupBy({ it.first }, { it.second })
+            .toSortedMap()
+            .forEach { (ymd, inGroup) ->
+                groups.add(
+                    TaskGroup(dueDateLabel(ymd.toLocalDate(), today), inGroup),
+                )
+            }
+        val noDate = tasks.filter { it.dueDate == null }
+        if (noDate.isNotEmpty()) groups.add(TaskGroup("Sem data", noDate))
+        groups
+    }
+}
+
+// ---------------------------------------------------------------------
+// Item 10 — filtro das vistas salvas.
+// ---------------------------------------------------------------------
+
+/** Tarefas que pertencem a uma vista salva (pendentes e feitas; a
+ *  ordenação escolhida afunda as feitas no modo inteligente). */
+fun savedViewTasks(
+    tasks: List<TaskItem>,
+    view: SavedView,
+    today: LocalDate,
+): List<TaskItem> {
+    val todayYmd = today.toYmd()
+    val weekEnd = today.plus(DatePeriod(days = 6)).toYmd()
+    return tasks.filter { task ->
+        (view.project == null || task.project == view.project) &&
+            (view.priority == null || task.priority == view.priority) &&
+            when (view.period) {
+                "today" -> task.dueDate != null && task.dueDate <= todayYmd
+                "week" -> task.dueDate != null &&
+                    task.dueDate >= todayYmd && task.dueDate <= weekEnd
+                "overdue" -> !task.done && task.dueDate != null &&
+                    task.dueDate < todayYmd
+                "nodate" -> task.dueDate == null
+                else -> true // "all"
+            }
+    }
+}
+
+/** Converte o groupBy salvo (string) no enum de agrupamento. */
+fun groupByOf(value: String): TaskGroupBy = when (value) {
+    "project" -> TaskGroupBy.PROJECT
+    "priority" -> TaskGroupBy.PRIORITY
+    "date" -> TaskGroupBy.DATE
+    else -> TaskGroupBy.NONE
 }
 
 /** Chave de ordenação por horário: "HH:mm"; sem horário vai para o fim ("99:99"). */
