@@ -6,6 +6,9 @@ CREATE TABLE habit(
   goal_type TEXT NOT NULL, -- BINARY | QUANTITY
   target_quantity REAL NOT NULL DEFAULT 1.0,
   quantity_unit TEXT NOT NULL DEFAULT '',
+  quantity_step REAL NOT NULL DEFAULT 1.0, -- passo do stepper (TickTick item 1)
+  show_in_today INTEGER NOT NULL DEFAULT 0, -- opt-in: sempre mostrar na Hoje (item 4)
+  show_in_calendar INTEGER NOT NULL DEFAULT 0, -- opt-in: marcas no calendário do diário (item 4)
   frequency_type TEXT NOT NULL, -- DAILY | WEEKLY_X | DAYS_OF_WEEK
   days_of_week TEXT NOT NULL DEFAULT '', -- csv de 1..7 (1=domingo), vazio = todos
   weekly_target INTEGER NOT NULL DEFAULT 7,
@@ -23,10 +26,36 @@ CREATE TABLE checkin(
   habit_id TEXT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
   date TEXT NOT NULL, -- yyyy-MM-dd
   quantity REAL NOT NULL DEFAULT 1.0,
+  status TEXT NOT NULL DEFAULT 'DONE', -- DONE | SKIPPED (pulado não quebra streak)
   created_at TEXT NOT NULL,
   UNIQUE(habit_id, date)
 );
 CREATE INDEX checkin_habit_date ON checkin(habit_id, date);
+
+-- Log do hábito (TickTick item 3): nota + emoji por dia e hábito.
+CREATE TABLE habit_record(
+  id TEXT NOT NULL PRIMARY KEY,
+  habit_id TEXT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
+  date TEXT NOT NULL, -- yyyy-MM-dd
+  content TEXT NOT NULL DEFAULT '',
+  emoji TEXT, -- caractere emoji ou null
+  created_at TEXT NOT NULL,
+  UNIQUE(habit_id, date)
+);
+CREATE INDEX habit_record_habit ON habit_record(habit_id, date);
+
+-- Ciclos/temporadas do hábito (TickTick item 2): janela início/fim com
+-- meta de dias; completed_at preenchido = ciclo concluído (permanente).
+CREATE TABLE habit_cycle(
+  id TEXT NOT NULL PRIMARY KEY,
+  habit_id TEXT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
+  start_date TEXT NOT NULL, -- yyyy-MM-dd (inclusive)
+  end_date TEXT NOT NULL, -- yyyy-MM-dd (inclusive)
+  target_days INTEGER NOT NULL, -- meta de dias feitos dentro da janela
+  completed_at TEXT, -- instante ISO da conclusão ou null
+  created_at TEXT NOT NULL
+);
+CREATE INDEX habit_cycle_habit ON habit_cycle(habit_id, start_date);
 
 CREATE TABLE task_item(
   id TEXT NOT NULL PRIMARY KEY,
@@ -176,13 +205,15 @@ SELECT * FROM habit WHERE id = ?;
 
 insertHabit:
 INSERT INTO habit(id, name, icon, color, goal_type, target_quantity, quantity_unit,
+  quantity_step, show_in_today, show_in_calendar,
   frequency_type, days_of_week, weekly_target, session, reminder_enabled,
   reminder_time, paused, archived, created_at, sort_order)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateHabit:
 UPDATE habit SET name = ?, icon = ?, color = ?, goal_type = ?, target_quantity = ?,
-  quantity_unit = ?, frequency_type = ?, days_of_week = ?, weekly_target = ?,
+  quantity_unit = ?, quantity_step = ?, show_in_today = ?, show_in_calendar = ?,
+  frequency_type = ?, days_of_week = ?, weekly_target = ?,
   session = ?, reminder_enabled = ?, reminder_time = ?, sort_order = ?
 WHERE id = ?;
 
@@ -222,11 +253,43 @@ SELECT * FROM checkin WHERE date >= ? AND date <= ? ORDER BY date ASC;
 -- INSERT OR REPLACE em vez de ON CONFLICT DO UPDATE: o upsert moderno exige
 -- SQLite 3.24+, mas o minSdk 24 roda SQLite 3.9 — REPLACE funciona desde sempre.
 upsertCheckin:
-INSERT OR REPLACE INTO checkin(id, habit_id, date, quantity, created_at)
-VALUES(?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO checkin(id, habit_id, date, quantity, status, created_at)
+VALUES(?, ?, ?, ?, ?, ?);
 
 deleteCheckin:
 DELETE FROM checkin WHERE habit_id = ? AND date = ?;
+
+-- Log do hábito (TickTick item 3)
+selectRecord:
+SELECT * FROM habit_record WHERE habit_id = ? AND date = ?;
+
+selectRecordsForHabit:
+SELECT * FROM habit_record WHERE habit_id = ? ORDER BY date DESC;
+
+selectAllRecords:
+SELECT * FROM habit_record ORDER BY date DESC;
+
+upsertRecord:
+INSERT OR REPLACE INTO habit_record(id, habit_id, date, content, emoji, created_at)
+VALUES(?, ?, ?, ?, ?, ?);
+
+deleteRecord:
+DELETE FROM habit_record WHERE habit_id = ? AND date = ?;
+
+-- Ciclos do hábito (TickTick item 2)
+selectCyclesForHabit:
+SELECT * FROM habit_cycle WHERE habit_id = ? ORDER BY start_date ASC;
+
+selectAllCycles:
+SELECT * FROM habit_cycle ORDER BY habit_id ASC, start_date ASC;
+
+insertCycle:
+INSERT INTO habit_cycle(id, habit_id, start_date, end_date, target_days,
+  completed_at, created_at)
+VALUES(?, ?, ?, ?, ?, ?, ?);
+
+completeCycle:
+UPDATE habit_cycle SET completed_at = ? WHERE id = ? AND completed_at IS NULL;
 
 -- Tarefas
 selectTasksForDate:

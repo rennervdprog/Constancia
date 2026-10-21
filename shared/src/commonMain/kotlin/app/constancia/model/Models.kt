@@ -32,13 +32,49 @@ data class Habit(
     val paused: Boolean,
     val createdAt: String,
     val sortOrder: Int,
+    // Backlog TickTick (schema v6):
+    val quantityStep: Double = 1.0, // passo do stepper (item 1)
+    val showInToday: Boolean = false, // opt-in: aparecer na Hoje mesmo fora dos dias devidos (item 4)
+    val showInCalendar: Boolean = false, // opt-in: marcas de check-in no calendário do diário (item 4)
 )
+
+/** Status do check-in: DONE = feito/parcial; SKIPPED = pulado (registrado
+ *  como dado — não quebra a sequência, difere da ausência de check-in). */
+enum class CheckinStatus { DONE, SKIPPED }
 
 data class Checkin(
     val id: String,
     val habitId: String,
     val date: String, // yyyy-MM-dd
     val quantity: Double,
+    val status: CheckinStatus = CheckinStatus.DONE,
+)
+
+/**
+ * TickTick item 3: registro do log do hábito (HabitRecord) — nota curta
+ * e emoji opcionais de um dia, por hábito. Vive em tabela própria para
+ * a aba Padrões cruzar humor-por-hábito no futuro.
+ */
+data class HabitRecord(
+    val id: String,
+    val habitId: String,
+    val date: String, // yyyy-MM-dd
+    val content: String,
+    val emoji: String? = null,
+)
+
+/**
+ * TickTick item 2: ciclo/temporada do hábito (HabitCycleModel) — janela
+ * de dias com meta; ao bater a meta, [completedAt] é preenchido e o
+ * ciclo fica permanente no histórico do hábito.
+ */
+data class HabitCycle(
+    val id: String,
+    val habitId: String,
+    val startDate: String, // yyyy-MM-dd (inclusive)
+    val endDate: String, // yyyy-MM-dd (inclusive)
+    val targetDays: Int,
+    val completedAt: String? = null, // instante ISO ou null = não concluído
 )
 
 /** Intervalo em que um hábito ficou pausado: dias perdoados no cálculo do streak. */

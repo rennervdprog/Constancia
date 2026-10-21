@@ -1,6 +1,7 @@
 package app.constancia.domain
 
 import app.constancia.model.Checkin
+import app.constancia.model.CheckinStatus
 import app.constancia.model.DiaryEntry
 import app.constancia.model.Habit
 import app.constancia.model.isoDayNumberCompat
@@ -192,7 +193,7 @@ fun weekFractions(
     }
 }
 
-enum class HeatCell { FUTURE, OFF, DONE, MISSED }
+enum class HeatCell { FUTURE, OFF, DONE, PARTIAL, SKIPPED, MISSED }
 
 /** Domingo (início da semana na grade do mapa de calor) da semana de [date]. */
 fun heatGridStart(today: LocalDate, weeks: Int = 18): LocalDate {
@@ -204,7 +205,8 @@ fun heatGridStart(today: LocalDate, weeks: Int = 18): LocalDate {
 /**
  * Grade do mapa de calor: [weeks] colunas (semanas, começando no domingo),
  * 7 linhas (dom..sáb). Estado de cada dia: futuro, não devido (off),
- * feito ou devido-não-feito.
+ * feito, parcial (progresso sem bater a meta — TickTick item 1), pulado
+ * (item 4) ou devido-não-feito.
  */
 fun heatGrid(
     habit: Habit,
@@ -214,14 +216,21 @@ fun heatGrid(
 ): List<List<HeatCell>> {
     val start = heatGridStart(today, weeks)
     val doneDates = doneDatesFor(habit, checkins.map { it.date to it.quantity })
+    val skippedDates = skippedDatesFor(checkins)
+    val progressDates = checkins
+        .filter { it.status == CheckinStatus.DONE && it.quantity > 0.0 }
+        .map { it.date }.toSet()
     val activeFrom = runCatching { habit.createdAt.take(10).toLocalDate() }.getOrNull()
     return (0 until weeks).map { col ->
         (0..6).map { row ->
             val day = start.plus(DatePeriod(days = col * 7 + row))
+            val ymd = day.toYmd()
             when {
                 day > today -> HeatCell.FUTURE
                 !isDueOn(habit, day, activeFrom) -> HeatCell.OFF
-                doneDates.contains(day.toYmd()) -> HeatCell.DONE
+                doneDates.contains(ymd) -> HeatCell.DONE
+                skippedDates.contains(ymd) -> HeatCell.SKIPPED
+                progressDates.contains(ymd) -> HeatCell.PARTIAL
                 else -> HeatCell.MISSED
             }
         }

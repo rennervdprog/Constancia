@@ -8,6 +8,7 @@ import app.constancia.data.local.TaskRepositoryImpl
 import app.constancia.db.ConstanciaDb
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
+import app.constancia.model.CheckinStatus
 import app.constancia.model.Habit
 import app.constancia.model.NewTask
 import app.constancia.model.Session
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -300,6 +302,8 @@ class RepositoryWriteFlowTest {
     // último, sobre o estado v4 que as migrações 2-4 produziram — é a
     // transição 4->5 exercida (a chamada migrate em duas etapas não
     // reaplica arquivos neste setup do SQLDelight).
+    // (Na v6, habit/checkin mínimos entraram na base: a 6.sqm faz
+    // ALTER TABLE neles.)
     @Test
     fun migration4To5AddsHistoryAndViewOptions() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
@@ -316,6 +320,18 @@ class RepositoryWriteFlowTest {
             "CREATE TABLE diary_entry(" +
                 "id TEXT NOT NULL PRIMARY KEY, date TEXT NOT NULL UNIQUE, mood INTEGER, " +
                 "note TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)",
+            0,
+        )
+        driver.execute(
+            null,
+            "CREATE TABLE habit(id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL DEFAULT '')",
+            0,
+        )
+        driver.execute(
+            null,
+            "CREATE TABLE checkin(id TEXT NOT NULL PRIMARY KEY, " +
+                "habit_id TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', " +
+                "quantity REAL NOT NULL DEFAULT 1.0, created_at TEXT NOT NULL DEFAULT '')",
             0,
         )
         driver.execute(
@@ -561,6 +577,19 @@ class RepositoryWriteFlowTest {
                 "note TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)",
             0,
         )
+        // habit/checkin mínimos: a 6.sqm faz ALTER TABLE neles.
+        driver.execute(
+            null,
+            "CREATE TABLE habit(id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL DEFAULT '')",
+            0,
+        )
+        driver.execute(
+            null,
+            "CREATE TABLE checkin(id TEXT NOT NULL PRIMARY KEY, " +
+                "habit_id TEXT NOT NULL DEFAULT '', date TEXT NOT NULL DEFAULT '', " +
+                "quantity REAL NOT NULL DEFAULT 1.0, created_at TEXT NOT NULL DEFAULT '')",
+            0,
+        )
         driver.execute(
             null,
             "INSERT INTO task_item(id, title, due_time, done, date, created_at, sort_order) " +
@@ -577,5 +606,214 @@ class RepositoryWriteFlowTest {
         assertEquals("2026-10-20", row.due_date)
         assertEquals("entrada", row.project)
         assertEquals(2L, row.priority)
+    }
+
+    // ---------- Backlog TickTick (schema v6) ----------
+
+    // Item 4: pular grava um REGISTRO (status SKIPPED) — não é ausência:
+    // o streak sobrevive ao dia pulado, e tocar de novo desfaz o pulo.
+    @Test
+    fun skipRecordsSkippedStatusAndKeepsStreak() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        habits.save(habit())
+        val today = todayYmd(TimeZone.UTC)
+        val d1 = today.toLocalDate().minus(DatePeriod(days = 2)).toYmd()
+        val d2 = today.toLocalDate().minus(DatePeriod(days = 1)).toYmd()
+        checkins.toggle("h1", d1)
+        checkins.toggle("h1", d2)
+
+        checkins.skip("h1", today)
+        val skipped = checkins.get("h1", today)
+        assertNotNull(skipped) // existe registro: difere de não ter check-in
+        assertEquals(CheckinStatus.SKIPPED, skipped.status)
+        assertEquals(0.0, skipped.quantity)
+
+        val status = habits.todayStatusFlow(TimeZone.UTC).first()
+            .single { it.habit.id == "h1" }
+        assertFalse(status.isDoneToday)
+        assertEquals(2, status.currentStreak) // o pulo não quebrou a sequência
+
+        // Tocar no dia pulado transforma o pulo em check-in feito.
+        checkins.toggle("h1", today)
+        val afterToggle = checkins.get("h1", today)
+        assertEquals(CheckinStatus.DONE, afterToggle?.status)
+
+        // Desfazer o pulo (unskip) remove só registros SKIPPED.
+        checkins.skip("h1", today)
+        checkins.unskip("h1", today)
+        assertNull(checkins.get("h1", today))
+    }
+
+    // Item 1 (repositório): progresso parcial persiste e só a meta
+    // conclui o dia; campos novos do hábito (passo/opt-ins) fazem round-trip.
+    @Test
+    fun quantityPartialProgressPersistsUntilGoal() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        habits.save(
+            habit(goalType = GoalType.QUANTITY, targetQuantity = 8.0)
+                .copy(quantityStep = 2.0, showInCalendar = true),
+        )
+        val storedHabit = habits.getById("h1")
+        assertEquals(2.0, storedHabit?.quantityStep)
+        assertEquals(true, storedHabit?.showInCalendar)
+        assertEquals(false, storedHabit?.showInToday)
+
+        val today = todayYmd(TimeZone.UTC)
+        checkins.setQuantity("h1", today, 6.0) // parcial: 6 de 8
+        var status = habits.todayStatusFlow(TimeZone.UTC).first()
+            .single { it.habit.id == "h1" }
+        assertFalse(status.isDoneToday)
+        assertEquals(6.0, status.todayCheckin?.quantity)
+
+        checkins.setQuantity("h1", today, 8.0) // bateu a meta
+        status = habits.todayStatusFlow(TimeZone.UTC).first()
+            .single { it.habit.id == "h1" }
+        assertTrue(status.isDoneToday)
+    }
+
+    // Item 3: log do hábito salva e lê nota + emoji; salvar de novo no
+    // mesmo dia substitui (um registro por dia e hábito).
+    @Test
+    fun habitRecordSavesAndReadsNoteAndEmoji() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        habits.save(habit())
+        val today = todayYmd(TimeZone.UTC)
+
+        assertNull(checkins.recordFor("h1", today))
+        checkins.saveRecord("h1", today, "Corri leve, sem dor no joelho.", "🏃")
+        val saved = checkins.recordFor("h1", today)
+        assertNotNull(saved)
+        assertEquals("Corri leve, sem dor no joelho.", saved.content)
+        assertEquals("🏃", saved.emoji)
+        assertEquals(1, checkins.recordsFlow("h1").first().size)
+        assertEquals(1, checkins.allRecordsFlow().first().size)
+
+        checkins.saveRecord("h1", today, "Nota corrigida.", null)
+        val updated = checkins.recordFor("h1", today)
+        assertEquals("Nota corrigida.", updated?.content)
+        assertNull(updated?.emoji)
+        assertEquals(1, checkins.recordsFlow("h1").first().size)
+    }
+
+    // Item 2: o ciclo conclui quando os dias feitos na janela batem a
+    // meta (completed_at gravado, permanente) e o próximo pode começar.
+    @Test
+    fun cycleCompletesWhenTargetReachedAndNextStarts() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        habits.save(habit())
+        val today = todayYmd(TimeZone.UTC)
+        val start = today.toLocalDate().minus(DatePeriod(days = 2)).toYmd()
+        val d2 = today.toLocalDate().minus(DatePeriod(days = 1)).toYmd()
+
+        val cycle = habits.startCycle("h1", targetDays = 3, startYmd = start)
+        assertEquals(start, cycle.startDate)
+        assertEquals(today, cycle.endDate) // janela de 3 dias inclusive
+
+        checkins.toggle("h1", start)
+        checkins.toggle("h1", d2)
+        var cycles = habits.cyclesFlow("h1").first()
+        assertEquals(1, cycles.size)
+        assertNull(cycles.single().completedAt) // 2 de 3: ainda não
+
+        checkins.toggle("h1", today) // terceiro dia: bate a meta
+        cycles = habits.cyclesFlow("h1").first()
+        assertNotNull(cycles.single().completedAt) // concluiu e registrou
+
+        // Próximo ciclo: começa amanhã, independente do anterior.
+        val tomorrow = today.toLocalDate().plus(DatePeriod(days = 1)).toYmd()
+        habits.startCycle("h1", targetDays = 3, startYmd = tomorrow)
+        cycles = habits.cyclesFlow("h1").first()
+        assertEquals(2, cycles.size)
+        assertNull(cycles.last().completedAt)
+        assertNotNull(cycles.first().completedAt) // o concluído permanece
+    }
+
+    // Migração 5 -> 6 (TickTick): defaults seguros nas colunas novas,
+    // status DONE nos check-ins antigos e as tabelas novas utilizáveis.
+    @Test
+    fun migration5To6AddsTickTickColumnsAndTables() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        // Base no formato v5: habit e checkin completos + task/diary da
+        // v2 (a cadeia de migrações 2-5 também roda sobre eles).
+        driver.execute(
+            null,
+            "CREATE TABLE task_item(" +
+                "id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, due_time TEXT, " +
+                "done INTEGER NOT NULL DEFAULT 0, date TEXT NOT NULL, " +
+                "created_at TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "CREATE TABLE diary_entry(" +
+                "id TEXT NOT NULL PRIMARY KEY, date TEXT NOT NULL UNIQUE, mood INTEGER, " +
+                "note TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)",
+            0,
+        )
+        driver.execute(
+            null,
+            "CREATE TABLE habit(" +
+                "id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, icon TEXT NOT NULL, " +
+                "color INTEGER NOT NULL, goal_type TEXT NOT NULL, " +
+                "target_quantity REAL NOT NULL DEFAULT 1.0, " +
+                "quantity_unit TEXT NOT NULL DEFAULT '', frequency_type TEXT NOT NULL, " +
+                "days_of_week TEXT NOT NULL DEFAULT '', " +
+                "weekly_target INTEGER NOT NULL DEFAULT 7, session TEXT NOT NULL, " +
+                "reminder_enabled INTEGER NOT NULL DEFAULT 0, " +
+                "reminder_time TEXT NOT NULL DEFAULT '', " +
+                "paused INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0, " +
+                "created_at TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "CREATE TABLE checkin(" +
+                "id TEXT NOT NULL PRIMARY KEY, habit_id TEXT NOT NULL, " +
+                "date TEXT NOT NULL, quantity REAL NOT NULL DEFAULT 1.0, " +
+                "created_at TEXT NOT NULL, UNIQUE(habit_id, date))",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO habit(id, name, icon, color, goal_type, target_quantity, " +
+                "quantity_unit, frequency_type, days_of_week, weekly_target, session, " +
+                "reminder_enabled, reminder_time, paused, archived, created_at, sort_order) " +
+                "VALUES('h1', 'Beber água', 'water', 1, 'BINARY', 1.0, '', 'DAILY', '', 7, " +
+                "'MANHA', 0, '', 0, 0, 'agora', 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO checkin(id, habit_id, date, quantity, created_at) " +
+                "VALUES('c1', 'h1', '2026-10-20', 1.0, 'agora')",
+            0,
+        )
+
+        ConstanciaDb.Schema.migrate(driver, 1, ConstanciaDb.Schema.version)
+
+        val q = ConstanciaDb(driver).constanciaDbQueries
+        val h = q.selectHabitById("h1").executeAsOne()
+        assertEquals("Beber água", h.name) // dado antigo preservado
+        assertEquals(1.0, h.quantity_step) // passo padrão
+        assertEquals(0L, h.show_in_today) // opt-ins desligados por padrão
+        assertEquals(0L, h.show_in_calendar)
+        val c = q.selectCheckin("h1", "2026-10-20").executeAsOne()
+        assertEquals("DONE", c.status) // check-ins antigos nascem DONE
+        // Tabelas novas utilizáveis.
+        q.upsertRecord("r1", "h1", "2026-10-20", "Primeira nota", "💧", "agora")
+        assertEquals(
+            "Primeira nota",
+            q.selectRecord("h1", "2026-10-20").executeAsOne().content,
+        )
+        q.insertCycle("cy1", "h1", "2026-10-20", "2026-11-10", 21L, null, "agora")
+        assertEquals(1, q.selectCyclesForHabit("h1").executeAsList().size)
     }
 }

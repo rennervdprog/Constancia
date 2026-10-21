@@ -4,6 +4,8 @@ import app.constancia.db.Challenge as ChallengeRow
 import app.constancia.db.Checkin as CheckinRow
 import app.constancia.db.Diary_entry as DiaryEntryRow
 import app.constancia.db.Habit as HabitRow
+import app.constancia.db.Habit_cycle as HabitCycleRow
+import app.constancia.db.Habit_record as HabitRecordRow
 import app.constancia.db.Pause_interval as PauseIntervalRow
 import app.constancia.db.Saved_view as SavedViewRow
 import app.constancia.db.Subtask as SubtaskRow
@@ -16,11 +18,14 @@ import app.constancia.db.Task_template_item as TaskTemplateItemRow
 import app.constancia.model.Challenge
 import app.constancia.model.ChallengeStatus
 import app.constancia.model.Checkin
+import app.constancia.model.CheckinStatus
 import app.constancia.model.DiaryEntry
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalPause
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
+import app.constancia.model.HabitCycle
+import app.constancia.model.HabitRecord
 import app.constancia.model.PauseInterval
 import app.constancia.model.SavedView
 import app.constancia.model.Session
@@ -52,6 +57,9 @@ internal fun HabitRow.toModel(): Habit = Habit(
     paused = paused.isSet(),
     createdAt = created_at,
     sortOrder = sort_order.toInt(),
+    quantityStep = quantity_step,
+    showInToday = show_in_today.isSet(),
+    showInCalendar = show_in_calendar.isSet(),
 )
 
 internal fun CheckinRow.toModel(): Checkin = Checkin(
@@ -59,7 +67,28 @@ internal fun CheckinRow.toModel(): Checkin = Checkin(
     habitId = habit_id,
     date = date,
     quantity = quantity,
+    status = status.toCheckinStatus(),
 )
+
+internal fun HabitRecordRow.toModel(): HabitRecord = HabitRecord(
+    id = id,
+    habitId = habit_id,
+    date = date,
+    content = content,
+    emoji = emoji,
+)
+
+internal fun HabitCycleRow.toModel(): HabitCycle = HabitCycle(
+    id = id,
+    habitId = habit_id,
+    startDate = start_date,
+    endDate = end_date,
+    targetDays = target_days.toInt(),
+    completedAt = completed_at,
+)
+
+internal fun String.toCheckinStatus(): CheckinStatus =
+    CheckinStatus.entries.firstOrNull { it.name == this } ?: CheckinStatus.DONE
 
 internal fun PauseIntervalRow.toModel(): PauseInterval = PauseInterval(
     id = id,

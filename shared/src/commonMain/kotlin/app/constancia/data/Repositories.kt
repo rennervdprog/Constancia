@@ -6,6 +6,8 @@ import app.constancia.model.Checkin
 import app.constancia.model.CompletionReversal
 import app.constancia.model.DiaryEntry
 import app.constancia.model.Habit
+import app.constancia.model.HabitCycle
+import app.constancia.model.HabitRecord
 import app.constancia.model.HabitStatus
 import app.constancia.model.GoalPause
 import app.constancia.model.NewTask
@@ -41,6 +43,18 @@ interface HabitRepository {
     fun todayStatusFlow(timeZone: TimeZone = TimeZone.currentSystemDefault()): Flow<List<HabitStatus>>
     /** Mesmo cálculo de [todayStatusFlow], mas para uma data qualquer (semana navegável). */
     fun statusForDateFlow(dateYmd: String, timeZone: TimeZone = TimeZone.currentSystemDefault()): Flow<List<HabitStatus>>
+
+    // -- Backlog TickTick (schema v6) --
+    /** Item 2: ciclos/temporadas de um hábito, do mais antigo ao atual. */
+    fun cyclesFlow(habitId: String): Flow<List<HabitCycle>>
+    /** Item 2: todos os ciclos (base das seções de ciclo nas telas). */
+    fun allCyclesFlow(): Flow<List<HabitCycle>>
+    /**
+     * Item 2: começa um ciclo de [targetDays] dias a partir de
+     * [startYmd] (a janela tem o mesmo comprimento da meta, como no
+     * TickTick). Retorna o ciclo criado.
+     */
+    suspend fun startCycle(habitId: String, targetDays: Int, startYmd: String): HabitCycle
 }
 
 interface CheckinRepository {
@@ -50,6 +64,24 @@ interface CheckinRepository {
     suspend fun remove(habitId: String, dateYmd: String)
     fun checkinsInRangeFlow(fromYmd: String, toYmd: String): Flow<List<Checkin>>
     suspend fun checkinsForHabit(habitId: String): List<Checkin>
+
+    // -- Backlog TickTick (schema v6) --
+    /**
+     * Item 4: marca o dia como PULADO — um registro (status SKIPPED),
+     * não uma ausência: o dia não conta como feito, mas também não
+     * quebra a sequência.
+     */
+    suspend fun skip(habitId: String, dateYmd: String)
+    /** Item 4: desfaz o pulo (remove o registro de skip do dia). */
+    suspend fun unskip(habitId: String, dateYmd: String)
+    /** Item 3: salva (cria ou substitui) o registro do log do dia. */
+    suspend fun saveRecord(habitId: String, dateYmd: String, content: String, emoji: String?)
+    /** Item 3: registro do log de um dia, ou null. */
+    suspend fun recordFor(habitId: String, dateYmd: String): HabitRecord?
+    /** Item 3: log de um hábito, do mais recente ao mais antigo. */
+    fun recordsFlow(habitId: String): Flow<List<HabitRecord>>
+    /** Item 3: todos os registros de log (base futura da aba Padrões). */
+    fun allRecordsFlow(): Flow<List<HabitRecord>>
 }
 
 interface TaskRepository {

@@ -1,5 +1,7 @@
 package app.constancia.domain
 
+import app.constancia.model.Checkin
+import app.constancia.model.CheckinStatus
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
@@ -107,6 +109,22 @@ fun doneDatesFor(habit: Habit, checkins: List<Pair<String, Double>>): Set<String
             GoalType.QUANTITY -> qty >= habit.targetQuantity
         }
     }.map { (date, _) -> date }.toSet()
+
+/**
+ * TickTick item 4: dias PULADOS (status SKIPPED) de um hábito. Pular é
+ * um registro, não uma ausência: o dia entra no conjunto de dias
+ * "perdoados" do streak (não conta como feito, mas também não quebra
+ * a sequência) — diferente de simplesmente não ter check-in.
+ */
+fun skippedDatesFor(checkins: List<Checkin>): Set<String> =
+    checkins.filter { it.status == CheckinStatus.SKIPPED }
+        .map { it.date }.toSet()
+
+/** O dia está feito? (quantidade bate a meta do hábito). */
+fun isGoalMet(habit: Habit, quantity: Double): Boolean = when (habit.goalType) {
+    GoalType.BINARY -> quantity >= 1.0
+    GoalType.QUANTITY -> quantity >= habit.targetQuantity
+}
 
 /**
  * Expande intervalos de pausa em um conjunto de datas "perdoadas" (yyyy-MM-dd).

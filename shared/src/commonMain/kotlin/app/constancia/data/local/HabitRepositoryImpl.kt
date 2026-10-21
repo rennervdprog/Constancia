@@ -8,9 +8,12 @@ import app.constancia.db.ConstanciaDb
 import app.constancia.domain.currentStreak
 import app.constancia.domain.doneDatesFor
 import app.constancia.domain.forgivenDates
+import app.constancia.domain.nextCycleWindow
+import app.constancia.domain.skippedDatesFor
 import app.constancia.domain.weekDoneCount
 import app.constancia.model.Checkin
 import app.constancia.model.Habit
+import app.constancia.model.HabitCycle
 import app.constancia.model.HabitStatus
 import app.constancia.model.PauseInterval
 import app.constancia.model.newId
@@ -57,6 +60,9 @@ class HabitRepositoryImpl(
                 habit.goalType.name,
                 habit.targetQuantity,
                 habit.quantityUnit,
+                habit.quantityStep,
+                habit.showInToday.toFlag(),
+                habit.showInCalendar.toFlag(),
                 habit.frequencyType.name,
                 habit.daysOfWeekCsv(),
                 habit.weeklyTarget.toLong(),
@@ -77,6 +83,9 @@ class HabitRepositoryImpl(
                 habit.goalType.name,
                 habit.targetQuantity,
                 habit.quantityUnit,
+                habit.quantityStep,
+                habit.showInToday.toFlag(),
+                habit.showInCalendar.toFlag(),
                 habit.frequencyType.name,
                 habit.daysOfWeekCsv(),
                 habit.weeklyTarget.toLong(),
@@ -114,6 +123,39 @@ class HabitRepositoryImpl(
 
     override suspend fun archive(id: String): Unit = withContext(Dispatchers.Default) {
         queries.archiveHabit(id)
+    }
+
+    override fun cyclesFlow(habitId: String): Flow<List<HabitCycle>> =
+        queries.selectCyclesForHabit(habitId)
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override fun allCyclesFlow(): Flow<List<HabitCycle>> =
+        queries.selectAllCycles()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override suspend fun startCycle(
+        habitId: String,
+        targetDays: Int,
+        startYmd: String,
+    ): HabitCycle = withContext(Dispatchers.Default) {
+        val (start, end) = nextCycleWindow(startYmd, targetDays)
+        val cycle = HabitCycle(
+            id = newId(),
+            habitId = habitId,
+            startDate = start,
+            endDate = end,
+            targetDays = targetDays,
+            completedAt = null,
+        )
+        queries.insertCycle(
+            cycle.id, cycle.habitId, cycle.startDate, cycle.endDate,
+            cycle.targetDays.toLong(), null, Clock.System.now().toString(),
+        )
+        cycle
     }
 
     override suspend fun delete(id: String): Unit = withContext(Dispatchers.Default) {
@@ -176,7 +218,9 @@ internal fun computeTodayStatuses(
         val hcs = checkinsByHabit[habit.id].orEmpty()
         val todayCheckin = hcs.firstOrNull { it.date == today }
         val doneDates = doneDatesFor(habit, hcs.map { it.date to it.quantity })
-        val forgiven = forgivenDates(pausesByHabit[habit.id].orEmpty(), today)
+        // Pausas E dias pulados (TickTick item 4) perdoam o streak.
+        val forgiven = forgivenDates(pausesByHabit[habit.id].orEmpty(), today) +
+            skippedDatesFor(hcs)
         HabitStatus(
             habit = habit,
             todayCheckin = todayCheckin,
