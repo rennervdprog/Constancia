@@ -323,7 +323,7 @@ fun groupTasks(
         }
         later.mapNotNull { task -> task.dueDate?.let { it to task } }
             .groupBy({ it.first }, { it.second })
-            .toSortedMap()
+            .entries.sortedBy { it.key }
             .forEach { (ymd, inGroup) ->
                 groups.add(
                     TaskGroup(dueDateLabel(ymd.toLocalDate(), today), inGroup),
