@@ -385,8 +385,10 @@ class ConstanciaUiTest {
         composeRule.onNodeWithText("Editar").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Editar hábito") }
         composeRule.onNodeWithText("Salvar alterações").assertExists()
-        // A folha abre PREENCHIDA com o nome atual.
-        composeRule.onNodeWithText("Beber água").assertExists()
+        // A folha abre PREENCHIDA com o nome atual (o texto aparece no
+        // campo editável E no cartão atrás da folha: 2 nós, por isso
+        // confere-se por presença, não por unicidade).
+        org.junit.Assert.assertTrue(nodesWith("Beber água"))
         shot("11_editar_habito")
         // Renomear e salvar = update no mesmo cartão (segue 1 hábito só).
         composeRule.onNodeWithTag("habit_name_field")
