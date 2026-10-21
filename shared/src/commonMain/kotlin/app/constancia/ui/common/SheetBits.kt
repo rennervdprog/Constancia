@@ -7,8 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -51,43 +52,70 @@ fun SheetSectionLabel(text: String) {
  * Manrope 13/700 (labelLarge) muted; selecionado fundo surface com sombra
  * leve "0 1px 4px rgba(0,0,0,.14)" e texto ink.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SegmentedRow(
     options: List<String>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     tagPrefix: String? = null,
+    // Grupo com muitas opções (ex.: 5 prazos): em tela estreita os
+    // chips descem inteiros pra linha de baixo DENTRO da mesma barra,
+    // em largura natural — em vez de cortar o texto (reteste
+    // 2026-10-21, bug nº 5, verificado em 320dp). Nas larguras
+    // normais todos cabem numa linha e nada muda.
+    allowWrap: Boolean = false,
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(scheme.surfaceVariant, RoundedCornerShape(12.dp))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        options.forEachIndexed { index, label ->
-            SegmentedChip(
-                label = label,
-                selected = index == selectedIndex,
-                onClick = { onSelect(index) },
-                tag = if (tagPrefix != null) tagPrefix + "_" + index else null,
-            )
+    val container = Modifier
+        .fillMaxWidth()
+        .background(scheme.surfaceVariant, RoundedCornerShape(12.dp))
+        .padding(4.dp)
+    if (allowWrap) {
+        FlowRow(
+            modifier = container,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            options.forEachIndexed { index, label ->
+                SegmentedChip(
+                    label = label,
+                    selected = index == selectedIndex,
+                    onClick = { onSelect(index) },
+                    tag = if (tagPrefix != null) tagPrefix + "_" + index else null,
+                    modifier = Modifier,
+                )
+            }
+        }
+    } else {
+        Row(
+            modifier = container,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            options.forEachIndexed { index, label ->
+                SegmentedChip(
+                    label = label,
+                    selected = index == selectedIndex,
+                    onClick = { onSelect(index) },
+                    tag = if (tagPrefix != null) tagPrefix + "_" + index else null,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun RowScope.SegmentedChip(
+private fun SegmentedChip(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
     tag: String?,
+    modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
     Box(
-        modifier = Modifier
-            .weight(1f)
+        modifier = modifier
             .then(if (tag != null) Modifier.testTag(tag) else Modifier)
             .then(
                 if (selected) {

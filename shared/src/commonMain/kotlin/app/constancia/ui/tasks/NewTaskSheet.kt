@@ -458,6 +458,7 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 selectedIndex = deadlineChoice,
                 onSelect = { deadlineChoice = it },
                 tagPrefix = "task_deadline",
+                allowWrap = true,
             )
 
             SheetSectionLabel("Duração estimada")
