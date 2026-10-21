@@ -513,7 +513,7 @@ private fun WeekBarsCard(
         ) {
             fractions.forEachIndexed { idx, frac ->
                 val isToday = idx == todayIdx
-                val isSelected = idx.toLong() == selectedIdx
+                val isSelected = idx == selectedIdx
                 val dayDate = monday.plus(DatePeriod(days = idx))
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(
@@ -1396,10 +1396,10 @@ private fun DayRingPanel(
             if (isToday) "Faltam $missing itens pra fechar o dia"
             else "Faltaram $missing itens naquele dia"
     }
-    val content = if (celebrated) extra.onProgressCard else scheme.onSurface
-    val subContent = if (celebrated) extra.onProgressCard.copy(alpha = 0.75f)
+    val content = if (celebrated) extra.progressCardContent else scheme.onSurface
+    val subContent = if (celebrated) extra.progressCardContent.copy(alpha = 0.75f)
     else scheme.onSurfaceVariant
-    val trackColor = if (celebrated) extra.onProgressCard.copy(alpha = 0.22f)
+    val trackColor = if (celebrated) extra.progressCardContent.copy(alpha = 0.22f)
     else extra.heat0
 
     Row(
