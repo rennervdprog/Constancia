@@ -11,7 +11,10 @@ import app.constancia.domain.nextOccurrence
 import app.constancia.domain.nextRepeatDate
 import app.constancia.domain.repeatLabel
 import app.constancia.domain.reminderInstantMillis
+import app.constancia.model.CompletionReversal
 import app.constancia.model.GoalPause
+import app.constancia.model.HabitCheckinReversal
+import app.constancia.model.SubtaskState
 import app.constancia.notify.NotificationScheduler
 import app.constancia.model.GoalType
 import app.constancia.model.NewTask
@@ -19,6 +22,8 @@ import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
+import app.constancia.model.TaskOccurrence
+import app.constancia.model.TaskViewOptions
 import app.constancia.model.TaskProject
 import app.constancia.model.TaskTemplate
 import app.constancia.model.newId
@@ -29,6 +34,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
@@ -47,6 +54,15 @@ class TaskRepositoryImpl(
 ) : TaskRepository {
 
     private val queries get() = db.constanciaDbQueries
+
+    /**
+     * R2.2 (Fase B): pacotes de reversão das conclusões desta sessão,
+     * por id de tarefa. É o que permite o desmarcar (em qualquer tela)
+     * desfazer junto a ocorrência gerada e o check-in do hábito — sem
+     * isto, desmarcar só desmarcava a linha (a assimetria da auditoria).
+     */
+    private val reversalsMutex = Mutex()
+    private val pendingReversals = mutableMapOf<String, CompletionReversal>()
 
     /**
      * Item 9: mantém o alarme da tarefa sincronizado com o estado dela
@@ -143,20 +159,170 @@ class TaskRepositoryImpl(
         id: String,
         done: Boolean,
         completedOn: LocalDate?,
-    ) {
+    ): CompletionReversal? {
+        if (!done) {
+            // Desmarcar com reversão pendente desfaz a conclusão inteira
+            // (ocorrência gerada + check-in de hábito), não só a linha.
+            val pending = reversalsMutex.withLock {
+                pendingReversals.remove(id)
+            }
+            if (pending != null) {
+                applyReversal(pending)
+                return null
+            }
+            withContext(Dispatchers.Default) {
+                queries.setTaskDone(false.toFlag(), null, id)
+            }
+            refreshReminder(id)
+            return null
+        }
+        val before = getById(id) ?: return null
+        if (before.done) return null
+        val subtaskStates = before.subtasks.map {
+            SubtaskState(it.id, it.done)
+        }
         withContext(Dispatchers.Default) {
             queries.setTaskDone(
-                done.toFlag(),
-                if (done) completedAtString(completedOn) else null,
+                true.toFlag(),
+                completedAtString(completedOn),
                 id,
             )
         }
         refreshReminder(id)
-        if (done) {
-            val task = getById(id) ?: return
-            spawnNextOccurrence(task)
-            markLinkedHabit(task)
+        val task = getById(id) ?: return null
+        return recordCompletion(task, subtaskStates)
+    }
+
+    /**
+     * Efeitos de uma conclusão já gravada (linha feita + completed_at):
+     * snapshot no histórico (R1.1, ANTES do spawn), próxima ocorrência e
+     * hábito vinculado — capturando tudo no pacote de reversão (R2.2).
+     */
+    private suspend fun recordCompletion(
+        task: TaskItem,
+        subtaskStates: List<SubtaskState>,
+    ): CompletionReversal {
+        val historyId = if (isRecurring(task)) {
+            insertHistorySnapshot(task)
+        } else {
+            null
         }
+        val spawnedId = spawnNextOccurrence(task)
+        val habitReversal = markLinkedHabit(task)
+        val reversal = CompletionReversal(
+            taskId = task.id,
+            taskTitle = task.title,
+            spawnedTaskId = spawnedId,
+            historyId = historyId,
+            habitCheckin = habitReversal,
+            subtaskStates = subtaskStates,
+        )
+        reversalsMutex.withLock { pendingReversals[task.id] = reversal }
+        return reversal
+    }
+
+    /** Recorrente = carrega rótulo de repetição ou spec estruturada. */
+    private fun isRecurring(task: TaskItem): Boolean =
+        task.repeatRule.isNotBlank() || task.repeatSpec.isNotBlank()
+
+    /** R1.1: grava o snapshot da ocorrência concluída no histórico. */
+    private suspend fun insertHistorySnapshot(task: TaskItem): String {
+        val historyId = newId()
+        withContext(Dispatchers.Default) {
+            queries.insertOccurrenceHistory(
+                historyId,
+                task.id,
+                task.dueDate,
+                task.title,
+                task.project.toDbValue(),
+                task.priority.toLong(),
+                task.deadlineDate,
+                task.durationMinutes?.toLong(),
+                task.completedAt ?: completedAtString(null),
+            )
+        }
+        return historyId
+    }
+
+    override suspend fun undoCompletion(reversal: CompletionReversal) {
+        reversalsMutex.withLock {
+            if (pendingReversals[reversal.taskId] == reversal) {
+                pendingReversals.remove(reversal.taskId)
+            }
+        }
+        applyReversal(reversal)
+    }
+
+    /**
+     * R2.2: aplica o pacote de reversão — o banco volta ao estado de
+     * antes da conclusão (tarefa, subtarefas, ocorrência gerada,
+     * histórico e check-in de hábito).
+     */
+    private suspend fun applyReversal(reversal: CompletionReversal) {
+        // 1) Ocorrência gerada: apaga (subtarefas primeiro) + lembrete.
+        val spawnedId = reversal.spawnedTaskId
+        if (spawnedId != null) {
+            withContext(Dispatchers.Default) {
+                queries.deleteSubtasksForTask(spawnedId)
+                queries.deleteTask(spawnedId)
+            }
+            notifier?.cancelTaskReminder(spawnedId)
+        }
+        // 2) O snapshot do histórico sai junto com a conclusão.
+        val historyId = reversal.historyId
+        if (historyId != null) {
+            withContext(Dispatchers.Default) {
+                queries.deleteOccurrenceHistory(historyId)
+            }
+        }
+        // 3) Check-in de hábito: volta à quantidade anterior (ou some,
+        // se a conclusão o criou). Antes de reabrir a tarefa porque a
+        // sincronia do check-in também mexe no "done" das vinculadas.
+        val habitReversal = reversal.habitCheckin
+        val checkinRepo = checkins
+        if (habitReversal != null && checkinRepo != null) {
+            val previous = habitReversal.previousQuantity
+            if (previous == null) {
+                checkinRepo.remove(habitReversal.habitId, habitReversal.date)
+            } else {
+                checkinRepo.setQuantity(
+                    habitReversal.habitId,
+                    habitReversal.date,
+                    previous,
+                )
+            }
+        }
+        // 4) Subtarefas e a tarefa voltam ao estado anterior.
+        withContext(Dispatchers.Default) {
+            reversal.subtaskStates.forEach { state ->
+                queries.setSubtaskDone(state.done.toFlag(), state.subtaskId)
+            }
+            queries.setTaskDone(false.toFlag(), null, reversal.taskId)
+        }
+        refreshReminder(reversal.taskId)
+    }
+
+    override fun occurrenceHistoryFlow(): Flow<List<TaskOccurrence>> =
+        queries.selectOccurrenceHistory()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override fun viewOptionsFlow(viewKey: String): Flow<TaskViewOptions> =
+        queries.selectViewOptions()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows ->
+                rows.firstOrNull { it.view_key == viewKey }?.toModel()
+                    ?: TaskViewOptions(viewKey = viewKey)
+            }
+
+    override suspend fun setViewOptions(
+        viewKey: String,
+        groupBy: String,
+        sortMode: String,
+    ): Unit = withContext(Dispatchers.Default) {
+        queries.upsertViewOptions(viewKey, groupBy, sortMode)
     }
 
     /**
@@ -198,11 +364,17 @@ class TaskRepositoryImpl(
 
     override suspend fun setSubtaskDone(subtaskId: String, done: Boolean) {
         var completedTaskId: String? = null
+        var statesBefore: List<SubtaskState> = emptyList()
         withContext(Dispatchers.Default) {
+            val beforeRows = queries.selectAllSubtasks().executeAsList()
+            val sub = beforeRows.firstOrNull { it.id == subtaskId }
+                ?: return@withContext
+            // Estado das subtarefas ANTES do toque (pacote de reversão).
+            statesBefore = beforeRows
+                .filter { it.task_id == sub.task_id }
+                .map { SubtaskState(it.id, it.done.isSet()) }
             queries.setSubtaskDone(done.toFlag(), subtaskId)
             // Todas as subtarefas feitas -> a tarefa conclui junto (protótipo).
-            val sub = queries.selectAllSubtasks().executeAsList()
-                .firstOrNull { it.id == subtaskId } ?: return@withContext
             val siblings = queries.selectAllSubtasks().executeAsList()
                 .filter { it.task_id == sub.task_id }
             if (siblings.isNotEmpty() && siblings.all { it.done.isSet() }) {
@@ -217,15 +389,16 @@ class TaskRepositoryImpl(
                 }
             }
         }
-        // Efeitos colaterais da conclusão (recorrência + vínculo com hábito).
+        // Efeitos colaterais da conclusão (histórico, recorrência e
+        // vínculo com hábito), com pacote de reversão como no setDone.
         val taskId = completedTaskId ?: return
         val task = getById(taskId) ?: return
-        spawnNextOccurrence(task)
-        markLinkedHabit(task)
+        recordCompletion(task, statesBefore)
         refreshReminder(taskId)
     }
 
     override suspend fun delete(id: String) {
+        reversalsMutex.withLock { pendingReversals.remove(id) }
         withContext(Dispatchers.Default) {
             queries.deleteTask(id)
         }
@@ -451,9 +624,11 @@ class TaskRepositoryImpl(
      * Com regra estruturada (item 7), a próxima sai de nextOccurrence
      * (base prazo × conclusão, término) e a série passa a carregar a
      * spec normalizada; sem spec, vale o nextRepeatDate legado.
+     * Devolve o id da ocorrência criada (null = nada foi gerado) — é o
+     * que o pacote de reversão (R2.2) apaga ao desfazer.
      */
-    private suspend fun spawnNextOccurrence(task: TaskItem) {
-        val due = task.dueDate ?: return
+    private suspend fun spawnNextOccurrence(task: TaskItem): String? {
+        val due = task.dueDate ?: return null
         val dueDate = due.toLocalDate()
         val spec = effectiveRepeatSpec(task.repeatSpec, task.repeatRule, dueDate)
         // Dia efetivo da conclusão (completed_at pode ser "como de ontem"
@@ -465,7 +640,7 @@ class TaskRepositoryImpl(
             nextOccurrence(spec, dueDate, completedOn)
         } else {
             nextRepeatDate(task.repeatRule, dueDate, completedOn)
-        } ?: return
+        } ?: return null
         val nextYmd = next.toYmd()
         // Higiene (Fase A): a deduplicação compara a SPEC estruturada da
         // série (normalizada), não só o rótulo — rótulo legado divergente
@@ -482,11 +657,11 @@ class TaskRepositoryImpl(
                     (spec != null || it.repeat_rule == task.repeatRule)
             }
         }
-        if (already) return
+        if (already) return null
         val shiftDays = next.toEpochDays() - dueDate.toEpochDays()
         val nextDeadline = task.deadlineDate?.toLocalDate()
             ?.plus(DatePeriod(days = shiftDays.toInt()))?.toYmd()
-        add(
+        return add(
             NewTask(
                 title = task.title,
                 note = task.note,
@@ -508,28 +683,33 @@ class TaskRepositoryImpl(
 
     /**
      * Vínculo tarefa -> hábito (igual ao protótipo): concluir a tarefa com
-     * prazo hoje/ontem marca o hábito de hoje. Desmarcar a tarefa NÃO
-     * desmarca o hábito.
+     * prazo hoje/ontem marca o hábito de hoje. Devolve como reverter o
+     * check-in (R2.2): a quantidade de hoje ANTES desta conclusão
+     * (null no pacote = não havia check-in; null no retorno = o hábito
+     * não foi tocado).
      */
-    private suspend fun markLinkedHabit(task: TaskItem) {
-        val repo = checkins ?: return
-        val habitId = task.habitId ?: return
+    private suspend fun markLinkedHabit(task: TaskItem): HabitCheckinReversal? {
+        val repo = checkins ?: return null
+        val habitId = task.habitId ?: return null
         val today = todayYmd()
         val yesterday = today.toLocalDate().minus(DatePeriod(days = 1)).toYmd()
-        if (task.dueDate != today && task.dueDate != yesterday) return
+        if (task.dueDate != today && task.dueDate != yesterday) return null
         val habitRow = withContext(Dispatchers.Default) {
             queries.selectHabitById(habitId).executeAsOneOrNull()
-        } ?: return
+        } ?: return null
         val current = repo.get(habitId, today)
         val isQuantity = habitRow.goal_type == GoalType.QUANTITY.name
         val target = habitRow.target_quantity
         val doneNow = current != null &&
             (if (isQuantity) current.quantity >= target else current.quantity >= 1.0)
-        if (doneNow) return
+        if (doneNow) return null
         if (current == null) {
             repo.toggle(habitId, today, if (isQuantity) target else 1.0)
+            return HabitCheckinReversal(habitId, today, null)
         } else if (isQuantity) {
             repo.setQuantity(habitId, today, target)
+            return HabitCheckinReversal(habitId, today, current.quantity)
         }
+        return null
     }
 }

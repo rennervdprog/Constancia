@@ -3,6 +3,7 @@ package app.constancia.data
 import app.constancia.model.Challenge
 import app.constancia.model.ChallengeStatus
 import app.constancia.model.Checkin
+import app.constancia.model.CompletionReversal
 import app.constancia.model.DiaryEntry
 import app.constancia.model.Habit
 import app.constancia.model.HabitStatus
@@ -12,8 +13,10 @@ import app.constancia.model.PauseInterval
 import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.TaskItem
+import app.constancia.model.TaskOccurrence
 import app.constancia.model.TaskProject
 import app.constancia.model.TaskTemplate
+import app.constancia.model.TaskViewOptions
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -67,8 +70,32 @@ interface TaskRepository {
      * Marca/desmarca a conclusão. R2.3 (Fase A): [completedOn] permite
      * concluir "como de" outro dia (ex.: ontem) — o instante gravado e a
      * âncora da próxima ocorrência usam essa data; null = agora.
+     * R2.2 (Fase B): ao concluir, devolve o pacote de reversão da
+     * conclusão (null ao desmarcar ou se já estava feita); ao desmarcar
+     * uma tarefa com reversão pendente, a reversão é aplicada (a
+     * ocorrência gerada e o check-in do hábito são desfeitos junto).
      */
-    suspend fun setDone(id: String, done: Boolean, completedOn: LocalDate? = null)
+    suspend fun setDone(id: String, done: Boolean, completedOn: LocalDate? = null): CompletionReversal?
+    /**
+     * R2.2 (Fase B): desfaz uma conclusão a partir do pacote devolvido
+     * por [setDone]: apaga a ocorrência gerada, remove o snapshot do
+     * histórico, reverte o check-in de hábito gerado e reabre a tarefa
+     * com o estado anterior das subtarefas.
+     */
+    suspend fun undoCompletion(reversal: CompletionReversal)
+    /**
+     * R1.1 (Fase B): histórico de ocorrências concluídas de tarefas
+     * recorrentes (snapshots), da conclusão mais recente à mais antiga.
+     */
+    fun occurrenceHistoryFlow(): Flow<List<TaskOccurrence>>
+    /**
+     * R8.1 (Fase B): opções de vista (agrupar/ordenar) persistidas da
+     * visão [viewKey] ('view:HOJE', 'saved:<id>' etc.); sem registro,
+     * devolve os padrões (groupBy "none", sortMode "SMART").
+     */
+    fun viewOptionsFlow(viewKey: String): Flow<TaskViewOptions>
+    /** R8.1 (Fase B): grava as opções de vista da visão [viewKey]. */
+    suspend fun setViewOptions(viewKey: String, groupBy: String, sortMode: String)
     suspend fun setPriority(id: String, priority: Int)
     suspend fun setDueDate(id: String, dueDate: String?)
     suspend fun addSubtask(taskId: String, title: String)
