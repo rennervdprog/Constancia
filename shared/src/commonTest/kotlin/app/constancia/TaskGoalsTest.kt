@@ -102,7 +102,6 @@ class TaskGoalsTest {
         assertEquals(2, weeklyGoalStreak(counts, 5, forgiven, today))
     }
 
-    @Test
     // ---------- FASE D: dias de descanso da meta (R10.1) ----------
     // Out/2026: 16=sex, 17=sáb (ISO 6), 18=dom (ISO 7), 19=seg, 20=ter.
 
