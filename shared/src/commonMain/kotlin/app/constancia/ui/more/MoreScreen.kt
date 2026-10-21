@@ -62,6 +62,7 @@ import app.constancia.AppDeps
 import app.constancia.data.SyncState
 import app.constancia.domain.buildExportCsv
 import app.constancia.domain.goalForgivenDates
+import app.constancia.domain.parseTimeOrNull
 import app.constancia.notify.NotificationScheduler
 import app.constancia.domain.buildExportJson
 import app.constancia.export.shareTextFile
@@ -418,8 +419,12 @@ fun MoreScreen(
                                 scope.launch {
                                     deps.prefs.setDailyReviewEnabled(enabled)
                                     if (enabled) {
-                                        NotificationScheduler()
-                                            .scheduleDailyReview(reviewTime)
+                                        parseTimeOrNull(reviewTime)?.let { t ->
+                                            NotificationScheduler()
+                                                .scheduleDailyReview(
+                                                    t.hour, t.minute,
+                                                )
+                                        }
                                     } else {
                                         NotificationScheduler()
                                             .cancelDailyReview()
@@ -461,7 +466,9 @@ fun MoreScreen(
                                                 deps.prefs
                                                     .setDailyReviewTime(hhmm)
                                                 NotificationScheduler()
-                                                    .scheduleDailyReview(hhmm)
+                                                    .scheduleDailyReview(
+                                                        hour, minute,
+                                                    )
                                             }
                                         }
                                     }
