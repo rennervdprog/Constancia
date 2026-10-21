@@ -7,7 +7,9 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -183,7 +185,18 @@ class ConstanciaUiTest {
         // Tocar em Mais de novo volta à raiz; Progresso também mora lá.
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         composeRule.onNodeWithTag("mais_progresso").performScrollTo().performClick()
-        composeRule.onNodeWithText("tarefas × hábitos × diário, cruzados").assertIsDisplayed()
+        try {
+            composeRule.waitUntil(timeoutMillis = 8000) {
+                composeRule.onAllNodesWithText("tarefas × hábitos × diário, cruzados")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithText("tarefas × hábitos × diário, cruzados").assertIsDisplayed()
+        } catch (e: Throwable) {
+            System.err.println(
+                "APPABRE_PROGRESSO_DUMP:\n" + composeRule.onRoot().printToString(),
+            )
+            throw e
+        }
         shot("01_progresso")
         composeRule.onNodeWithTag("tab_HOJE").performClick()
         composeRule.onNodeWithText("SEU DIA").assertIsDisplayed()
