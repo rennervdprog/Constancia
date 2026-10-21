@@ -732,8 +732,8 @@ class RepositoryWriteFlowTest {
         habits.startCycle("h1", targetDays = 3, startYmd = tomorrow)
         cycles = habits.cyclesFlow("h1").first()
         assertEquals(2, cycles.size)
-        assertNull(cycles.last().completedAt)
         assertNotNull(cycles.first().completedAt) // o concluído permanece
+        assertNull(cycles.last().completedAt)
     }
 
     // Migração 5 -> 6 (TickTick): defaults seguros nas colunas novas,
