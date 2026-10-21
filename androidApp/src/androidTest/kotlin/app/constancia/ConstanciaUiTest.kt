@@ -132,6 +132,21 @@ class ConstanciaUiTest {
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag(tag) }
     }
 
+    /**
+     * Emulador lento às vezes mostra o diálogo do sistema "System UI isn't
+     * responding" por cima do app — ele é modal e engole os toques dos
+     * testes. Se estiver na tela, toca em "Wait" para devolvê-los ao app.
+     */
+    private fun dismissAnrIfPresent() {
+        runCatching {
+            val wait = device.findObject(androidx.test.uiautomator.By.text("Wait"))
+            if (wait != null) {
+                wait.click()
+                Thread.sleep(500)
+            }
+        }
+    }
+
     /** Cria um hábito pelo fluxo do botão central (+) e espera a folha fechar. */
     private fun createHabit(name: String) {
         composeRule.onNodeWithTag("fab_create").performClick()
@@ -197,9 +212,28 @@ class ConstanciaUiTest {
     @Test
     fun checkinNoCirculo_marcaHabito() {
         createHabit("Ler")
+        dismissAnrIfPresent()
         // O herói conta hábito + diário: faltam 2 itens antes do check.
         awaitText("Faltam 2 itens pra fechar o dia", "home_list")
-        composeRule.onAllNodesWithTag("habit_check")[0].performClick()
+        // O clique no check pode ser engolido pelo diálogo de ANR do sistema
+        // ou se perder no emulador lento: tenta de novo se o herói não mudar
+        // (espera entre tentativas p/ não desmarcar um check que só demorou).
+        var tries = 0
+        while (!nodesWith("Falta 1 item pra fechar o dia") && tries < 3) {
+            dismissAnrIfPresent()
+            runCatching {
+                composeRule.onAllNodesWithTag("habit_check")[0].performClick()
+            }
+            composeRule.waitForIdle()
+            val deadline = System.currentTimeMillis() + 6000
+            while (
+                !nodesWith("Falta 1 item pra fechar o dia") &&
+                System.currentTimeMillis() < deadline
+            ) {
+                Thread.sleep(300)
+            }
+            tries++
+        }
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Falta 1 item pra fechar o dia")
         }
