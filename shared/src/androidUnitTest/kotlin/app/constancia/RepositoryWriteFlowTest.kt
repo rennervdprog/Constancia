@@ -293,6 +293,238 @@ class RepositoryWriteFlowTest {
         assertEquals(1, diary.allEntriesFlow().first().size)
     }
 
+    // Migração 4 -> 5 (Fase B): cria as tabelas do histórico de
+    // ocorrências e das opções de vista sem perder as tarefas.
+    @Test
+    fun migration4To5AddsHistoryAndViewOptions() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        ConstanciaDb.Schema.create(driver)
+        // Volta ao estado v4: sem as duas tabelas novas da 5.sqm.
+        driver.execute(null, "DROP TABLE task_occurrence_history", 0)
+        driver.execute(null, "DROP TABLE view_options", 0)
+        driver.execute(
+            null,
+            "INSERT INTO task_item(id, title, date, created_at) " +
+                "VALUES('t1', 'Tarefa da v4', '2026-10-20', 'agora')",
+            0,
+        )
+
+        ConstanciaDb.Schema.migrate(driver, 4, 5)
+
+        val db = ConstanciaDb(driver)
+        val q = db.constanciaDbQueries
+        assertEquals("Tarefa da v4", q.selectTaskById("t1").executeAsOne().title)
+        assertTrue(q.selectOccurrenceHistory().executeAsList().isEmpty())
+        assertTrue(q.selectViewOptions().executeAsList().isEmpty())
+        q.upsertViewOptions("view:HOJE", "project", "DUE")
+        val stored = q.selectViewOptions().executeAsList().single()
+        assertEquals("view:HOJE", stored.view_key)
+        assertEquals("project", stored.group_by)
+        assertEquals("DUE", stored.sort_mode)
+    }
+
+    /** Retrato completo das tabelas que a conclusão/desfazer tocam. */
+    private fun dumpDb(db: ConstanciaDb): String {
+        val q = db.constanciaDbQueries
+        return buildString {
+            appendLine("tasks:")
+            q.selectAllTasks().executeAsList()
+                .forEach { appendLine(it.toString()) }
+            appendLine("subtasks:")
+            q.selectAllSubtasks().executeAsList()
+                .forEach { appendLine(it.toString()) }
+            appendLine("checkins:")
+            q.selectCheckinsInRange("0000-01-01", "9999-12-31")
+                .executeAsList().forEach { appendLine(it.toString()) }
+            appendLine("history:")
+            q.selectOccurrenceHistory().executeAsList()
+                .forEach { appendLine(it.toString()) }
+        }
+    }
+
+    // R1.1 (Fase B): concluir recorrente grava o snapshot no histórico
+    // ANTES do spawn; concluir tarefa comum não grava nada.
+    @Test
+    fun completingRecurringTaskWritesHistorySnapshot() = runBlocking {
+        val db = testDb()
+        val tasks = TaskRepositoryImpl(db)
+        val date = todayYmd(TimeZone.UTC)
+        val recurringId = tasks.add(
+            NewTask(
+                title = "Regar as plantas",
+                dueDate = date,
+                priority = 1,
+                repeatRule = "Todo dia",
+                durationMinutes = 15,
+            ),
+        )
+        val plainId = tasks.add(
+            NewTask(title = "Tarefa única", dueDate = date),
+        )
+
+        tasks.setDone(recurringId, true)
+        tasks.setDone(plainId, true)
+
+        val history = tasks.occurrenceHistoryFlow().first()
+        assertEquals(1, history.size)
+        val snapshot = history.single()
+        assertEquals(recurringId, snapshot.sourceTaskId)
+        assertEquals(date, snapshot.occurrenceDueDate)
+        assertEquals("Regar as plantas", snapshot.title)
+        assertEquals(1, snapshot.priority)
+        assertEquals(15, snapshot.durationMinutes)
+        assertTrue(snapshot.completedAt.startsWith(date))
+    }
+
+    // Critério de pronto da Fase B (R2.2): concluir -> desfazer deixa o
+    // banco IDÊNTICO ao de nunca ter concluído (tarefas, subtarefas,
+    // check-ins e histórico); concluir de novo não acumula efeitos
+    // (uma ocorrência, um snapshot, um check-in) e desfazer de novo
+    // volta ao mesmo retrato inicial.
+    @Test
+    fun undoRecurringCompletionRestoresExactState() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        val tasks = TaskRepositoryImpl(db, checkins)
+        habits.save(habit())
+        val date = todayYmd(TimeZone.UTC)
+        val id = tasks.add(
+            NewTask(
+                title = "Beber água (diária)",
+                dueDate = date,
+                repeatRule = "Todo dia",
+                habitId = "h1",
+                subtaskTitles = listOf("Encher a garrafa", "Beber"),
+            ),
+        )
+        val before = dumpDb(db)
+
+        // Conclui: marca a linha, gera a próxima ocorrência (amanhã),
+        // grava o snapshot e marca o hábito vinculado.
+        val reversal = tasks.setDone(id, true)
+        assertNotNull(reversal)
+        assertNotNull(reversal.spawnedTaskId)
+        assertNotNull(reversal.historyId)
+        assertNotNull(reversal.habitCheckin)
+        val afterComplete = tasks.allTasksFlow().first()
+        assertEquals(2, afterComplete.size)
+        val spawned = afterComplete.first { !it.done }
+        assertEquals(
+            date.toLocalDate().plus(DatePeriod(days = 1)).toYmd(),
+            spawned.dueDate,
+        )
+        assertEquals(1, tasks.occurrenceHistoryFlow().first().size)
+        assertTrue(
+            habits.todayStatusFlow(TimeZone.UTC).first().single().isDoneToday,
+        )
+
+        // Desfaz pelo pacote: o banco volta a ser EXATAMENTE o inicial.
+        tasks.undoCompletion(reversal)
+        assertEquals(before, dumpDb(db))
+        assertFalse(
+            habits.todayStatusFlow(TimeZone.UTC).first().single().isDoneToday,
+        )
+
+        // Concluir de novo: um único conjunto de efeitos, sem duplicar.
+        val reversal2 = tasks.setDone(id, true)
+        assertNotNull(reversal2)
+        val redone = tasks.allTasksFlow().first()
+        assertEquals(2, redone.size)
+        assertEquals(
+            date.toLocalDate().plus(DatePeriod(days = 1)).toYmd(),
+            redone.first { !it.done }.dueDate,
+        )
+        assertEquals(1, tasks.occurrenceHistoryFlow().first().size)
+        assertTrue(
+            habits.todayStatusFlow(TimeZone.UTC).first().single().isDoneToday,
+        )
+
+        // E desfazer a segunda conclusão também restaura tudo.
+        tasks.undoCompletion(reversal2)
+        assertEquals(before, dumpDb(db))
+    }
+
+    // R2.2: desmarcar a tarefa (sem passar pelo desfazer explícito) com
+    // reversão pendente desfaz a conclusão inteira — some a ocorrência
+    // gerada, o snapshot e o check-in do hábito (fim da assimetria).
+    @Test
+    fun unmarkingCompletionRevertsSpawnHistoryAndCheckin() = runBlocking {
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        val tasks = TaskRepositoryImpl(db, checkins)
+        habits.save(habit())
+        val date = todayYmd(TimeZone.UTC)
+        val id = tasks.add(
+            NewTask(
+                title = "Beber água (diária)",
+                dueDate = date,
+                repeatRule = "Todo dia",
+                habitId = "h1",
+            ),
+        )
+        val before = dumpDb(db)
+
+        tasks.setDone(id, true)
+        assertEquals(2, tasks.allTasksFlow().first().size)
+
+        tasks.setDone(id, false)
+        assertEquals(before, dumpDb(db))
+    }
+
+    // R2.2: concluir pela última subtarefa também gera pacote de
+    // reversão — desmarcar a tarefa restaura a subtarefa e some com a
+    // ocorrência gerada.
+    @Test
+    fun undoSubtaskDrivenCompletionRestoresSubtasks() = runBlocking {
+        val tasks = TaskRepositoryImpl(testDb())
+        val date = todayYmd(TimeZone.UTC)
+        val id = tasks.add(
+            NewTask(
+                title = "Faxina diária",
+                dueDate = date,
+                repeatRule = "Todo dia",
+                subtaskTitles = listOf("Cozinha", "Banheiro"),
+            ),
+        )
+        val subs = tasks.allTasksFlow().first().single().subtasks
+        tasks.setSubtaskDone(subs[0].id, true)
+        tasks.setSubtaskDone(subs[1].id, true)
+        val completed = tasks.allTasksFlow().first()
+        assertTrue(completed.first { it.id == id }.done)
+        assertEquals(2, completed.size) // a próxima ocorrência nasceu
+
+        tasks.setDone(id, false)
+
+        val restored = tasks.allTasksFlow().first()
+        assertEquals(1, restored.size) // a ocorrência gerada sumiu
+        val task = restored.single()
+        assertFalse(task.done)
+        assertEquals(listOf(true, false), task.subtasks.map { it.done })
+        assertTrue(tasks.occurrenceHistoryFlow().first().isEmpty())
+    }
+
+    // R8.1 (Fase B): opções de vista persistem por visão — gravou, leu
+    // de volta; outra visão segue no padrão.
+    @Test
+    fun viewOptionsPersistPerView() = runBlocking {
+        val tasks = TaskRepositoryImpl(testDb())
+        val defaults = tasks.viewOptionsFlow("view:HOJE").first()
+        assertEquals("none", defaults.groupBy)
+        assertEquals("SMART", defaults.sortMode)
+
+        tasks.setViewOptions("view:HOJE", "project", "DUE")
+
+        val stored = tasks.viewOptionsFlow("view:HOJE").first()
+        assertEquals("view:HOJE", stored.viewKey)
+        assertEquals("project", stored.groupBy)
+        assertEquals("DUE", stored.sortMode)
+        val other = tasks.viewOptionsFlow("view:FEITAS").first()
+        assertEquals("none", other.groupBy)
+        assertEquals("SMART", other.sortMode)
+    }
+
     // Migração 2 -> 3: banco antigo (sem as colunas novas) migra sem perder dados.
     @Test
     fun migrationToLatestAddsTaskAndDiaryColumns() {
