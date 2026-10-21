@@ -5,7 +5,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -183,26 +182,16 @@ class ConstanciaUiTest {
         shot("01_diario")
         // Tocar em Mais de novo volta à raiz; Progresso também mora lá.
         composeRule.onNodeWithTag("tab_MAIS").performClick()
-        composeRule.onNodeWithTag("mais_progresso").performScrollTo().performClick()
-        try {
-            composeRule.waitUntil(timeoutMillis = 8000) {
-                composeRule.onAllNodesWithText("tarefas × hábitos × diário, cruzados")
-                    .fetchSemanticsNodes().isNotEmpty()
-            }
-            composeRule.onNodeWithText("tarefas × hábitos × diário, cruzados").assertIsDisplayed()
-        } catch (e: Throwable) {
-            System.err.println(
-                "APPABRE_FAIL: " + e.javaClass.simpleName + ": " +
-                    (e.message ?: "").take(300),
-            )
-            shot("09_appabre_debug")
-            val roots = composeRule.onAllNodes(isRoot()).fetchSemanticsNodes()
-            System.err.println("APPABRE_ROOTS: " + roots.size)
-            roots.forEachIndexed { idx, node ->
-                System.err.println("ROOT[$idx] bounds=" + node?.boundsInRoot)
-            }
-            throw e
-        }
+        composeRule.onNodeWithTag("mais_progresso").performScrollTo()
+        // Mesmo cuidado do check-in: após o scroll mínimo, o centro do item pode
+        // ficar sob o FAB elevado da barra flutuante — e o clique abriria a folha
+        // de criação em vez de navegar. Subir a lista ~110px tira o item da zona
+        // da barra antes do clique.
+        device.swipe(160, 430, 160, 320, 10)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("mais_progresso").performClick()
+        awaitText("tarefas × hábitos × diário, cruzados", "reports_list")
+        composeRule.onNodeWithText("tarefas × hábitos × diário, cruzados").assertIsDisplayed()
         shot("01_progresso")
         composeRule.onNodeWithTag("tab_HOJE").performClick()
         composeRule.onNodeWithText("SEU DIA").assertIsDisplayed()
