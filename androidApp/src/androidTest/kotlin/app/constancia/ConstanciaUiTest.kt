@@ -82,6 +82,16 @@ class ConstanciaUiTest {
             prefs = PrefsRepositoryImpl(),
         )
         runBlocking { deps.challenges.ensureSeed() }
+        // Reteste 2: reproduz o ambiente REAL em TODOS os testes — o
+        // MainActivity usa enableEdgeToEdge (decorFits=false); sem
+        // virar a chave, o conteúdo do teste fica encaixado na janela
+        // e o bug "conteúdo sob a status bar" fica invisível (foi o
+        // que mascarou o problema no reteste 1).
+        val activity = resumedActivity()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            androidx.core.view.WindowCompat
+                .setDecorFitsSystemWindows(activity.window, false)
+        }
         composeRule.setContent { AppContent(deps) }
     }
 
@@ -412,7 +422,12 @@ class ConstanciaUiTest {
         // Digitar só números formata sozinho: 930 -> "09:30".
         composeRule.onNodeWithTag("task_time_field").performScrollTo()
             .performTextInput("930")
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("09:30") }
+        // Reteste 2: o campo guarda só DÍGITOS e exibe "09:30" via
+        // VisualTransformation — a semântica (EditableText) expõe o
+        // buffer "930"; o formatado aparece no print 12_form_prazo.
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            editableTextOf("task_time_field") == "930"
+        }
         runCatching { device.pressBack() } // fecha o teclado virtual
         composeRule.waitForIdle()
         // "Sem prazo" em UMA linha: a altura do texto é a de uma linha
@@ -482,6 +497,17 @@ class ConstanciaUiTest {
             "o emulador deveria reportar inset de status bar > 0 (veio $statusTop)",
             statusTop > 0,
         )
+        // O ambiente edge-to-edge está mesmo ativo? A raiz do app
+        // precisa ocupar a tela INTEIRA (com decorFits=true ela
+        // ocuparia só display − status − nav). Sem esta checagem, um
+        // flip silenciosamente falho aprovaria o teste pelo motivo
+        // errado.
+        val rootBounds = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(
+            "ambiente edge-to-edge não reproduzido: " +
+                "raiz=${rootBounds.height} tela=${device.displayHeight}",
+            rootBounds.height >= device.displayHeight - 4,
+        )
         shot("13_insets_home")
         val header = composeRule.onNodeWithTag("home_header")
             .fetchSemanticsNode().boundsInRoot
@@ -489,13 +515,17 @@ class ConstanciaUiTest {
             "cabeçalho sob a status bar: topo=${header.top} < inset=$statusTop",
             header.top >= statusTop - 2f,
         )
+        // A asserção mede uma ABA dentro da pílula (e não a Row da
+        // barra): a Row inclui o windowInsetsPadding da navegação,
+        // cuja base encosta no fim da janela por construção — o
+        // conteúdo INTERNO é o que não pode ficar sob a barra.
         val rootH = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.height
-        val bar = composeRule.onNodeWithTag("bottom_bar")
+        val tab = composeRule.onNodeWithTag("tab_HOJE")
             .fetchSemanticsNode().boundsInRoot
         org.junit.Assert.assertTrue(
-            "barra inferior sob a barra de navegação: " +
-                "base=${bar.bottom} > ${rootH - navBottom}",
-            bar.bottom <= rootH - navBottom + 2f,
+            "aba da barra inferior sob a barra de navegação: " +
+                "base=${tab.bottom} > ${rootH - navBottom}",
+            tab.bottom <= rootH - navBottom + 2f,
         )
         // A folha de criação também respeita o topo.
         composeRule.onNodeWithTag("fab_create").performClick()
@@ -509,5 +539,89 @@ class ConstanciaUiTest {
             "folha sob a status bar: topo=${sheetTitle.top} < inset=$statusTop",
             sheetTitle.top >= statusTop - 2f,
         )
+    }
+
+    // ---------- Reteste 2: campo de hora com teclas de verdade ----------
+
+    /** Texto do buffer de um campo (semântica EditableText). */
+    private fun editableTextOf(tag: String): String =
+        composeRule.onNodeWithTag(tag).fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.EditableText]
+            .text
+
+    /** Digita via eventos de tecla reais (KEYCODE), um por dígito. */
+    private fun keyType(text: String) {
+        val inst = InstrumentationRegistry.getInstrumentation()
+        text.forEach { c ->
+            val code = when (c) {
+                in '0'..'9' -> android.view.KeyEvent.KEYCODE_0 + (c - '0')
+                else -> error("keyType só aceita dígitos: $c")
+            }
+            inst.sendKeyDownUpSync(code)
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun keyBackspace() {
+        InstrumentationRegistry.getInstrumentation()
+            .sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DEL)
+        composeRule.waitForIdle()
+    }
+
+    private fun awaitBuffer(tag: String, expected: String) {
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            editableTextOf(tag) == expected
+        }
+    }
+
+    @Test
+    fun reteste2_campoDeHora_sequenciasReais() {
+        // Reteste 2 (2026-10-21): a máscara antiga passava no teste
+        // raso (digitar 930) mas no aparelho reescrevia dígitos
+        // ("29"->"23", "61"->"59"), prendia o cursor no fim e engolia
+        // backspace no ":". Aqui as sequências são TECLAS REAIS no
+        // campo de hora da tarefa (o mesmo componente TimeTextField é
+        // usado nos outros 3 campos de hora do app).
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_task").performClick()
+        composeRule.onNodeWithTag("task_name_field")
+            .performTextInput("Revisar contrato")
+        composeRule.onNodeWithTag("task_time_field").performScrollTo()
+            .performClick()
+        composeRule.waitForIdle()
+
+        // 1) Dígito a dígito: 9, 3, 0 -> buffer "930" (exibe 09:30).
+        keyType("930")
+        awaitBuffer("task_time_field", "930")
+        shot("14_hora_digitada_930")
+
+        // 2) Dígito extra além do buffer é ignorado, sem deslocar.
+        keyType("7")
+        awaitBuffer("task_time_field", "930")
+
+        // 3) Backspace apaga dígito a dígito até esvaziar, sem travar.
+        keyBackspace()
+        awaitBuffer("task_time_field", "93")
+        keyBackspace()
+        awaitBuffer("task_time_field", "9")
+        keyBackspace()
+        awaitBuffer("task_time_field", "")
+
+        // 4) Hora inválida NÃO é reescrita: digitar 2, 9 fica "29"
+        // (a antiga transformava em "23" na frente do usuário).
+        keyType("29")
+        awaitBuffer("task_time_field", "29")
+        shot("15_hora_invalida_sem_reescrever")
+
+        // 5) Selecionar tudo + redigitar troca o valor inteiro.
+        composeRule.onNodeWithTag("task_time_field")
+            .performTextReplacement("845")
+        awaitBuffer("task_time_field", "845")
+
+        // 6) Colar texto formatado filtra os dígitos: "14:30" -> 1430.
+        composeRule.onNodeWithTag("task_time_field")
+            .performTextReplacement("14:30")
+        awaitBuffer("task_time_field", "1430")
     }
 }

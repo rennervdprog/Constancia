@@ -8,8 +8,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -89,8 +93,18 @@ fun AppContent(deps: AppDeps) {
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            val screenModifier = Modifier.fillMaxSize()
-            when (navigator.tab) {
+            // Reteste 2 (2026-10-21): o MainActivity roda edge-to-edge
+            // e NADA aplicava os insets do sistema — o cabeçalho nascia
+            // cortado sob a status bar no aparelho real. O fundo pinta
+            // a tela inteira (a faixa da status bar fica na cor do app,
+            // como no protótipo), mas o CONTEÚDO começa abaixo dela:
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.statusBars),
+            ) {
+                val screenModifier = Modifier.fillMaxSize()
+                when (navigator.tab) {
                 AppTab.HOJE -> HomeScreen(
                     deps,
                     screenModifier,
@@ -127,6 +141,7 @@ fun AppContent(deps: AppDeps) {
                         onOpenSection = { navigator.openMaisSection(it) },
                     )
                 }
+            }
             }
 
             ConstanciaBottomBar(
@@ -187,6 +202,9 @@ private fun ConstanciaBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .testTag("bottom_bar")
+            // Idem reteste 2: a pílula flutua ACIMA da barra de
+            // gestos/navegação, nunca sob ela.
+            .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 14.dp)
             .padding(bottom = 12.dp)
             .shadow(
