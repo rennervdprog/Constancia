@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
@@ -26,6 +27,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
+import app.constancia.billing.StoreBilling
 import app.constancia.data.LocalSyncRepository
 import app.constancia.data.local.ChallengeRepositoryImpl
 import app.constancia.data.local.CheckinRepositoryImpl
@@ -34,6 +36,11 @@ import app.constancia.data.local.HabitRepositoryImpl
 import app.constancia.data.local.PrefsRepositoryImpl
 import app.constancia.data.local.TaskRepositoryImpl
 import app.constancia.db.ConstanciaDb
+import app.constancia.domain.ConstanciaBilling
+import app.constancia.domain.PlanPeriod
+import app.constancia.domain.StorePlan
+import app.constancia.domain.StoreProduct
+import app.constancia.domain.StorePurchase
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -728,6 +735,96 @@ class PaywallUiTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    /** Mesmo protocolo de screenshot dos demais testes (logcat). */
+    private fun shot(name: String) {
+        android.util.Log.d("UITEST_SHOT", name)
+        try { Thread.sleep(1500) } catch (_: InterruptedException) { }
+    }
+
+    private fun nodesWith(text: String, substring: Boolean = false) =
+        composeRule.onAllNodesWithText(text, substring = substring)
+            .fetchSemanticsNodes().isNotEmpty()
+
+    private fun nodesWithTag(tag: String) =
+        composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+
+    private fun depsWithStore(context: Context, store: StoreBilling): AppDeps {
+        context.deleteDatabase("constancia.db")
+        val driver = AndroidSqliteDriver(ConstanciaDb.Schema, context, "constancia.db")
+        val db = ConstanciaDb(driver)
+        val checkins = CheckinRepositoryImpl(db)
+        return AppDeps(
+            habits = HabitRepositoryImpl(db, checkins),
+            checkins = checkins,
+            tasks = TaskRepositoryImpl(db),
+            diary = DiaryRepositoryImpl(db),
+            challenges = ChallengeRepositoryImpl(db),
+            sync = LocalSyncRepository(),
+            prefs = PrefsRepositoryImpl(),
+            billing = store,
+        )
+    }
+
+    /** Loja falsa com os três planos nos preços aprovados — prova o
+     *  seletor e a fiação plano→compra sem Play Console de verdade. */
+    private class FakePlanStore : StoreBilling {
+        val product = StoreProduct(
+            productId = ConstanciaBilling.PRODUCT_ID,
+            plans = listOf(
+                StorePlan(
+                    basePlanId = ConstanciaBilling.MONTHLY_BASE_PLAN_ID,
+                    period = PlanPeriod.MONTHLY,
+                    offerId = null,
+                    formattedPrice = "R$ 19,90",
+                    priceAmountMicros = 19_900_000L,
+                    currencyCode = "BRL",
+                    formattedMonthlyEquivalent = "R$ 19,90",
+                    trialDays = null,
+                ),
+                StorePlan(
+                    basePlanId = ConstanciaBilling.QUARTERLY_BASE_PLAN_ID,
+                    period = PlanPeriod.QUARTERLY,
+                    offerId = null,
+                    formattedPrice = "R$ 44,90",
+                    priceAmountMicros = 44_900_000L,
+                    currencyCode = "BRL",
+                    formattedMonthlyEquivalent = "R$ 14,97",
+                    trialDays = null,
+                ),
+                StorePlan(
+                    basePlanId = ConstanciaBilling.ANNUAL_BASE_PLAN_ID,
+                    period = PlanPeriod.ANNUAL,
+                    offerId = ConstanciaBilling.TRIAL_OFFER_ID,
+                    formattedPrice = "R$ 119,90",
+                    priceAmountMicros = 119_900_000L,
+                    currencyCode = "BRL",
+                    formattedMonthlyEquivalent = "R$ 9,99",
+                    trialDays = 7,
+                ),
+            ),
+        )
+
+        @Volatile
+        var launchedPlan: String? = null
+
+        override fun storeAvailable(): Boolean = true
+        override suspend fun queryProduct(): StoreProduct = product
+        override suspend fun queryOwnedPurchases(): List<StorePurchase> =
+            emptyList()
+        override suspend fun acknowledge(purchase: StorePurchase): Boolean = true
+        override fun setPurchaseListener(
+            listener: ((StorePurchase) -> Unit)?,
+        ) = Unit
+
+        override fun launchPurchase(
+            product: StoreProduct,
+            basePlanId: String,
+        ): Boolean {
+            launchedPlan = basePlanId
+            return true
+        }
+    }
+
     @Test
     fun faseF_paywallSemLoja_estadoHonestoSemPrecoInventado() {
         val context: Context = ApplicationProvider.getApplicationContext()
@@ -778,5 +875,92 @@ class PaywallUiTest {
             composeRule.onAllNodesWithText("últimos 30 dias", substring = true)
                 .fetchSemanticsNodes().isEmpty(),
         )
+    }
+
+    /**
+     * Multi-planos (pós-Fase F): com uma loja falsa devolvendo os três
+     * planos, o paywall mostra o seletor com os preços DA LOJA, o
+     * anual pré-selecionado (selo MELHOR VALOR, trial, equivalente
+     * mensal e economia calculada), e trocar de plano muda o CTA e o
+     * plano que a compra lança.
+     */
+    @Test
+    fun planos_paywallSeletor_precosDaLojaETrocaDePlano() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val store = FakePlanStore()
+        val deps = depsWithStore(context, store)
+        composeRule.setContent {
+            app.constancia.ui.paywall.PaywallScreen(deps = deps, onClose = {})
+        }
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            nodesWithTag("plan_selector")
+        }
+        // Os três planos, com os preços que a LOJA (falsa) retornou.
+        org.junit.Assert.assertTrue(nodesWithTag("plan_option_mensal"))
+        org.junit.Assert.assertTrue(nodesWithTag("plan_option_trimestral"))
+        org.junit.Assert.assertTrue(nodesWithTag("plan_option_anual"))
+        org.junit.Assert.assertTrue(nodesWith("R$ 19,90"))
+        org.junit.Assert.assertTrue(nodesWith("R$ 44,90"))
+        org.junit.Assert.assertTrue(nodesWith("R$ 119,90"))
+        // Anual em destaque: selo, equivalente mensal e a economia
+        // calculada dos preços reais (119,90/ano vs 19,90/mês → 50%).
+        org.junit.Assert.assertTrue(nodesWith("MELHOR VALOR"))
+        org.junit.Assert.assertTrue(nodesWith("≈ R$ 9,99/mês", substring = true))
+        org.junit.Assert.assertTrue(nodesWith("economize 50%", substring = true))
+        org.junit.Assert.assertTrue(nodesWith("economize 25%", substring = true))
+        // Trial é anunciado SÓ no anual (a pílula dentro da opção).
+        org.junit.Assert.assertTrue(nodesWith("7 dias grátis"))
+        shot("17_paywall_planos")
+
+        val list = composeRule.onNodeWithTag("paywall_list")
+        fun scrollToBottom() {
+            repeat(6) {
+                list.performTouchInput { swipeUp() }
+                composeRule.waitForIdle()
+            }
+        }
+        fun scrollToTop() {
+            repeat(6) {
+                list.performTouchInput { swipeDown() }
+                composeRule.waitForIdle()
+            }
+        }
+
+        // Padrão: o anual vem pré-selecionado — o CTA (fim da lista)
+        // é o do trial.
+        scrollToBottom()
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            nodesWith("Começar 7 dias grátis")
+        }
+
+        // Trimestral: o CTA muda para o preço do plano escolhido.
+        scrollToTop()
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            nodesWithTag("plan_option_trimestral")
+        }
+        composeRule.onNodeWithTag("plan_option_trimestral").performClick()
+        composeRule.waitForIdle()
+        scrollToBottom()
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            nodesWith("Assinar o Pro — R$ 44,90/3 meses")
+        }
+        shot("17_paywall_trimestral")
+
+        // Mensal: CTA muda de novo e a COMPRA lança o plano mensal
+        // (a fiação seletor → oferta é o que a loja falsa registra).
+        scrollToTop()
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            nodesWithTag("plan_option_mensal")
+        }
+        composeRule.onNodeWithTag("plan_option_mensal").performClick()
+        composeRule.waitForIdle()
+        scrollToBottom()
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            nodesWith("Assinar o Pro — R$ 19,90/mês")
+        }
+        composeRule.onNodeWithTag("paywall_subscribe").performClick()
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            store.launchedPlan == "mensal"
+        }
     }
 }
