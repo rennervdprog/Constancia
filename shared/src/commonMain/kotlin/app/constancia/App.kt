@@ -186,6 +186,7 @@ private fun ConstanciaBottomBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .testTag("bottom_bar")
             .padding(horizontal = 14.dp)
             .padding(bottom = 12.dp)
             .shadow(

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -427,5 +428,72 @@ class ConstanciaUiTest {
             semPrazo.height <= mais30.height * 1.5f,
         )
         shot("12_form_prazo")
+    }
+
+    /** Insets reais da janela do teste (status bar / nav bar), em px. */
+    private fun realWindowInsets(): Pair<Int, Int> {
+        var top = 0
+        var bottom = 0
+        val activity = composeRule.activity
+        activity.runOnUiThread {
+            val wi = androidx.core.view.ViewCompat
+                .getRootWindowInsets(activity.window.decorView)
+            top = wi?.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.statusBars(),
+            )?.top ?: 0
+            bottom = wi?.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.navigationBars(),
+            )?.bottom ?: 0
+        }
+        return top to bottom
+    }
+
+    @Test
+    fun reteste2_conteudoNaoInvadeBarrasDoSistema() {
+        // REPRODUÇÃO (reteste 2, 2026-10-21): no aparelho do Renner o
+        // cabeçalho da Hoje nasce CORTADO sob a status bar. A Activity
+        // do teste, por padrão, encaixa o conteúdo na janela
+        // (decorFits=true) e esconde o bug — o MainActivity real usa
+        // enableEdgeToEdge (decorFits=false). Virar a chave reproduz o
+        // ambiente real: sem insets aplicados, o conteúdo invade a
+        // barra de status e a de navegação.
+        val activity = composeRule.activity
+        activity.runOnUiThread {
+            androidx.core.view.WindowCompat
+                .setDecorFitsSystemWindows(activity.window, false)
+        }
+        composeRule.waitForIdle()
+        val (statusTop, navBottom) = realWindowInsets()
+        org.junit.Assert.assertTrue(
+            "o emulador deveria reportar inset de status bar > 0 (veio $statusTop)",
+            statusTop > 0,
+        )
+        shot("13_insets_home")
+        val header = composeRule.onNodeWithTag("home_header")
+            .fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(
+            "cabeçalho sob a status bar: topo=${header.top} < inset=$statusTop",
+            header.top >= statusTop - 2f,
+        )
+        val rootH = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.height
+        val bar = composeRule.onNodeWithTag("bottom_bar")
+            .fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(
+            "barra inferior sob a barra de navegação: " +
+                "base=${bar.bottom} > ${rootH - navBottom}",
+            bar.bottom <= rootH - navBottom + 2f,
+        )
+        // A folha de criação também respeita o topo.
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("O que você quer criar?")
+        }
+        shot("13_insets_folha_criar")
+        val sheetTitle = composeRule.onNodeWithText("O que você quer criar?")
+            .fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(
+            "folha sob a status bar: topo=${sheetTitle.top} < inset=$statusTop",
+            sheetTitle.top >= statusTop - 2f,
+        )
     }
 }

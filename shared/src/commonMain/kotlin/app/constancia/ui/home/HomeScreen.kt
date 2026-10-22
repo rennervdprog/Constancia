@@ -441,6 +441,7 @@ private fun GreetHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag("home_header")
             .padding(start = 2.dp, end = 2.dp, top = 6.dp, bottom = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
