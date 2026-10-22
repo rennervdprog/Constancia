@@ -849,29 +849,27 @@ private fun PlanOptionRow(
                 }
             }
             Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (plan.period == PlanPeriod.MONTHLY) {
+                    "cobrança mensal, cancele quando quiser"
+                } else {
+                    plan.monthlyEquivalentLabel()
+                },
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 12.sp,
+                ),
+                color = subColor,
+            )
+            if (savings != null) {
                 Text(
-                    text = if (plan.period == PlanPeriod.MONTHLY) {
-                        "cobrança mensal, cancele quando quiser"
-                    } else {
-                        plan.monthlyEquivalentLabel()
-                    },
+                    text = "economize $savings% vs. o mensal",
                     style = MaterialTheme.typography.bodySmall.copy(
                         fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
                     ),
-                    color = subColor,
+                    color = if (selected) Color(0xFF4B1D96)
+                    else Color(0xFFC4A6F5),
                 )
-                if (savings != null) {
-                    Text(
-                        text = " · economize $savings%",
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                        ),
-                        color = if (selected) Color(0xFF4B1D96)
-                        else Color(0xFFC4A6F5),
-                    )
-                }
             }
             if (plan.trialDays != null) {
                 Spacer(Modifier.height(6.dp))
