@@ -182,7 +182,6 @@ private fun ChallengeCard(
                 } else {
                     CtaButton(
                         text = "Desbloquear no Pro",
-                        tag = "challenge_unlock_pro",
                         onClick = onOpenPaywall,
                     )
                 }
