@@ -263,7 +263,7 @@ class TimeInputTest {
         assertEquals("", timeDigitsOf(""))
         assertEquals("0800", timeDigitsOf("08:00"))
         assertEquals("930", timeDigitsOf("9:30"))
-        assertEquals("930", timeDigitsOf("09:30"))
+        assertEquals("0930", timeDigitsOf("09:30"))
         assertEquals("1234", timeDigitsOf("12:34"))
     }
 
