@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,7 +96,15 @@ fun MoreScreen(
     val extra = MaterialTheme.constanciaExtra
     val scheme = MaterialTheme.colorScheme
     val darkTheme by deps.prefs.darkThemeFlow().collectAsState(initial = false)
-    val isPro by deps.prefs.isProFlow().collectAsState(initial = false)
+    // Fase F: entitlement da fonte única (EntitlementManager via loja).
+    val isPro by deps.entitlement.isProFlow.collectAsState(initial = false)
+    // Fase F: o preço exibido vem do ProductDetails da loja — sem
+    // produto carregado, o cartão simplesmente não mostra preço.
+    var proPrice by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        proPrice = deps.billing.queryProduct()?.formattedPrice
+            ?.takeIf { it.isNotBlank() }
+    }
     val syncStatus by deps.sync.statusFlow().collectAsState(initial = null)
     val statuses by deps.habits.todayStatusFlow().collectAsState(initial = emptyList())
     var syncMsg by remember { mutableStateOf<String?>(null) }
@@ -223,7 +232,7 @@ fun MoreScreen(
 
         // Cartão Pro em gradiente do protótipo.
         item {
-            ProCard(isPro = isPro, onClick = onOpenPaywall)
+            ProCard(isPro = isPro, priceText = proPrice, onClick = onOpenPaywall)
         }
 
         item {
@@ -693,7 +702,7 @@ fun MoreScreen(
  *  círculo decorativo, selo, título, texto e a linha de preço com o
  *  botão branco "Conhecer". */
 @Composable
-private fun ProCard(isPro: Boolean, onClick: () -> Unit) {
+private fun ProCard(isPro: Boolean, priceText: String?, onClick: () -> Unit) {
     val shape = RoundedCornerShape(24.dp)
     Box(
         modifier = Modifier
@@ -731,15 +740,17 @@ private fun ProCard(isPro: Boolean, onClick: () -> Unit) {
                 text = if (isPro) {
                     "Você já é Pro"
                 } else {
-                    "Relatórios sem limite de tempo"
+                    // Fase F (decisão aprovada): o grátis NÃO tem recorte
+                    // de período — a copy vende as superfícies Pro reais.
+                    "Padrões cruzados e raio-X de atrasos"
                 },
                 style = MaterialTheme.typography.headlineSmall.copy(fontSize = 19.sp),
                 color = Color.White,
             )
             Spacer(Modifier.height(5.dp))
             Text(
-                text = "Padrões cruzados, raio-X de atrasos e o ano em " +
-                    "revista — sem recorte de 30 dias.",
+                text = "Insights avançados de tarefas × hábitos × diário " +
+                    "e a revista completa do seu ano — só no Pro.",
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
                 color = Color(0xFFDCCFFB),
                 modifier = Modifier.widthIn(max = 270.dp),
@@ -747,27 +758,21 @@ private fun ProCard(isPro: Boolean, onClick: () -> Unit) {
             if (!isPro) {
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "R$ 119,90/ano",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                        ),
-                        color = Color.White,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "R$ 191,88",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 12.sp,
-                        ),
-                        color = Color(0xFFA78BDB),
-                        textDecoration = TextDecoration.LineThrough,
-                        maxLines = 1,
-                        softWrap = false,
-                    )
+                    // Preço SÓ da loja (ProductDetails): sem produto
+                    // carregado, nenhum preço é exibido (nada hardcoded).
+                    if (priceText != null) {
+                        Text(
+                            text = "$priceText/ano",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = Color.White,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Spacer(Modifier.weight(1f))
                     Box(
                         modifier = Modifier
