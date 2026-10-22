@@ -198,7 +198,17 @@ private fun ConstanciaBottomBar(
     modifier: Modifier = Modifier,
 ) {
     val extra = MaterialTheme.constanciaExtra
-    Row(
+    // Reteste 3 (2026-10-22): pílula e conteúdo em CAMADAS separadas.
+    // Antes era um Row único com shadow + clip na mesma cadeia: o
+    // shadow recorta o desenho por padrão (clip=true quando há
+    // elevação) e o clip(28dp) idem — os dois cortavam TUDO o que o
+    // Row desenhava na borda da pílula, inclusive a projeção de
+    // -26dp do FAB ("Botao + cortado" no aparelho: o botão virava
+    // meia-cúpula de topo reto, sem os cantos superiores). Agora quem
+    // carrega shadow/clip/fundo/borda é uma camada SEM filhos, do
+    // tamanho exato da barra; a linha de abas e o FAB desenham por
+    // cima, sem nenhum recorte — o FAB projeta inteiro.
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .testTag("bottom_bar")
@@ -206,85 +216,95 @@ private fun ConstanciaBottomBar(
             // gestos/navegação, nunca sob ela.
             .windowInsetsPadding(WindowInsets.navigationBars)
             .padding(horizontal = 14.dp)
-            .padding(bottom = 12.dp)
-            .shadow(
-                elevation = 18.dp,
-                shape = RoundedCornerShape(28.dp),
-                spotColor = Color(0xFF26104A).copy(alpha = 0.28f),
-                ambientColor = Color(0xFF26104A).copy(alpha = 0.28f),
-            )
-            .clip(RoundedCornerShape(28.dp))
-            .background(extra.tabBg)
-            .border(
-                1.dp,
-                Color(0xFF26104A).copy(alpha = 0.07f),
-                RoundedCornerShape(28.dp),
-            )
-            .padding(horizontal = 6.dp)
-            .padding(top = 9.dp, bottom = 7.dp),
-        verticalAlignment = Alignment.Top,
+            .padding(bottom = 12.dp),
     ) {
-        BarTab(
-            tab = AppTab.HOJE,
-            selected = navigator.tab == AppTab.HOJE,
-            badge = 0,
-            onSelect = onSelect,
-            modifier = Modifier.weight(1f),
-        )
-        BarTab(
-            tab = AppTab.TAREFAS,
-            selected = navigator.tab == AppTab.TAREFAS,
-            badge = overdueCount,
-            onSelect = onSelect,
-            modifier = Modifier.weight(1f),
-        )
-        // Botão central de criar: elevado sobre a barra.
+        // Camada visual da pílula: sombra + fundo translúcido + borda.
         Box(
-            modifier = Modifier.weight(1f),
-            contentAlignment = Alignment.TopCenter,
-        ) {
-            Box(
-                modifier = Modifier
-                    .offset(y = (-26).dp)
-                    .size(54.dp)
-                    .shadow(
-                        elevation = 14.dp,
-                        shape = RoundedCornerShape(19.dp),
-                        spotColor = Color(0xFF38066E).copy(alpha = 0.55f),
-                        ambientColor = Color(0xFF38066E).copy(alpha = 0.55f),
-                    )
-                    .clip(RoundedCornerShape(19.dp))
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFF5B21B6), Color(0xFF38106E)),
-                        ),
-                    )
-                    .testTag("fab_create")
-                    .clickable(onClick = onCreate),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "Criar",
-                    tint = Color.White,
-                    modifier = Modifier.size(26.dp),
+            modifier = Modifier
+                .matchParentSize()
+                .shadow(
+                    elevation = 18.dp,
+                    shape = RoundedCornerShape(28.dp),
+                    spotColor = Color(0xFF26104A).copy(alpha = 0.28f),
+                    ambientColor = Color(0xFF26104A).copy(alpha = 0.28f),
                 )
+                .clip(RoundedCornerShape(28.dp))
+                .background(extra.tabBg)
+                .border(
+                    1.dp,
+                    Color(0xFF26104A).copy(alpha = 0.07f),
+                    RoundedCornerShape(28.dp),
+                ),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp)
+                .padding(top = 9.dp, bottom = 7.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            BarTab(
+                tab = AppTab.HOJE,
+                selected = navigator.tab == AppTab.HOJE,
+                badge = 0,
+                onSelect = onSelect,
+                modifier = Modifier.weight(1f),
+            )
+            BarTab(
+                tab = AppTab.TAREFAS,
+                selected = navigator.tab == AppTab.TAREFAS,
+                badge = overdueCount,
+                onSelect = onSelect,
+                modifier = Modifier.weight(1f),
+            )
+            // Botão central de criar: elevado sobre a barra.
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .offset(y = (-26).dp)
+                        .size(54.dp)
+                        .shadow(
+                            elevation = 14.dp,
+                            shape = RoundedCornerShape(19.dp),
+                            spotColor = Color(0xFF38066E).copy(alpha = 0.55f),
+                            ambientColor = Color(0xFF38066E).copy(alpha = 0.55f),
+                        )
+                        .clip(RoundedCornerShape(19.dp))
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFF5B21B6), Color(0xFF38106E)),
+                            ),
+                        )
+                        .testTag("fab_create")
+                        .clickable(onClick = onCreate),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = "Criar",
+                        tint = Color.White,
+                        modifier = Modifier.size(26.dp),
+                    )
+                }
             }
+            BarTab(
+                tab = AppTab.HABITOS,
+                selected = navigator.tab == AppTab.HABITOS,
+                badge = 0,
+                onSelect = onSelect,
+                modifier = Modifier.weight(1f),
+            )
+            BarTab(
+                tab = AppTab.MAIS,
+                selected = navigator.tab == AppTab.MAIS,
+                badge = 0,
+                onSelect = onSelect,
+                modifier = Modifier.weight(1f),
+            )
         }
-        BarTab(
-            tab = AppTab.HABITOS,
-            selected = navigator.tab == AppTab.HABITOS,
-            badge = 0,
-            onSelect = onSelect,
-            modifier = Modifier.weight(1f),
-        )
-        BarTab(
-            tab = AppTab.MAIS,
-            selected = navigator.tab == AppTab.MAIS,
-            badge = 0,
-            onSelect = onSelect,
-            modifier = Modifier.weight(1f),
-        )
     }
 }
 

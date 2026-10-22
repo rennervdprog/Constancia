@@ -494,10 +494,15 @@ class ConstanciaUiTest {
             fab.top < bar.top - 4f,
         )
         val bitmap = composeRule.onRoot().captureToImage().asAndroidBitmap()
-        // Amostra: metade da faixa projetada (entre o topo desenhado
-        // do FAB e a borda da pílula), centro horizontal do FAB.
-        val x = fab.center.x.toInt().coerceIn(0, bitmap.width - 1)
-        val y = ((fab.top + bar.top) / 2f).toInt().coerceIn(0, bitmap.height - 1)
+        // Amostra: 8px acima da borda da pílula (a projeção é ~17dp),
+        // no centro horizontal da BARRA (o FAB é o item central). Não
+        // uso fab.top como referência: com o bug presente, os bounds
+        // VISÍVEIS do FAB já vêm recortados na borda da pílula
+        // (fab.top == bar.top na reprodução) e a amostra cairia em
+        // cima da borda. Na reprodução, este pixel era (255,255,255)
+        // — o fundo da tela — e dentro da pílula, (70,23,139).
+        val x = bar.center.x.toInt().coerceIn(0, bitmap.width - 1)
+        val y = (bar.top - 8f).toInt().coerceIn(0, bitmap.height - 1)
         val px = bitmap.getPixel(x, y)
         val r = android.graphics.Color.red(px)
         val g = android.graphics.Color.green(px)
