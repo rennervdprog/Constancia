@@ -172,7 +172,8 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
         modifier = Modifier
             .fillMaxSize()
             .background(scheme.background)
-            .windowInsetsPadding(WindowInsets.statusBars),
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .testTag("paywall_list"),
         contentPadding = PaddingValues(
             start = 20.dp, top = 10.dp, end = 20.dp, bottom = 24.dp,
         ),
