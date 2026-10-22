@@ -748,8 +748,9 @@ class PaywallUiTest {
             app.constancia.ui.paywall.PaywallScreen(deps = deps, onClose = {})
         }
         // A área de compra é o último item da LazyColumn: rola até ela
-        // ser composta antes de conferir qualquer texto de lá.
-        val list = composeRule.onNode(hasScrollAction())
+        // ser composta antes de conferir qualquer texto de lá. (A tag é
+        // necessária: hasScrollAction também casa o HorizontalPager.)
+        val list = composeRule.onNodeWithTag("paywall_list")
         repeat(5) {
             list.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
