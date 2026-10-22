@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.constancia.AppDeps
+import app.constancia.domain.ProGate
 import app.constancia.model.Challenge
 import app.constancia.model.ChallengeStatus
 import app.constancia.model.FrequencyType
@@ -54,8 +55,14 @@ import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
 
 @Composable
-fun ChallengesScreen(deps: AppDeps, modifier: Modifier = Modifier) {
+fun ChallengesScreen(
+    deps: AppDeps,
+    modifier: Modifier = Modifier,
+    onOpenPaywall: () -> Unit = {},
+) {
     val challenges by deps.challenges.challengesFlow().collectAsState(initial = emptyList())
+    // Fase F: entitlement vem da fonte única (EntitlementManager).
+    val isPro by deps.entitlement.isProFlow.collectAsState(initial = false)
     val scope = rememberCoroutineScope()
     val today = remember { todayYmd() }
 
@@ -79,6 +86,8 @@ fun ChallengesScreen(deps: AppDeps, modifier: Modifier = Modifier) {
         items(challenges, key = { it.id }) { challenge ->
             ChallengeCard(
                 challenge = challenge,
+                isPro = isPro,
+                onOpenPaywall = onOpenPaywall,
                 onStart = {
                     scope.launch {
                         deps.challenges.start(challenge.id, today)
@@ -117,6 +126,8 @@ fun ChallengesScreen(deps: AppDeps, modifier: Modifier = Modifier) {
 @Composable
 private fun ChallengeCard(
     challenge: Challenge,
+    isPro: Boolean,
+    onOpenPaywall: () -> Unit,
     onStart: () -> Unit,
     onFinish: () -> Unit,
     onGiveUp: () -> Unit,
@@ -164,7 +175,17 @@ private fun ChallengeCard(
         when (challenge.status) {
             ChallengeStatus.AVAILABLE -> {
                 Spacer(Modifier.height(12.dp))
-                CtaButton(text = "Começar", onClick = onStart)
+                // Fase F: pacote Pro só COMEÇA com entitlement — quem já
+                // começou segue usando mesmo após downgrade (ProGate).
+                if (ProGate.canStartChallenge(challenge.isPro, challenge.status, isPro)) {
+                    CtaButton(text = "Começar", onClick = onStart)
+                } else {
+                    CtaButton(
+                        text = "Desbloquear no Pro",
+                        tag = "challenge_unlock_pro",
+                        onClick = onOpenPaywall,
+                    )
+                }
             }
             ChallengeStatus.ACTIVE -> {
                 Spacer(Modifier.height(12.dp))
