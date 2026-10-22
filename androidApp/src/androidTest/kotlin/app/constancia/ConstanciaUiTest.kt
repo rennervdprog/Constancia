@@ -2,6 +2,9 @@ package app.constancia
 
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -551,9 +554,20 @@ class ConstanciaUiTest {
 
     // ---------- Reteste 2: campo de hora com teclas de verdade ----------
 
+    /**
+     * Nó semântico do campo de texto dono da tag (árvore NÃO mesclada):
+     * é o nó que carrega a ação SetText — o `EditableText` mora nele,
+     * não necessariamente no nó mesclado que a tag enxerga.
+     */
+    private fun textFieldNode(tag: String) = composeRule.onNode(
+        (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag))) and
+            hasSetTextAction(),
+        useUnmergedTree = true,
+    ).fetchSemanticsNode()
+
     /** Texto do buffer de um campo (semântica EditableText). */
     private fun editableTextOf(tag: String): String =
-        composeRule.onNodeWithTag(tag).fetchSemanticsNode()
+        textFieldNode(tag)
             .config[androidx.compose.ui.semantics.SemanticsProperties.EditableText]
             .text
 
@@ -580,7 +594,7 @@ class ConstanciaUiTest {
     private fun probeField(tag: String): String {
         val sb = StringBuilder()
         runCatching {
-            val node = composeRule.onNodeWithTag(tag).fetchSemanticsNode()
+            val node = textFieldNode(tag)
             sb.append("id=").append(node.id).append(' ')
             sb.append("editable=[")
             sb.append(
