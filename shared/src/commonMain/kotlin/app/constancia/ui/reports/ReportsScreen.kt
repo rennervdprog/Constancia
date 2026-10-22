@@ -174,7 +174,8 @@ fun ReportsScreen(
     val reportTasks = remember(allTasks, taskHistory) {
         withOccurrenceHistory(allTasks, taskHistory)
     }
-    val isPro by deps.prefs.isProFlow().collectAsState(initial = false)
+    // Fase F: entitlement da fonte única (EntitlementManager via loja).
+    val isPro by deps.entitlement.isProFlow.collectAsState(initial = false)
     val today = remember { Clock.System.todayIn(timeZone) }
     // Janela dobrada: período atual + anterior (deltas) no mesmo fluxo.
     val fromYmd = remember(period, today) {
