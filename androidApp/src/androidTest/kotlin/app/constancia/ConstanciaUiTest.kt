@@ -1,7 +1,9 @@
 package app.constancia
 
 import android.content.Context
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
@@ -447,6 +449,65 @@ class ConstanciaUiTest {
             semPrazo.height <= mais30.height * 1.5f,
         )
         shot("12_form_prazo")
+    }
+
+    @Test
+    fun reteste3_fabElevadoInteiro_emTodasAsTelas() {
+        // REPRODUÇÃO (reteste 3, 2026-10-22): "Botao + cortado" no
+        // aparelho do Renner. O FAB central do protótipo é um squircle
+        // de 54dp ELEVADO -26dp: ele projeta ~17dp ACIMA da borda
+        // superior da pílula. Se algum ancestral recorta o desenho na
+        // borda da barra (clip), a projeção some e o botão vira uma
+        // meia-cúpula de topo reto. Bounds de semântica NÃO enxergam
+        // clip (o offset continua "valendo" no layout) — a prova é por
+        // PIXEL: no meio da faixa projetada, no centro horizontal do
+        // FAB, tem que existir o roxo do gradiente, em todas as telas.
+        assertFabInteiroAcimaDaPilula()
+        shot("16_fab_hoje")
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.waitForIdle()
+        assertFabInteiroAcimaDaPilula()
+        shot("16_fab_tarefas")
+        composeRule.onNodeWithTag("tab_HABITOS").performClick()
+        composeRule.waitForIdle()
+        assertFabInteiroAcimaDaPilula()
+        shot("16_fab_habitos")
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.waitForIdle()
+        assertFabInteiroAcimaDaPilula()
+        shot("16_fab_mais")
+        // Diário mora dentro da Mais — a barra segue visível lá.
+        composeRule.onNodeWithTag("mais_diario").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertFabInteiroAcimaDaPilula()
+        shot("16_fab_diario")
+    }
+
+    /** Confere por pixel que a projeção do FAB acima da pílula é roxa. */
+    private fun assertFabInteiroAcimaDaPilula() {
+        val bar = composeRule.onNodeWithTag("bottom_bar")
+            .fetchSemanticsNode().boundsInRoot
+        val fab = composeRule.onNodeWithTag("fab_create")
+            .fetchSemanticsNode().boundsInRoot
+        org.junit.Assert.assertTrue(
+            "FAB deveria projetar acima da pílula: fab.top=${fab.top} bar.top=${bar.top}",
+            fab.top < bar.top - 4f,
+        )
+        val bitmap = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        // Amostra: metade da faixa projetada (entre o topo desenhado
+        // do FAB e a borda da pílula), centro horizontal do FAB.
+        val x = fab.center.x.toInt().coerceIn(0, bitmap.width - 1)
+        val y = ((fab.top + bar.top) / 2f).toInt().coerceIn(0, bitmap.height - 1)
+        val px = bitmap.getPixel(x, y)
+        val r = android.graphics.Color.red(px)
+        val g = android.graphics.Color.green(px)
+        val b = android.graphics.Color.blue(px)
+        org.junit.Assert.assertTrue(
+            "pixel na projeção do FAB não é o roxo do gradiente " +
+                "(r=$r g=$g b=$b em x=$x y=$y; fab.top=${fab.top} bar.top=${bar.top}): " +
+                "o botão + está cortado na borda da pílula",
+            b > 90 && b > r + 40 && g < 90 && r in 30..140,
+        )
     }
 
     /** Activity atualmente RESUMED (a regra é createComposeRule, sem .activity). */
