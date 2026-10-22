@@ -426,16 +426,11 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("task_time_field").performScrollTo()
             .performTextInput("930")
         // Reteste 2: o campo guarda só DÍGITOS e exibe "09:30" via
-        // VisualTransformation — a semântica (EditableText) expõe o
-        // buffer "930"; o formatado aparece no print 12_form_prazo.
-        try {
-            composeRule.waitUntil(timeoutMillis = 8000) {
-                editableTextOf("task_time_field") == "930"
-            }
-        } catch (e: Throwable) {
-            val probe = probeField("task_time_field")
-            shotProbe("task_time_field", "98_diag_form")
-            throw AssertionError("buffer '930' não atingido. Sonda: $probe", e)
+        // VisualTransformation — e o EditableText da semântica expõe
+        // justamente o texto exibido ("09:30"), que é o que o usuário
+        // vê e o que o formulário recebe.
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            displayTextOf("task_time_field") == "09:30"
         }
         runCatching { device.pressBack() } // fecha o teclado virtual
         composeRule.waitForIdle()
@@ -563,8 +558,14 @@ class ConstanciaUiTest {
         useUnmergedTree = true,
     ).fetchSemanticsNode()
 
-    /** Texto do buffer de um campo (semântica EditableText). */
-    private fun editableTextOf(tag: String): String =
+    /**
+     * Texto EXIBIDO pelo campo (semântica EditableText). Com
+     * VisualTransformation, o EditableText expõe o texto TRANSFORMADO
+     * ("09:30"), não o buffer interno de dígitos — comprovado pela
+     * sonda do reteste 2 (editable=[09:30] após digitar 930). É também
+     * exatamente o valor que o pai recebe no onValueChange.
+     */
+    private fun displayTextOf(tag: String): String =
         textFieldNode(tag)
             .config[androidx.compose.ui.semantics.SemanticsProperties.EditableText]
             .text
@@ -588,58 +589,10 @@ class ConstanciaUiTest {
         composeRule.waitForIdle()
     }
 
-    /** Sonda de diagnóstico: o que a semântica do campo realmente vê. */
-    private fun probeField(tag: String): String {
-        val sb = StringBuilder()
-        runCatching {
-            val node = textFieldNode(tag)
-            sb.append("id=").append(node.id).append(' ')
-            sb.append("editable=[")
-            sb.append(
-                runCatching {
-                    node.config[
-                        androidx.compose.ui.semantics
-                            .SemanticsProperties.EditableText,
-                    ].text
-                }.getOrElse { "ERR:${it.message?.take(50)}" },
-            )
-            sb.append("] text=[")
-            sb.append(
-                runCatching {
-                    node.config[
-                        androidx.compose.ui.semantics.SemanticsProperties.Text,
-                    ].joinToString { it.text }
-                }.getOrElse { "ERR:${it.message?.take(50)}" },
-            )
-            sb.append(']')
-        }.onFailure { sb.append("nodeERR:${it.message?.take(80)}") }
-        return sb.toString()
-    }
-
-    /** Fotografa a sonda escrita no campo de nome (canal que funciona). */
-    private fun shotProbe(tag: String, label: String) {
-        val probe = probeField(tag)
-        runCatching {
-            composeRule.onNodeWithTag("task_name_field")
-                .performTextReplacement(probe.take(300))
-        }
-        shot(label)
-    }
-
-    private fun awaitBuffer(tag: String, expected: String) {
-        try {
-            composeRule.waitUntil(timeoutMillis = 8000) {
-                editableTextOf(tag) == expected
-            }
-        } catch (e: Throwable) {
-            // Diagnóstico (reteste 2): a sonda mostra o que a
-            // semântica do campo realmente vê (buffer e texto).
-            val probe = probeField(tag)
-            shotProbe(tag, "99_diag_buffer")
-            throw AssertionError(
-                "buffer esperado '$expected' não atingido. Sonda: $probe",
-                e,
-            )
+    /** Espera o campo EXIBIR o texto dado (ver displayTextOf). */
+    private fun awaitDisplay(tag: String, expected: String) {
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            displayTextOf(tag) == expected
         }
     }
 
@@ -650,7 +603,8 @@ class ConstanciaUiTest {
         // ("29"->"23", "61"->"59"), prendia o cursor no fim e engolia
         // backspace no ":". Aqui as sequências são TECLAS REAIS no
         // campo de hora da tarefa (o mesmo componente TimeTextField é
-        // usado nos outros 3 campos de hora do app).
+        // usado nos outros 3 campos de hora do app) e cada passo
+        // confere o texto EXIBIDO — que é o que o usuário vê.
         composeRule.onNodeWithTag("tab_TAREFAS").performClick()
         composeRule.onNodeWithTag("fab_create").performClick()
         composeRule.onNodeWithTag("create_task").performClick()
@@ -660,37 +614,37 @@ class ConstanciaUiTest {
             .performClick()
         composeRule.waitForIdle()
 
-        // 1) Dígito a dígito: 9, 3, 0 -> buffer "930" (exibe 09:30).
+        // 1) Dígito a dígito: 9, 3, 0 -> exibe "09:30".
         keyType("930")
-        awaitBuffer("task_time_field", "930")
+        awaitDisplay("task_time_field", "09:30")
         shot("14_hora_digitada_930")
 
         // 2) Dígito extra além do buffer é ignorado, sem deslocar.
         keyType("7")
-        awaitBuffer("task_time_field", "930")
+        awaitDisplay("task_time_field", "09:30")
 
         // 3) Backspace apaga dígito a dígito até esvaziar, sem travar.
         keyBackspace()
-        awaitBuffer("task_time_field", "93")
+        awaitDisplay("task_time_field", "09:3")
         keyBackspace()
-        awaitBuffer("task_time_field", "9")
+        awaitDisplay("task_time_field", "09")
         keyBackspace()
-        awaitBuffer("task_time_field", "")
+        awaitDisplay("task_time_field", "")
 
-        // 4) Hora inválida NÃO é reescrita: digitar 2, 9 fica "29"
+        // 4) Hora inválida NÃO é reescrita: digitar 2, 9 exibe "29"
         // (a antiga transformava em "23" na frente do usuário).
         keyType("29")
-        awaitBuffer("task_time_field", "29")
+        awaitDisplay("task_time_field", "29")
         shot("15_hora_invalida_sem_reescrever")
 
         // 5) Selecionar tudo + redigitar troca o valor inteiro.
         composeRule.onNodeWithTag("task_time_field")
             .performTextReplacement("845")
-        awaitBuffer("task_time_field", "845")
+        awaitDisplay("task_time_field", "08:45")
 
-        // 6) Colar texto formatado filtra os dígitos: "14:30" -> 1430.
+        // 6) Colar texto formatado filtra os dígitos: "14:30" fica.
         composeRule.onNodeWithTag("task_time_field")
             .performTextReplacement("14:30")
-        awaitBuffer("task_time_field", "1430")
+        awaitDisplay("task_time_field", "14:30")
     }
 }
