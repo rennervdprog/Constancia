@@ -18,10 +18,15 @@ import com.android.billingclient.api.acknowledgePurchase
 import com.android.billingclient.api.queryProductDetails
 import com.android.billingclient.api.queryPurchasesAsync
 import app.constancia.domain.ConstanciaBilling
+import app.constancia.domain.PlanCatalog
 import app.constancia.domain.PurchaseState
+import app.constancia.domain.StoreOffer
 import app.constancia.domain.StoreProduct
 import app.constancia.domain.StorePurchase
+import app.constancia.domain.monthsOfBillingPeriod
 import java.lang.ref.WeakReference
+import java.text.NumberFormat
+import java.util.Currency
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -72,11 +77,17 @@ object BillingHolder {
 fun initBillingContext(context: Context) = BillingHolder.init(context)
 
 /**
- * Android — Google Play Billing Library (Fase F).
+ * Android — Google Play Billing Library (Fase F; multi-planos depois).
  *
  * Fluxo: conectar → queryProductDetails(`constancia_pro`/subs) →
- * launchBillingFlow com a oferta do plano-base `anual` → o resultado
- * chega no PurchasesUpdatedListener → acknowledge → entitlement.
+ * traduzir TODAS as ofertas para [StoreOffer] e deixar o [PlanCatalog]
+ * (lógica pura) escolher a oferta de cada plano-base (`mensal`,
+ * `trimestral`, `anual` com trial) → launchBillingFlow com o
+ * offerToken DO PLANO ESCOLHIDO → o resultado chega no
+ * PurchasesUpdatedListener → acknowledge → entitlement. Quem já
+ * assina outro plano-base do mesmo produto troca de plano pelo
+ * SubscriptionUpdateParams (a compra nova substitui a antiga; o
+ * entitlement continua Pro, pois é por produto).
  * `queryPurchasesAsync` restaura compras existentes (abertura do app e
  * botão "Restaurar compra").
  *
@@ -92,19 +103,30 @@ actual class BillingGateway : StoreBilling {
     @Volatile
     private var purchaseListener: ((StorePurchase) -> Unit)? = null
 
-    // ProductDetails + oferta escolhida da última consulta (o fluxo de
-    // compra precisa do objeto da loja, não só do modelo neutro).
+    // ProductDetails da última consulta (o fluxo de compra precisa do
+    // objeto da loja, não só do modelo neutro).
     @Volatile
     private var cachedDetails: com.android.billingclient.api.ProductDetails? = null
 
+    // offerToken por plano-base, da oferta que o PlanCatalog escolheu.
     @Volatile
-    private var cachedOfferToken: String? = null
+    private var cachedOfferTokens: Map<String, String> = emptyMap()
+
+    // Token da compra ativa do produto (se houver): é o que permite a
+    // TROCA de plano pelo fluxo da loja (SubscriptionUpdateParams).
+    @Volatile
+    private var cachedOwnedToken: String? = null
 
     private val purchasesUpdatedListener = PurchasesUpdatedListener { result, purchases ->
         if (result.responseCode == BillingClient.BillingResponseCode.OK &&
             purchases != null
         ) {
             purchases.forEach { purchase ->
+                if (purchase.purchaseState == Purchase.PurchaseState.PURCHASED &&
+                    purchase.products.contains(ConstanciaBilling.PRODUCT_ID)
+                ) {
+                    cachedOwnedToken = purchase.purchaseToken
+                }
                 purchaseListener?.invoke(purchase.toStorePurchase())
             }
         }
@@ -162,19 +184,17 @@ actual class BillingGateway : StoreBilling {
         val details = result.productDetailsList?.firstOrNull() ?: return null
         val offers = details.subscriptionOfferDetails
         if (offers.isNullOrEmpty()) return null
-        // Oferta do plano-base anual; sem ela, a primeira disponível.
-        val offer = offers.firstOrNull {
-            it.basePlanId == ConstanciaBilling.BASE_PLAN_ID
-        } ?: offers.first()
+        // Traduz TODAS as ofertas da loja para o modelo neutro; quem
+        // escolhe a oferta de cada plano-base é o PlanCatalog (puro).
+        val storeOffers = offers.mapNotNull { offer -> offer.toStoreOffer() }
+        val plans = PlanCatalog.resolvePlans(storeOffers)
+        if (plans.isEmpty()) return null
         cachedDetails = details
-        cachedOfferToken = offer.offerToken
-        val phases = offer.pricingPhases.pricingPhaseList
-        val paidPhase = phases.firstOrNull { it.priceAmountMicros > 0 } ?: phases.firstOrNull()
-        val freePhase = phases.firstOrNull { it.priceAmountMicros == 0L }
+        cachedOfferTokens = PlanCatalog.chooseOffers(storeOffers)
+            .mapValues { (_, offer) -> offer.offerToken }
         return StoreProduct(
             productId = details.productId,
-            formattedPrice = paidPhase?.formattedPrice ?: "",
-            trialDays = freePhase?.let { trialDaysOf(it.billingPeriod) },
+            plans = plans,
         )
     }
 
@@ -190,6 +210,12 @@ actual class BillingGateway : StoreBilling {
         ) {
             return null
         }
+        // Guarda o token da assinatura ativa DESTE produto: é ele que
+        // permite a troca de plano-base pelo fluxo da loja.
+        cachedOwnedToken = result.purchasesList.firstOrNull { purchase ->
+            purchase.purchaseState == Purchase.PurchaseState.PURCHASED &&
+                purchase.products.contains(ConstanciaBilling.PRODUCT_ID)
+        }?.purchaseToken
         return result.purchasesList.map { it.toStorePurchase() }
     }
 
@@ -209,12 +235,17 @@ actual class BillingGateway : StoreBilling {
         purchaseListener = listener
     }
 
-    actual override fun launchPurchase(product: StoreProduct): Boolean {
+    actual override fun launchPurchase(
+        product: StoreProduct,
+        basePlanId: String,
+    ): Boolean {
         val activity = BillingHolder.activity ?: return false
         val billing = client?.takeIf { it.isReady } ?: return false
         val details = cachedDetails ?: return false
-        val offerToken = cachedOfferToken ?: return false
-        val flowParams = BillingFlowParams.newBuilder()
+        // Offer token DO PLANO ESCOLHIDO (trial só existe no anual —
+        // quem garantiu foi o PlanCatalog na consulta do produto).
+        val offerToken = cachedOfferTokens[basePlanId] ?: return false
+        val flowBuilder = BillingFlowParams.newBuilder()
             .setProductDetailsParamsList(
                 listOf(
                     BillingFlowParams.ProductDetailsParams.newBuilder()
@@ -223,10 +254,60 @@ actual class BillingGateway : StoreBilling {
                         .build(),
                 ),
             )
-            .build()
-        val result = billing.launchBillingFlow(activity, flowParams)
+        // Já assina OUTRO plano-base do mesmo produto? Troca de plano:
+        // a loja substitui a assinatura antiga pela nova (o entitlement
+        // segue Pro — é por produto, não por plano).
+        cachedOwnedToken?.let { oldToken ->
+            flowBuilder.setSubscriptionUpdateParams(
+                BillingFlowParams.SubscriptionUpdateParams.newBuilder()
+                    .setOldPurchaseToken(oldToken)
+                    .setSubscriptionReplacementMode(
+                        BillingFlowParams.SubscriptionUpdateParams
+                            .ReplacementMode.CHARGE_FULL_PRICE,
+                    )
+                    .build(),
+            )
+        }
+        val result = billing.launchBillingFlow(activity, flowBuilder.build())
         return result.responseCode == BillingClient.BillingResponseCode.OK
     }
+
+    /** SubscriptionOfferDetails da loja → [StoreOffer] neutro: preço e
+     *  período da FASE PAGA; trial da fase grátis, se houver. */
+    private fun com.android.billingclient.api.ProductDetails
+        .SubscriptionOfferDetails.toStoreOffer(): StoreOffer? {
+        val phases = pricingPhases.pricingPhaseList
+        val paidPhase = phases.firstOrNull { it.priceAmountMicros > 0 }
+            ?: phases.firstOrNull() ?: return null
+        val freePhase = phases.firstOrNull { it.priceAmountMicros == 0L }
+        val months = monthsOfBillingPeriod(paidPhase.billingPeriod)
+            .takeIf { it > 0 } ?: 1
+        return StoreOffer(
+            basePlanId = basePlanId,
+            offerId = offerId,
+            formattedPrice = paidPhase.formattedPrice,
+            priceAmountMicros = paidPhase.priceAmountMicros,
+            currencyCode = paidPhase.priceCurrencyCode,
+            billingPeriod = paidPhase.billingPeriod,
+            formattedMonthlyEquivalent = formatMicrosAsCurrency(
+                amountMicros = paidPhase.priceAmountMicros / months,
+                currencyCode = paidPhase.priceCurrencyCode,
+            ),
+            trialDays = freePhase?.let { trialDaysOf(it.billingPeriod) },
+            offerToken = offerToken,
+        )
+    }
+
+    /** Formata micros na moeda da loja (o equivalente mensal exibido é
+     *  calculado do preço REAL que a loja retornou). */
+    private fun formatMicrosAsCurrency(
+        amountMicros: Long,
+        currencyCode: String,
+    ): String = runCatching {
+        val format = NumberFormat.getCurrencyInstance()
+        format.currency = Currency.getInstance(currencyCode)
+        format.format(amountMicros / 1_000_000.0)
+    }.getOrDefault("")
 
     private fun Purchase.toStorePurchase(): StorePurchase = StorePurchase(
         productId = products.firstOrNull() ?: "",

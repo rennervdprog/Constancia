@@ -100,9 +100,12 @@ fun MoreScreen(
     val isPro by deps.entitlement.isProFlow.collectAsState(initial = false)
     // Fase F: o preço exibido vem do ProductDetails da loja — sem
     // produto carregado, o cartão simplesmente não mostra preço.
+    // Multi-planos: o preço de chamada é o do plano de entrada (o
+    // mensal, com sufixo "/mês"); sem mensal, o do plano em destaque.
     var proPrice by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
-        proPrice = deps.billing.queryProduct()?.formattedPrice
+        proPrice = deps.billing.queryProduct()?.headlinePlan()
+            ?.priceWithSuffix()
             ?.takeIf { it.isNotBlank() }
     }
     val syncStatus by deps.sync.statusFlow().collectAsState(initial = null)
@@ -758,11 +761,12 @@ private fun ProCard(isPro: Boolean, priceText: String?, onClick: () -> Unit) {
             if (!isPro) {
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Preço SÓ da loja (ProductDetails): sem produto
+                    // Preço SÓ da loja (ProductDetails, plano de
+                    // entrada já com sufixo de período): sem produto
                     // carregado, nenhum preço é exibido (nada hardcoded).
                     if (priceText != null) {
                         Text(
-                            text = "$priceText/ano",
+                            text = priceText,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,

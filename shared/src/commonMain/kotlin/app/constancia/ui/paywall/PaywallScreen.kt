@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.pager.HorizontalPager
@@ -55,8 +56,12 @@ import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
 import app.constancia.domain.BillingEvent
 import app.constancia.domain.BillingUiState
+import app.constancia.domain.ConstanciaBilling
+import app.constancia.domain.PlanPeriod
+import app.constancia.domain.StorePlan
 import app.constancia.domain.StoreProduct
 import app.constancia.domain.reduceBilling
+import app.constancia.domain.savingsPercentVsMonthly
 import app.constancia.theme.constanciaExtra
 import app.constancia.ui.common.BackRow
 import app.constancia.ui.common.CtaButton
@@ -88,11 +93,17 @@ private val benefits = listOf(
 )
 
 /**
- * Paywall (Fase F): visual do protótipo aprovado (roxo profundo, cartão
- * do plano, CTA branco/roxo), mas com o comércio REAL por trás:
- * - o preço exibido vem do ProductDetails da loja, nunca hardcoded;
+ * Paywall (Fase F + planos): visual do protótipo aprovado (roxo
+ * profundo, cartão do plano, CTA branco/roxo), mas com o comércio REAL
+ * por trás:
+ * - seletor de planos (Mensal · Trimestral · Anual) com os preços do
+ *   ProductDetails da loja, nunca hardcoded; o anual — melhor valor —
+ *   vem pré-selecionado e com selo; trial SÓ no anual;
+ * - equivalente mensal e economia calculados dos preços reais que a
+ *   loja retornou (domain: monthlyEquivalentMicros/savingsPercent);
  * - seções de venda POR RECURSO Pro (R11.2), com demonstração visual;
- * - comprar abre o fluxo da loja; restaurar reconcilia o entitlement;
+ * - comprar abre o fluxo da loja NO PLANO ESCOLHIDO; restaurar
+ *   reconcilia o entitlement;
  * - loja/produto indisponível (sideload, Console não configurado, iOS
  *   sem StoreKit) = estado honesto, sem preço inventado nem compra falsa.
  * A máquina de estados é o redutor puro `reduceBilling` (testado).
@@ -104,8 +115,12 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val isPro by deps.entitlement.isProFlow.collectAsState(initial = false)
     var state by remember { mutableStateOf<BillingUiState>(BillingUiState.Loading) }
+    // Plano escolhido no seletor; o anual (melhor valor) começa marcado.
+    var selectedPlanId by remember {
+        mutableStateOf(ConstanciaBilling.ANNUAL_BASE_PLAN_ID)
+    }
 
-    // Carrega o produto da loja uma vez (preço/trial são DA LOJA).
+    // Carrega o produto da loja uma vez (preços/trial são DA LOJA).
     LaunchedEffect(Unit) {
         if (!deps.billing.storeAvailable()) {
             state = reduceBilling(
@@ -118,7 +133,7 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
             )
         } else {
             val product = deps.billing.queryProduct()
-            state = if (product != null && product.formattedPrice.isNotBlank()) {
+            state = if (product != null && product.plans.isNotEmpty()) {
                 reduceBilling(state, BillingEvent.ProductLoaded(product))
             } else {
                 reduceBilling(state, BillingEvent.ProductNotConfigured)
@@ -137,11 +152,19 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
         is BillingUiState.Failed -> s.product
         else -> null
     }
+    // Se a loja não retornou o plano marcado (ex.: Console sem o
+    // anual), a seleção cai para o plano em destaque do produto.
+    val selectedPlan: StorePlan? = product?.plan(selectedPlanId)
+        ?: product?.featuredPlan()
 
     fun buy() {
-        state = reduceBilling(state, BillingEvent.BuyClicked)
+        val planId = selectedPlan?.basePlanId ?: return
+        state = reduceBilling(state, BillingEvent.BuyClicked(planId))
         val purchasing = state as? BillingUiState.Purchasing ?: return
-        if (!deps.billing.launchPurchase(purchasing.product)) {
+        if (!deps.billing.launchPurchase(
+                purchasing.product, purchasing.basePlanId,
+            )
+        ) {
             state = reduceBilling(
                 state,
                 BillingEvent.PurchaseError(
@@ -188,91 +211,20 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
             )
         }
 
-        // Cartão do plano anual (.pro-card do protótipo).
+        // Cartão de planos (.pro-card do protótipo, agora com seletor):
+        // com produto da loja, os três planos com preço real; sem
+        // produto, o cartão genérico honesto (nenhum preço inventado).
         item {
-            val shape = RoundedCornerShape(24.dp)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(shape)
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(Color(0xFF4B1D96), Color(0xFF2A0A54)),
-                            start = androidx.compose.ui.geometry.Offset(0f, 0f),
-                            end = androidx.compose.ui.geometry.Offset(360f, 300f),
-                        ),
-                    ),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = 50.dp, y = (-60).dp)
-                        .size(150.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(Color(0xFFC4A6F5).copy(alpha = 0.18f)),
+            if (product != null && selectedPlan != null) {
+                PlanSelectorCard(
+                    product = product,
+                    selectedPlan = selectedPlan,
+                    enabled = state is BillingUiState.Ready ||
+                        state is BillingUiState.Failed,
+                    onSelect = { selectedPlanId = it },
                 )
-                Column(modifier = Modifier.padding(19.dp)) {
-                    Text(
-                        text = "PLANO ANUAL",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.12.em,
-                        ),
-                        color = Color(0xFFC4A6F5),
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = if (product != null) {
-                            "${product.formattedPrice} por ano"
-                        } else {
-                            "Um ano de Pro"
-                        },
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontSize = 19.sp,
-                        ),
-                        color = Color.White,
-                    )
-                    Spacer(Modifier.height(5.dp))
-                    Text(
-                        text = when {
-                            product?.trialDays != null ->
-                                "Comece com ${product.trialDays} dias grátis. " +
-                                    "Se não cancelar, a assinatura anual " +
-                                    "começa automaticamente — cancele " +
-                                    "quando quiser, sem multa."
-                            product != null ->
-                                "Renova todo ano pelo preço acima; cancele " +
-                                    "quando quiser na loja, sem multa."
-                            else ->
-                                "O preço aparece aqui assim que a loja " +
-                                    "responder — nada é cobrado sem a sua " +
-                                    "confirmação na loja."
-                        },
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 13.5.sp,
-                        ),
-                        color = Color(0xFFDCCFFB),
-                    )
-                    if (product?.trialDays != null) {
-                        Spacer(Modifier.height(12.dp))
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(Color(0xFFC4A6F5))
-                                .padding(horizontal = 10.dp, vertical = 5.dp),
-                        ) {
-                            Text(
-                                text = "${product.trialDays} dias grátis",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                ),
-                                color = Color(0xFF38106E),
-                            )
-                        }
-                    }
-                }
+            } else {
+                GenericPlanCard()
             }
         }
 
@@ -373,10 +325,12 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
                     }
                     is BillingUiState.Ready -> {
                         CtaButton(
-                            text = if (s.product.trialDays != null) {
-                                "Começar ${s.product.trialDays} dias grátis"
-                            } else {
-                                "Assinar o Pro — ${s.product.formattedPrice}/ano"
+                            text = when {
+                                selectedPlan?.trialDays != null ->
+                                    "Começar ${selectedPlan.trialDays} dias grátis"
+                                selectedPlan != null ->
+                                    "Assinar o Pro — ${selectedPlan.priceWithSuffix()}"
+                                else -> "Assinar o Pro"
                             },
                             tag = "paywall_subscribe",
                             onClick = { buy() },
@@ -480,13 +434,20 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 )
-                if (product != null) {
+                if (selectedPlan != null) {
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        text = "Assinatura de renovação automática, " +
-                            "gerenciada pela loja da sua conta. O teste " +
-                            "grátis vira assinatura paga ao final do " +
-                            "período se não for cancelado antes.",
+                        text = if (selectedPlan.trialDays != null) {
+                            "Assinatura de renovação automática, " +
+                                "gerenciada pela loja da sua conta. O " +
+                                "teste grátis vira assinatura paga ao " +
+                                "final do período se não for cancelado " +
+                                "antes."
+                        } else {
+                            "Assinatura de renovação automática, " +
+                                "gerenciada pela loja da sua conta. " +
+                                "Cancele quando quiser, sem multa."
+                        },
                         style = MaterialTheme.typography.bodySmall.copy(
                             fontSize = 11.sp,
                         ),
@@ -708,5 +669,250 @@ private fun DemoBar(label: String, fraction: Float, value: String) {
             ),
             color = scheme.onSurface,
         )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cartão de planos: gradiente roxo do protótipo + seletor de planos com
+// preço REAL da loja. Sem produto, cai no cartão genérico (sem preço).
+// ---------------------------------------------------------------------------
+
+private val PlanGradient = Brush.linearGradient(
+    colors = listOf(Color(0xFF4B1D96), Color(0xFF2A0A54)),
+    start = androidx.compose.ui.geometry.Offset(0f, 0f),
+    end = androidx.compose.ui.geometry.Offset(360f, 300f),
+)
+
+@Composable
+private fun GradientPlanShell(content: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(24.dp)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(PlanGradient),
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 50.dp, y = (-60).dp)
+                .size(150.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color(0xFFC4A6F5).copy(alpha = 0.18f)),
+        )
+        Column(modifier = Modifier.padding(19.dp)) { content() }
+    }
+}
+
+@Composable
+private fun PlanCardHeader(headline: String) {
+    Text(
+        text = "CONSTÂNCIA PRO",
+        style = MaterialTheme.typography.labelMedium.copy(
+            fontSize = 11.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.12.em,
+        ),
+        color = Color(0xFFC4A6F5),
+    )
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = headline,
+        style = MaterialTheme.typography.headlineSmall.copy(fontSize = 19.sp),
+        color = Color.White,
+    )
+}
+
+/** Sem produto da loja (carregando, sideload, Console não configurado,
+ *  iOS): cartão honesto, sem NENHUM preço — eles só existem com a loja. */
+@Composable
+private fun GenericPlanCard() {
+    GradientPlanShell {
+        PlanCardHeader(headline = "Um plano pra cada ritmo")
+        Spacer(Modifier.height(5.dp))
+        Text(
+            text = "Mensal, trimestral ou anual — os preços aparecem " +
+                "aqui assim que a loja responder. Nada é cobrado sem a " +
+                "sua confirmação na loja.",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
+            color = Color(0xFFDCCFFB),
+        )
+    }
+}
+
+@Composable
+private fun PlanSelectorCard(
+    product: StoreProduct,
+    selectedPlan: StorePlan,
+    enabled: Boolean,
+    onSelect: (String) -> Unit,
+) {
+    GradientPlanShell {
+        PlanCardHeader(headline = "Escolha seu plano")
+        Spacer(Modifier.height(14.dp))
+        Column(
+            modifier = Modifier.testTag("plan_selector"),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            product.plans.forEach { plan ->
+                PlanOptionRow(
+                    plan = plan,
+                    product = product,
+                    selected = plan.basePlanId == selectedPlan.basePlanId,
+                    enabled = enabled,
+                    onClick = { onSelect(plan.basePlanId) },
+                )
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = if (selectedPlan.trialDays != null) {
+                "Comece com ${selectedPlan.trialDays} dias grátis. Se " +
+                    "não cancelar, a assinatura anual começa " +
+                    "automaticamente — cancele quando quiser, sem multa."
+            } else {
+                "Renova ${selectedPlan.period.renewalLabel} por " +
+                    "${selectedPlan.formattedPrice}; cancele quando " +
+                    "quiser na loja, sem multa."
+            },
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
+            color = Color(0xFFDCCFFB),
+        )
+    }
+}
+
+@Composable
+private fun PlanOptionRow(
+    plan: StorePlan,
+    product: StoreProduct,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val nameColor = if (selected) Color(0xFF2A0A54) else Color.White
+    val subColor = if (selected) Color(0xFF5B4A86) else Color(0xFFDCCFFB)
+    val monthly = product.monthlyPlan()
+    val savings = monthly?.let { savingsPercentVsMonthly(plan, it) }
+    val isFeatured = product.plans.size > 1 &&
+        plan.basePlanId == product.featuredPlan()?.basePlanId
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                if (selected) Color.White else Color.White.copy(alpha = 0.10f),
+            )
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = if (selected) Color.White
+                else Color.White.copy(alpha = 0.35f),
+                shape = shape,
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .testTag("plan_option_${plan.basePlanId}")
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = plan.period.displayName,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    color = nameColor,
+                )
+                if (isFeatured) {
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(
+                                if (selected) Color(0xFF4B1D96)
+                                else Color(0xFFC4A6F5),
+                            )
+                            .padding(horizontal = 8.dp, vertical = 3.dp),
+                    ) {
+                        Text(
+                            text = "MELHOR VALOR",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 0.08.em,
+                            ),
+                            color = if (selected) Color.White
+                            else Color(0xFF38106E),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(2.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = if (plan.period == PlanPeriod.MONTHLY) {
+                        "cobrança mensal, cancele quando quiser"
+                    } else {
+                        plan.monthlyEquivalentLabel()
+                    },
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                    ),
+                    color = subColor,
+                )
+                if (savings != null) {
+                    Text(
+                        text = " · economize $savings%",
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                        color = if (selected) Color(0xFF4B1D96)
+                        else Color(0xFFC4A6F5),
+                    )
+                }
+            }
+            if (plan.trialDays != null) {
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(
+                            if (selected) Color(0xFF4B1D96)
+                            else Color(0xFFC4A6F5),
+                        )
+                        .padding(horizontal = 9.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "${plan.trialDays} dias grátis",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                        ),
+                        color = if (selected) Color.White
+                        else Color(0xFF38106E),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = plan.formattedPrice,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = 16.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+                color = nameColor,
+                maxLines = 1,
+                softWrap = false,
+            )
+            Text(
+                text = plan.period.priceSuffix.removePrefix("/"),
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
+                color = subColor,
+            )
+        }
     }
 }

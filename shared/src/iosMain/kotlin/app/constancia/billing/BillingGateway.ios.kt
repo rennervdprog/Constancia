@@ -23,5 +23,8 @@ actual class BillingGateway : StoreBilling {
 
     actual override fun setPurchaseListener(listener: ((StorePurchase) -> Unit)?) = Unit
 
-    actual override fun launchPurchase(product: StoreProduct): Boolean = false
+    actual override fun launchPurchase(
+        product: StoreProduct,
+        basePlanId: String,
+    ): Boolean = false
 }

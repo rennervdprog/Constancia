@@ -22,9 +22,10 @@ interface StoreBilling {
     fun storeAvailable(): Boolean
 
     /**
-     * Produto `constancia_pro` como a loja o descreve (preço formatado
-     * e dias de teste vêm DA LOJA). null = produto não configurado, loja
-     * inalcançável ou build fora da Play — a UI mostra estado honesto.
+     * Produto `constancia_pro` como a loja o descreve, com TODOS os
+     * planos-base vendáveis já resolvidos (preço e trial vêm DA LOJA).
+     * null = produto não configurado, loja inalcançável ou build fora
+     * da Play — a UI mostra estado honesto.
      */
     suspend fun queryProduct(): StoreProduct?
 
@@ -43,11 +44,13 @@ interface StoreBilling {
     fun setPurchaseListener(listener: ((StorePurchase) -> Unit)?)
 
     /**
-     * Abre o fluxo de compra da loja para o produto já consultado.
-     * true = fluxo aberto; o resultado chega pelo listener. false = não
-     * deu para abrir (sem Activity, sem produto em cache etc.).
+     * Abre o fluxo de compra da loja para o plano-base [basePlanId] do
+     * produto já consultado (a oferta é a que [PlanCatalog] escolheu
+     * para esse plano: trial só no anual). true = fluxo aberto; o
+     * resultado chega pelo listener. false = não deu para abrir (sem
+     * Activity, sem produto em cache etc.).
      */
-    fun launchPurchase(product: StoreProduct): Boolean
+    fun launchPurchase(product: StoreProduct, basePlanId: String): Boolean
 }
 
 expect class BillingGateway() : StoreBilling {
@@ -56,5 +59,5 @@ expect class BillingGateway() : StoreBilling {
     override suspend fun queryOwnedPurchases(): List<StorePurchase>?
     override suspend fun acknowledge(purchase: StorePurchase): Boolean
     override fun setPurchaseListener(listener: ((StorePurchase) -> Unit)?)
-    override fun launchPurchase(product: StoreProduct): Boolean
+    override fun launchPurchase(product: StoreProduct, basePlanId: String): Boolean
 }
