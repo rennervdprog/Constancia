@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import app.constancia.billing.initBillingContext
 import app.constancia.data.DatabaseDriverFactory
 import app.constancia.export.initShareContext
 import app.constancia.notify.initNotificationContext
@@ -23,6 +24,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         initShareContext(applicationContext)
         initNotificationContext(applicationContext)
+        // Fase F: contexto p/ o Google Play Billing (gateway sem
+        // contexto até aqui ignora as chamadas silenciosamente).
+        initBillingContext(applicationContext)
         // Reagenda lembretes/revisão (alarmes não sobrevivem a reboot
         // nem a atualizações do app) e pede a permissão de notificar.
         rescheduleAllNotifications(applicationContext)
