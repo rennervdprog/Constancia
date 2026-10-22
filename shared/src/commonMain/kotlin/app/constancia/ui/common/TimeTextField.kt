@@ -5,7 +5,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,9 +38,18 @@ import app.constancia.domain.timeTransformedToOriginal
  *
  * Contrato com quem chama (igual ao do campo antigo): [value] é o
  * TEXTO EXIBIDO ("09:30", parcial ou "") e [onValueChange] recebe o
- * texto exibido a cada edição. Mudanças externas do [value] (ex.: o
- * formulário limpa o campo após adicionar um lembrete) ressincronizam
- * o buffer; o eco das próprias edições é reconhecido e ignorado.
+ * texto exibido a cada edição.
+ *
+ * Ressincronização externa SEM corrida: a primeira versão usava
+ * `LaunchedEffect(value)` comparando o value (que volta do pai com
+ * atraso de um frame) com o buffer atual — digitando rápido, o efeito
+ * de um eco antigo rodava quando o buffer já tinha o dígito seguinte
+ * e REBOBINAVA o campo, engolindo tecla (o teste instrumentado de
+ * sequências reais pegou: digitar 930 terminava em "090"). Agora a
+ * comparação é feita DURANTE a composição (padrão oficial de
+ * "ajustar estado quando a entrada muda"): value que é eco do que
+ * este campo emitiu é ignorado; qualquer outro value novo é mudança
+ * externa (ex.: o formulário limpa o campo) e ressincroniza o buffer.
  */
 @Composable
 fun TimeTextField(
@@ -56,16 +64,19 @@ fun TimeTextField(
             TextFieldValue(text = digits, selection = TextRange(digits.length)),
         )
     }
-    // Ressincroniza quando o valor muda POR FORA (não pelo eco da
-    // própria digitação, que já chega igual ao texto exibido atual).
-    LaunchedEffect(value) {
-        if (value != timeDisplayText(state.text)) {
+    // Último value visto na composição e último texto emitido ao pai:
+    // juntos distinguem "eco da minha digitação" de "mudança externa".
+    var lastSeenValue by remember { mutableStateOf(value) }
+    var lastEmitted by remember { mutableStateOf<String?>(null) }
+    if (value != lastSeenValue) {
+        if (value != lastEmitted) {
             val digits = timeDigitsOf(value)
             state = TextFieldValue(
                 text = digits,
                 selection = TextRange(digits.length),
             )
         }
+        lastSeenValue = value
     }
     val transformation = remember { TimeMaskTransformation() }
     OutlinedTextField(
@@ -81,7 +92,9 @@ fun TimeTextField(
                     selection = TextRange(edit.cursor),
                 )
             }
-            onValueChange(timeDisplayText(state.text))
+            val display = timeDisplayText(state.text)
+            lastEmitted = display
+            onValueChange(display)
         },
         placeholder = { Text(placeholder) },
         singleLine = true,
