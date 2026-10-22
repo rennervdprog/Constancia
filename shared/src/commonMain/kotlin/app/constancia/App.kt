@@ -133,7 +133,11 @@ fun AppContent(deps: AppDeps) {
                         onOpenPaywall = { navigator.showPaywall = true },
                         onBack = { navigator.maisSection = null },
                     )
-                    MaisSection.DESAFIOS -> ChallengesScreen(deps, screenModifier)
+                    MaisSection.DESAFIOS -> ChallengesScreen(
+                        deps,
+                        screenModifier,
+                        onOpenPaywall = { navigator.showPaywall = true },
+                    )
                     null -> MoreScreen(
                         deps,
                         screenModifier,
@@ -176,7 +180,7 @@ fun AppContent(deps: AppDeps) {
             NewTaskSheet(deps = deps, onDismiss = { navigator.showNewTask = false })
         }
         if (navigator.showPaywall) {
-            PaywallScreen(onClose = { navigator.showPaywall = false })
+            PaywallScreen(deps = deps, onClose = { navigator.showPaywall = false })
         }
     }
 }
