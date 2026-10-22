@@ -430,6 +430,7 @@ class ConstanciaUiTest {
                 editableTextOf("task_time_field") == "930"
             }
         } catch (e: Throwable) {
+            shotProbe("task_time_field", "98_diag_form")
             val dump = runCatching {
                 composeRule.onNodeWithTag("task_time_field").printToString()
             }.getOrElse { "sem dump: $it" }
@@ -575,6 +576,44 @@ class ConstanciaUiTest {
         composeRule.waitForIdle()
     }
 
+    /** Sonda de diagnóstico: o que a semântica do campo realmente vê. */
+    private fun probeField(tag: String): String {
+        val sb = StringBuilder()
+        runCatching {
+            val node = composeRule.onNodeWithTag(tag).fetchSemanticsNode()
+            sb.append("id=").append(node.id).append(' ')
+            sb.append("editable=[")
+            sb.append(
+                runCatching {
+                    node.config[
+                        androidx.compose.ui.semantics
+                            .SemanticsProperties.EditableText,
+                    ].text
+                }.getOrElse { "ERR:${it.message?.take(50)}" },
+            )
+            sb.append("] text=[")
+            sb.append(
+                runCatching {
+                    node.config[
+                        androidx.compose.ui.semantics.SemanticsProperties.Text,
+                    ].joinToString { it.text }
+                }.getOrElse { "ERR:${it.message?.take(50)}" },
+            )
+            sb.append(']')
+        }.onFailure { sb.append("nodeERR:${it.message?.take(80)}") }
+        return sb.toString()
+    }
+
+    /** Fotografa a sonda escrita no campo de nome (canal que funciona). */
+    private fun shotProbe(tag: String, label: String) {
+        val probe = probeField(tag)
+        runCatching {
+            composeRule.onNodeWithTag("task_name_field")
+                .performTextReplacement(probe.take(300))
+        }
+        shot(label)
+    }
+
     private fun awaitBuffer(tag: String, expected: String) {
         try {
             composeRule.waitUntil(timeoutMillis = 8000) {
@@ -583,6 +622,7 @@ class ConstanciaUiTest {
         } catch (e: Throwable) {
             // Diagnóstico (reteste 2): despeja a árvore semântica do
             // campo pra saber se o texto entrou e o que a semântica vê.
+            shotProbe(tag, "99_diag_buffer")
             val dump = runCatching {
                 composeRule.onNodeWithTag(tag).printToString()
             }.getOrElse { "sem dump: $it" }
