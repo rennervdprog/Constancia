@@ -42,49 +42,13 @@ fun parseTimeOrNull(text: String?): LocalTime? {
 }
 
 /**
- * Máscara de digitação dos campos de horário (reteste 2026-10-21: o
- * campo "HH:mm" não formatava sozinho). Aceita só dígitos (máx. 4),
- * insere o ":" após a hora e trava as faixas na fonte: hora 00–23 e
- * minuto 00–59 já durante a digitação. Primeiro dígito 3–9 é hora de
- * um dígito só ("9" vira "09" e o próximo dígito já é minuto). O
- * texto resultante é sempre vazio, parcial válido ("9", "09:3") ou
- * um "HH:mm" completo que [parseTimeOrNull] aceita; apagar desfaz
- * dígito a dígito, sem ficar preso no ":".
+ * A máscara de digitação dos campos de horário morava aqui
+ * (`maskTimeText`, rodada do reteste 1) e foi REMOVIDA no reteste 2:
+ * reformatar o texto a cada tecla reescrevia dígitos digitados e
+ * prendia o cursor no fim do campo. O modelo atual (buffer de
+ * dígitos + VisualTransformation) vive em `TimeInput.kt` e no
+ * componente `ui/common/TimeTextField.kt`.
  */
-fun maskTimeText(raw: String): String {
-    val digits = raw.filter { it.isDigit() }.take(4)
-    if (digits.isEmpty()) return ""
-    fun clampedMinute(two: String): String =
-        minOf(two.toInt(), 59).toString().padStart(2, '0')
-    return if (digits[0] in '3'..'9') {
-        // Hora de um dígito: "9" -> "09", "93" -> "09:3", "930" -> "09:30".
-        val hour = "0" + digits[0]
-        when (val rest = digits.substring(1)) {
-            "" -> hour
-            else -> hour + ":" +
-                if (rest.length == 2) clampedMinute(rest) else rest
-        }
-    } else {
-        when {
-            digits.length <= 2 -> {
-                if (digits.length == 2) {
-                    minOf(digits.toInt(), 23).toString().padStart(2, '0')
-                } else {
-                    digits
-                }
-            }
-            digits.length == 3 -> {
-                val hour = minOf(digits.substring(0, 2).toInt(), 23)
-                hour.toString().padStart(2, '0') + ":" + digits[2]
-            }
-            else -> {
-                val hour = minOf(digits.substring(0, 2).toInt(), 23)
-                hour.toString().padStart(2, '0') + ":" +
-                    clampedMinute(digits.substring(2, 4))
-            }
-        }
-    }
-}
 
 fun reminderInstantMillis(
     task: TaskItem,

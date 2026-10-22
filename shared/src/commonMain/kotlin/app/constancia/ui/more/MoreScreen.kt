@@ -73,6 +73,7 @@ import app.constancia.domain.buildExportJson
 import app.constancia.export.shareTextFile
 import app.constancia.model.todayYmd
 import app.constancia.theme.constanciaExtra
+import app.constancia.ui.common.TimeTextField
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -513,15 +514,13 @@ fun MoreScreen(
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier.weight(1f),
                             )
-                            OutlinedTextField(
+                            TimeTextField(
                                 value = reviewTimeText ?: reviewTime,
                                 onValueChange = { value ->
-                                    val clean =
-                                        app.constancia.domain.maskTimeText(value)
-                                    reviewTimeText = clean
+                                    reviewTimeText = value
                                     val parsed = app.constancia.domain
-                                        .parseTimeOrNull(clean)
-                                    if (parsed != null && clean.length == 5) {
+                                        .parseTimeOrNull(value)
+                                    if (parsed != null && value.length == 5) {
                                         val hhmm = parsed.hour.toString()
                                             .padStart(2, '0') + ":" +
                                             parsed.minute.toString()
@@ -536,12 +535,7 @@ fun MoreScreen(
                                         }
                                     }
                                 },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Number,
-                                ),
                                 modifier = Modifier.width(100.dp),
-                                shape = RoundedCornerShape(12.dp),
                             )
                         }
                     }

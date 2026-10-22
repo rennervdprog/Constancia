@@ -1,8 +1,6 @@
 package app.constancia
 
 import app.constancia.domain.isDueOn
-import app.constancia.domain.maskTimeText
-import app.constancia.domain.parseTimeOrNull
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
@@ -106,32 +104,10 @@ class RetestFixesTest {
         assertEquals(123L, normalizeHabitColor(123L))
     }
 
-    // ---- Bug nº 3: máscara automática de horário ----
-
-    @Test
-    fun maskTimeText_formatsWhileTyping() {
-        assertEquals("", maskTimeText(""))
-        assertEquals("2", maskTimeText("2"))
-        assertEquals("09", maskTimeText("9"))
-        assertEquals("09:3", maskTimeText("93"))
-        assertEquals("09:30", maskTimeText("930"))
-        assertEquals("09:30", maskTimeText("0930"))
-        assertEquals("12:34", maskTimeText("12:34"))
-        assertEquals("12:34", maskTimeText("12345")) // dígito extra cai
-        assertEquals("", maskTimeText("abc"))
-    }
-
-    @Test
-    fun maskTimeText_clampsRanges() {
-        assertEquals("23", maskTimeText("29"))
-        assertEquals("23:59", maskTimeText("2361"))
-        assertEquals("09:59", maskTimeText("999"))
-    }
-
-    @Test
-    fun maskTimeText_outputParses() {
-        val parsed = parseTimeOrNull(maskTimeText("930"))
-        assertEquals(9, parsed?.hour)
-        assertEquals(30, parsed?.minute)
-    }
+    // ---- Bug nº 3 (reteste 1) / reteste 2: campo de horário ----
+    // Os testes da antiga `maskTimeText` foram REMOVIDOS junto com
+    // ela: afirmavam o comportamento que o Renner reprovou no
+    // aparelho (clamp reescrevendo dígito: "29"->"23", "61"->"59").
+    // A bateria do modelo novo (buffer de dígitos + transformação)
+    // vive em TimeInputTest.kt, com as sequências reais de edição.
 }

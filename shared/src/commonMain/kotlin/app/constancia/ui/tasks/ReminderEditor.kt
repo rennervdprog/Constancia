@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import app.constancia.domain.REMINDER_OPTIONS
 import app.constancia.domain.parseTimeOrNull
 import app.constancia.domain.taskReminderLabel
+import app.constancia.ui.common.TimeTextField
 import app.constancia.model.ReminderSpec
 import app.constancia.model.ReminderType
 import app.constancia.model.TaskReminder
@@ -108,18 +109,10 @@ fun ReminderListEditor(
         if (absoluteDate != null) {
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
+                TimeTextField(
                     value = absTimeText,
-                    onValueChange = { value ->
-                        absTimeText = app.constancia.domain.maskTimeText(value)
-                    },
-                    placeholder = { Text("HH:mm") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                    ),
+                    onValueChange = { value -> absTimeText = value },
                     modifier = Modifier.width(104.dp),
-                    shape = RoundedCornerShape(12.dp),
                 )
                 Spacer(Modifier.width(8.dp))
                 PickChip("Adicionar horário fixo", false) {

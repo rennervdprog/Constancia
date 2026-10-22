@@ -58,6 +58,7 @@ import app.constancia.theme.HabitPalette
 import app.constancia.ui.common.HABIT_ICON_KEYS
 import app.constancia.ui.common.SegmentedRow
 import app.constancia.ui.common.SheetSectionLabel
+import app.constancia.ui.common.TimeTextField
 import app.constancia.ui.common.argbLongOf
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
@@ -548,19 +549,10 @@ fun NewHabitSheet(
             }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
+                TimeTextField(
                     value = reminderTimeText,
-                    onValueChange = { value ->
-                        reminderTimeText =
-                            app.constancia.domain.maskTimeText(value)
-                    },
-                    placeholder = { Text("HH:mm") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                    ),
+                    onValueChange = { value -> reminderTimeText = value },
                     modifier = Modifier.width(110.dp),
-                    shape = RoundedCornerShape(12.dp),
                 )
                 Spacer(Modifier.width(8.dp))
                 Box(

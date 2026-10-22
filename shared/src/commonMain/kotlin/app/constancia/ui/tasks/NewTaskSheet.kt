@@ -65,6 +65,7 @@ import app.constancia.model.todayYmd
 import app.constancia.ui.common.CtaButton
 import app.constancia.ui.common.SegmentedRow
 import app.constancia.ui.common.SheetSectionLabel
+import app.constancia.ui.common.TimeTextField
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.plus
@@ -256,18 +257,10 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                         color = scheme.onSurfaceVariant,
                     )
                 }
-                OutlinedTextField(
+                TimeTextField(
                     value = timeText,
-                    onValueChange = { v ->
-                        timeText = app.constancia.domain.maskTimeText(v)
-                    },
-                    placeholder = { Text("HH:mm") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                    ),
+                    onValueChange = { v -> timeText = v },
                     modifier = Modifier.width(110.dp).testTag("task_time_field"),
-                    shape = RoundedCornerShape(12.dp),
                 )
             }
 
