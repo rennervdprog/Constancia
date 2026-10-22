@@ -433,11 +433,9 @@ class ConstanciaUiTest {
                 editableTextOf("task_time_field") == "930"
             }
         } catch (e: Throwable) {
+            val probe = probeField("task_time_field")
             shotProbe("task_time_field", "98_diag_form")
-            val dump = runCatching {
-                composeRule.onNodeWithTag("task_time_field").printToString()
-            }.getOrElse { "sem dump: $it" }
-            throw AssertionError("buffer '930' não atingido. Nó:\n$dump", e)
+            throw AssertionError("buffer '930' não atingido. Sonda: $probe", e)
         }
         runCatching { device.pressBack() } // fecha o teclado virtual
         composeRule.waitForIdle()
@@ -634,14 +632,12 @@ class ConstanciaUiTest {
                 editableTextOf(tag) == expected
             }
         } catch (e: Throwable) {
-            // Diagnóstico (reteste 2): despeja a árvore semântica do
-            // campo pra saber se o texto entrou e o que a semântica vê.
+            // Diagnóstico (reteste 2): a sonda mostra o que a
+            // semântica do campo realmente vê (buffer e texto).
+            val probe = probeField(tag)
             shotProbe(tag, "99_diag_buffer")
-            val dump = runCatching {
-                composeRule.onNodeWithTag(tag).printToString()
-            }.getOrElse { "sem dump: $it" }
             throw AssertionError(
-                "buffer esperado '$expected' não atingido. Nó:\n$dump",
+                "buffer esperado '$expected' não atingido. Sonda: $probe",
                 e,
             )
         }
