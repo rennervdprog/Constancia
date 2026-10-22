@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -377,7 +378,7 @@ class ConstanciaUiTest {
         // (gesto no próprio LazyColumn) até ele ser composto.
         val listNode = composeRule.onNodeWithTag("mais_list")
         var tries = 0
-        while (!nodesWith("Relatórios sem limite de tempo") && tries < 8) {
+        while (!nodesWith("Padrões cruzados e raio-X de atrasos") && tries < 8) {
             listNode.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
             tries++
@@ -385,8 +386,8 @@ class ConstanciaUiTest {
         // Verifica que o cartão está visível (screenshot mostra o UI).
         // NOTA: o clique no cartão não abre o paywall no emulador de teste
         // (investigado); a navegação é coberta por teste manual.
-        composeRule.onNodeWithText("Relatórios sem limite de tempo").assertExists()
-        composeRule.onNodeWithText("Relatórios sem limite de tempo").performScrollTo()
+        composeRule.onNodeWithText("Padrões cruzados e raio-X de atrasos").assertExists()
+        composeRule.onNodeWithText("Padrões cruzados e raio-X de atrasos").performScrollTo()
         shot("10_mais_banner_pro")
     }
 
@@ -712,5 +713,69 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("task_time_field")
             .performTextReplacement("14:30")
         awaitDisplay("task_time_field", "14:30")
+    }
+}
+
+/**
+ * Fase F (Comercial) — o paywall SEM loja de verdade (emulador de CI:
+ * sem Play, sem produto configurado no Console) precisa mostrar o
+ * estado HONESTO: nada de preço inventado, nada de compra fingida —
+ * e o botão "Restaurar compra" presente.
+ */
+@RunWith(AndroidJUnit4::class)
+class PaywallUiTest {
+
+    @get:Rule
+    val composeRule = createComposeRule()
+
+    @Test
+    fun faseF_paywallSemLoja_estadoHonestoSemPrecoInventado() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        context.deleteDatabase("constancia.db")
+        val driver = AndroidSqliteDriver(ConstanciaDb.Schema, context, "constancia.db")
+        val db = ConstanciaDb(driver)
+        val checkins = CheckinRepositoryImpl(db)
+        val deps = AppDeps(
+            habits = HabitRepositoryImpl(db, checkins),
+            checkins = checkins,
+            tasks = TaskRepositoryImpl(db),
+            diary = DiaryRepositoryImpl(db),
+            challenges = ChallengeRepositoryImpl(db),
+            sync = LocalSyncRepository(),
+            prefs = PrefsRepositoryImpl(),
+        )
+        composeRule.setContent {
+            app.constancia.ui.paywall.PaywallScreen(deps = deps, onClose = {})
+        }
+        // A área de compra é o último item da LazyColumn: rola até ela
+        // ser composta antes de conferir qualquer texto de lá.
+        val list = composeRule.onNode(hasScrollAction())
+        repeat(5) {
+            list.performTouchInput { swipeUp() }
+            composeRule.waitForIdle()
+        }
+        // O gateway não tem contexto de loja neste processo e o produto
+        // não existe no Console: o estado final é "indisponível" honesto.
+        composeRule.waitUntil(timeoutMillis = 10000) {
+            composeRule.onAllNodesWithText(
+                "ainda não está disponível", substring = true,
+            ).fetchSemanticsNodes().isNotEmpty()
+        }
+        // NENHUM preço hardcoded pode aparecer sem a loja responder.
+        org.junit.Assert.assertTrue(
+            composeRule.onAllNodesWithText("119,90", substring = true)
+                .fetchSemanticsNodes().isEmpty(),
+        )
+        // Restaurar compra existe (Android tem loja integrada).
+        composeRule.onNodeWithTag("paywall_restore").assertExists()
+        // E o rodapé do grátis generoso está lá (sem "últimos 30 dias").
+        org.junit.Assert.assertTrue(
+            composeRule.onAllNodesWithText("sem limite de itens", substring = true)
+                .fetchSemanticsNodes().isNotEmpty(),
+        )
+        org.junit.Assert.assertTrue(
+            composeRule.onAllNodesWithText("últimos 30 dias", substring = true)
+                .fetchSemanticsNodes().isEmpty(),
+        )
     }
 }
