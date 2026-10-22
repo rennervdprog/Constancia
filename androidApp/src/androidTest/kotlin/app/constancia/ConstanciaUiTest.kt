@@ -430,12 +430,26 @@ class ConstanciaUiTest {
         shot("12_form_prazo")
     }
 
+    /** Activity atualmente RESUMED (a regra é createComposeRule, sem .activity). */
+    private fun resumedActivity(): android.app.Activity {
+        var found: android.app.Activity? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            found = androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+                .getInstance()
+                .getActivitiesInStage(
+                    androidx.test.runner.lifecycle.Stage.RESUMED,
+                )
+                .firstOrNull()
+        }
+        return found ?: error("nenhuma activity RESUMED")
+    }
+
     /** Insets reais da janela do teste (status bar / nav bar), em px. */
     private fun realWindowInsets(): Pair<Int, Int> {
         var top = 0
         var bottom = 0
-        val activity = composeRule.activity
-        activity.runOnUiThread {
+        val activity = resumedActivity()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val wi = androidx.core.view.ViewCompat
                 .getRootWindowInsets(activity.window.decorView)
             top = wi?.getInsets(
@@ -457,8 +471,8 @@ class ConstanciaUiTest {
         // enableEdgeToEdge (decorFits=false). Virar a chave reproduz o
         // ambiente real: sem insets aplicados, o conteúdo invade a
         // barra de status e a de navegação.
-        val activity = composeRule.activity
-        activity.runOnUiThread {
+        val activity = resumedActivity()
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
             androidx.core.view.WindowCompat
                 .setDecorFitsSystemWindows(activity.window, false)
         }
