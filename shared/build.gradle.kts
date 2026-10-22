@@ -60,6 +60,8 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.sqldelight.android.driver)
             implementation(libs.androidx.activity.compose)
+            // Fase F: Google Play Billing (assinatura constancia_pro).
+            implementation(libs.play.billing.ktx)
         }
         iosMain.dependencies {
             implementation(libs.sqldelight.native.driver)
