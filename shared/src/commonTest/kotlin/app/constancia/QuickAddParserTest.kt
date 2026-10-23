@@ -10,7 +10,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** Item 6 — mini-Dateist PT: reconhecimento, título limpo e desfazer. */
+/** Item 6 — parser de linguagem natural PT: reconhecimento, título limpo e desfazer. */
 class QuickAddParserTest {
 
     private val today = LocalDate(2026, 10, 20) // terça-feira
