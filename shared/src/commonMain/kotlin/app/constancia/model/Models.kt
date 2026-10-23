@@ -50,7 +50,7 @@ data class Habit(
     val paused: Boolean,
     val createdAt: String,
     val sortOrder: Int,
-    // Backlog TickTick (schema v6):
+    // Hábitos avançados (schema v6):
     val quantityStep: Double = 1.0, // passo do stepper (item 1)
     val showInToday: Boolean = false, // opt-in: aparecer na Hoje mesmo fora dos dias devidos (item 4)
     val showInCalendar: Boolean = false, // opt-in: marcas de check-in no calendário do diário (item 4)
@@ -89,7 +89,7 @@ data class Checkin(
 )
 
 /**
- * TickTick item 3: registro do log do hábito (HabitRecord) — nota curta
+ * Item 3: registro do log do hábito — nota curta
  * e emoji opcionais de um dia, por hábito. Vive em tabela própria para
  * a aba Padrões cruzar humor-por-hábito no futuro.
  */
@@ -102,9 +102,9 @@ data class HabitRecord(
 )
 
 /**
- * TickTick item 2: ciclo/temporada do hábito (HabitCycleModel) — janela
- * de dias com meta; ao bater a meta, [completedAt] é preenchido e o
- * ciclo fica permanente no histórico do hábito.
+ * Item 2: ciclo/temporada do hábito — janela de dias com meta;
+ * ao bater a meta, [completedAt] é preenchido e o ciclo fica
+ * permanente no histórico do hábito.
  */
 data class HabitCycle(
     val id: String,
@@ -133,7 +133,7 @@ data class HabitStatus(
     val streakInfo: StreakInfo = StreakInfo(0, null, null, 0),
 )
 
-/** Listas/projetos das tarefas (estilo Todoist), com a cor de cada um. */
+/** Listas/projetos das tarefas, com a cor de cada um. */
 enum class TaskProject(val label: String, val colorHex: Long) {
     ENTRADA("Entrada", 0xFF7A6B90),
     PESSOAL("Pessoal", 0xFF0B7A55),
@@ -165,7 +165,7 @@ data class TaskItem(
     val note: String = "",
     val habitId: String? = null, // tarefa vinculada a um hábito
     val subtasks: List<Subtask> = emptyList(),
-    // Backlog Todoist (schema v4):
+    // Recursos avançados de tarefas (schema v4):
     val deadlineDate: String? = null, // yyyy-MM-dd: prazo final, distinto da data agendada
     val durationMinutes: Int? = null, // duração estimada em minutos
     val completedAt: String? = null, // instante ISO da conclusão (metas/streak de tarefas)
@@ -187,7 +187,7 @@ data class NewTask(
     val repeatRule: String = "",
     val habitId: String? = null,
     val subtaskTitles: List<String> = emptyList(),
-    // Backlog Todoist (schema v4):
+    // Recursos avançados de tarefas (schema v4):
     val deadlineDate: String? = null,
     val durationMinutes: Int? = null,
     val reminderMinutesBefore: Int? = null,
@@ -226,8 +226,8 @@ data class ReminderSpec(
 )
 
 /**
- * Lembrete de hábito (tabela habit_reminder, Fase C — absorvido do
- * backlog TickTick §9.4): um horário "HH:mm" que se repete todo dia.
+ * Lembrete de hábito (tabela habit_reminder, Fase C): um horário
+ * "HH:mm" que se repete todo dia.
  * Um hábito pode ter VÁRIOS (o campo único virou a primeira linha).
  */
 data class HabitReminder(
