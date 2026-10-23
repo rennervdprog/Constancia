@@ -50,7 +50,7 @@ import app.constancia.theme.constanciaExtra
 import kotlinx.datetime.LocalDate
 
 /**
- * Item 6 — campo de captura rápida com mini-Dateist: enquanto digita,
+ * Item 6 — captura rápida com linguagem natural: enquanto digita,
  * os trechos reconhecidos (data, hora, p1..p3, #projeto, recorrência)
  * ganham destaque no próprio campo e viram chips removíveis logo
  * abaixo (tocar no × desfaz aquele reconhecimento e o trecho volta a
