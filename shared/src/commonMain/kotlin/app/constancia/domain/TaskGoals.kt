@@ -12,8 +12,8 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
 /**
- * Item 2 — metas diária/semanal de tarefas concluídas, SEM pontos nem
- * Karma (decisão do Renner): só contagem, progresso e sequência (streak),
+ * Item 2 — metas diária/semanal de tarefas concluídas, SEM sistema de
+ * pontos (decisão do Renner): só contagem, progresso e sequência (streak),
  * com modo pausa que congela a sequência sem quebrar — a mesma filosofia
  * das pausas de hábito (domain/Streaks.kt), reaproveitada aqui para o
  * histórico de conclusões das tarefas.
