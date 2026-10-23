@@ -16,7 +16,7 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
 /**
- * Lógica pura das tarefas estilo Todoist (100% testável, sem Compose):
+ * Lógica pura das tarefas (100% testável, sem Compose):
  * visões (Entrada/Hoje/Próximos/Feitas), contadores, ordenação por
  * prioridade, rótulos de prazo, recorrência e progresso de subtarefas.
  */
@@ -226,7 +226,7 @@ private fun stepRepeatDate(repeatRule: String, from: LocalDate): LocalDate? = wh
 // Item 1 — reagendamento rápido (chips) e em massa.
 // ---------------------------------------------------------------------
 
-/** Alvos dos chips de reagendamento do Todoist. */
+/** Alvos dos chips de reagendamento rápido. */
 enum class RescheduleTarget {
     WEEKEND, NEXT_WEEK, PLUS_3_DAYS, PLUS_1_WEEK,
     // Fase A (R5.2): fim da semana corrente e mesmo dia do mês que vem.
@@ -302,7 +302,7 @@ fun durationLabel(minutes: Int): String = when {
 }
 
 /**
- * Ordenação "inteligente" (padrão do Todoist): pendentes antes das
+ * Ordenação "inteligente" das tarefas: pendentes antes das
  * feitas; entre as pendentes, atrasadas -> hoje -> futuras -> sem data;
  * dentro do balde, prazo, prioridade e horário.
  */
