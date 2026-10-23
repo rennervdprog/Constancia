@@ -157,7 +157,7 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
     }
 
     /**
-     * TickTick item 2: depois de qualquer escrita de check-in, confere os
+     * Item 2: depois de qualquer escrita de check-in, confere os
      * ciclos do hábito — se os dias feitos dentro da janela bateram a
      * meta, o ciclo é marcado como concluído (permanente no histórico).
      */
