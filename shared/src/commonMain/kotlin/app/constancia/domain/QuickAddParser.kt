@@ -8,9 +8,9 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
 
 /**
- * Item 6 — mini-Dateist em português: reconhece no texto da captura
- * rápida data, hora, prioridade (p1..p3), projeto (#Projeto) e
- * recorrência, como o Dateist do Todoist. O parser é regex puro sobre o
+ * Item 6 — parser de linguagem natural em português: reconhece no
+ * texto da captura rápida data, hora, prioridade (p1..p3), projeto
+ * (#Projeto) e recorrência. O parser é regex puro sobre o
  * texto normalizado (minúsculas, sem acentos — índices 1:1 com o
  * original), devolve os trechos reconhecidos (para destacar no campo e
  * permitir desfazer um a um) e o título limpo.
@@ -113,8 +113,8 @@ private data class Candidate(
 )
 
 /**
- * R3.2 (Fase A): mascara os trechos entre crases (escape literal do
- * Dateist) ANTES do parse — texto entre `crases` é literal e NUNCA vira
+ * R3.2 (Fase A): mascara os trechos entre crases (escape literal)
+ * ANTES do parse — texto entre `crases` é literal e NUNCA vira
  * data/hora/prioridade/projeto/recorrência. A máscara substitui cada
  * caractere do trecho (e as próprias crases) por um marcador neutro,
  * mantendo o comprimento: todos os índices seguem 1:1 com o original.
@@ -349,7 +349,7 @@ fun parseQuickAdd(
     }
 
     // ---------------- Lembrete "!30m" / "!1h" (R3.3) --------------------
-    // Estilo Todoist: "!" + quantidade + unidade (h = horas; min/m ou
+    // Lembrete rápido: "!" + quantidade + unidade (h = horas; min/m ou
     // sem unidade = minutos antes da base da tarefa).
     for (m in Regex("""!(\d{1,4})\s?(min|m|h)?\b""").findAll(norm)) {
         val amount = m.groupValues[1].toIntOrNull() ?: continue
