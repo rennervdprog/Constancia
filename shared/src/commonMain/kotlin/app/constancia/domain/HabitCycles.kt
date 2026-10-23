@@ -9,7 +9,7 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 
 /**
- * TickTick item 2: ciclos/temporadas do hábito (HabitCycleModel deles).
+ * Item 2: ciclos/temporadas do hábito.
  * Um ciclo é uma janela [startDate, endDate] com meta de dias feitos
  * (targetDays). Bater a meta conclui o ciclo — que fica permanente no
  * histórico — e o app oferece o próximo. Falhar um dia dentro do ciclo
@@ -51,7 +51,7 @@ fun cycleState(cycle: HabitCycle, doneDates: Set<String>, todayYmd: String): Cyc
 /**
  * Sequência (streak) DENTRO do ciclo: dias consecutivos feitos contando
  * de hoje (ou ontem) para trás, sem sair da janela e perdoando os dias
- * de [forgivenDates] (pausas e pulos). É o "streak do ciclo" do TickTick.
+ * de [forgivenDates] (pausas e pulos). É a sequência (streak) dentro do ciclo.
  */
 fun cycleStreak(
     cycle: HabitCycle,
