@@ -46,19 +46,19 @@ interface HabitRepository {
     /** Mesmo cálculo de [todayStatusFlow], mas para uma data qualquer (semana navegável). */
     fun statusForDateFlow(dateYmd: String, timeZone: TimeZone = TimeZone.currentSystemDefault()): Flow<List<HabitStatus>>
 
-    // -- Backlog TickTick (schema v6) --
+    // -- Hábitos avançados (schema v6) --
     /** Item 2: ciclos/temporadas de um hábito, do mais antigo ao atual. */
     fun cyclesFlow(habitId: String): Flow<List<HabitCycle>>
     /** Item 2: todos os ciclos (base das seções de ciclo nas telas). */
     fun allCyclesFlow(): Flow<List<HabitCycle>>
     /**
      * Item 2: começa um ciclo de [targetDays] dias a partir de
-     * [startYmd] (a janela tem o mesmo comprimento da meta, como no
-     * TickTick). Retorna o ciclo criado.
+     * [startYmd] (a janela tem o mesmo comprimento da meta).
+     * Retorna o ciclo criado.
      */
     suspend fun startCycle(habitId: String, targetDays: Int, startYmd: String): HabitCycle
 
-    // -- Fase C (absorvido do TickTick §9.4) --
+    // -- Fase C: lembretes de hábito --
     /** Lembretes (horários diários "HH:mm") de um hábito — vários por hábito. */
     fun habitRemindersFlow(habitId: String): Flow<List<HabitReminder>>
     /** Todos os lembretes de hábito (base das telas e do reagendamento). */
@@ -79,7 +79,7 @@ interface CheckinRepository {
     fun checkinsInRangeFlow(fromYmd: String, toYmd: String): Flow<List<Checkin>>
     suspend fun checkinsForHabit(habitId: String): List<Checkin>
 
-    // -- Backlog TickTick (schema v6) --
+    // -- Hábitos avançados (schema v6) --
     /**
      * Item 4: marca o dia como PULADO — um registro (status SKIPPED),
      * não uma ausência: o dia não conta como feito, mas também não
@@ -100,7 +100,7 @@ interface CheckinRepository {
 
 interface TaskRepository {
     fun tasksForDateFlow(dateYmd: String): Flow<List<TaskItem>>
-    /** Todas as tarefas (com subtarefas) — base das visões estilo Todoist. */
+    /** Todas as tarefas (com subtarefas) — base das visões de lista. */
     fun allTasksFlow(): Flow<List<TaskItem>>
     suspend fun getById(id: String): TaskItem?
     /** Cria uma tarefa completa (com subtarefas). Retorna o id criado. */
@@ -148,7 +148,7 @@ interface TaskRepository {
     suspend fun setSubtaskDone(subtaskId: String, done: Boolean)
     suspend fun delete(id: String)
 
-    // -- Backlog Todoist Faixa 1/2 --
+    // -- Tarefas: recursos das Faixas 1 e 2 --
     /** Item 1: move TODAS as pendentes vencidas (dueDate < hoje) para o
      *  dia alvo. Retorna quantas foram movidas. */
     suspend fun rescheduleAllOverdue(todayYmd: String, targetYmd: String): Int
@@ -218,7 +218,7 @@ interface PrefsRepository {
     fun onboardingDoneFlow(): Flow<Boolean>
     suspend fun setOnboardingDone()
 
-    // -- Backlog Todoist Faixa 1/2 --
+    // -- Tarefas: recursos das Faixas 1 e 2 --
     /** Item 2: meta diária de tarefas concluídas (0 = desligada). */
     fun taskDailyGoalFlow(): Flow<Int>
     suspend fun setTaskDailyGoal(goal: Int)
