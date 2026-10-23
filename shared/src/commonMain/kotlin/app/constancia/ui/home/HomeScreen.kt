@@ -213,7 +213,7 @@ fun HomeScreen(
 
     val active = statuses.filter { !it.habit.paused }
     val paused = statuses.filter { it.habit.paused }
-    // TickTick item 4: hábito com opt-in "sempre no Hoje" aparece no
+    // Item 4: hábito com opt-in "sempre no Hoje" aparece no
     // fluxo do dia mesmo fora dos dias devidos (marcável direto daqui).
     val visibleHabits = active.filter {
         it.habit.showInToday || isDueOn(it.habit, selectedDate, createdFrom(it.habit))
@@ -1238,7 +1238,7 @@ private fun HabitSessionRow(
                 )
             }
         }
-        // TickTick item 4: pular o dia é um registro — não quebra a
+        // Item 4: pular o dia é um registro — não quebra a
         // sequência. Some quando o dia já está feito.
         val skippedDay = status.todayCheckin?.status == CheckinStatus.SKIPPED
         if (skippedDay || !status.isDoneToday) {
@@ -2063,7 +2063,7 @@ private fun InsightCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
 }
 
 /**
- * Item 2 — cartão da meta diária de tarefas (sem pontos/Karma): quanto
+ * Item 2 — cartão da meta diária de tarefas (sem sistema de pontos): quanto
  * já foi concluído hoje, a barra de progresso, a sequência de dias com
  * a meta batida e o aviso de pausa (pausar não quebra a sequência).
  * Some quando a meta está desligada (ajuste em Mais → Ajustes).
