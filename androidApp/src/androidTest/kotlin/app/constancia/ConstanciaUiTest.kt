@@ -280,7 +280,7 @@ class ConstanciaUiTest {
         runCatching { device.pressBack() } // fecha o teclado virtual
         composeRule.waitForIdle()
         shot("05_tarefas_hoje")
-        // Expande a linha: as ações estilo Todoist aparecem. O clique pode
+        // Expande a linha: as ações da tarefa aparecem. O clique pode
         // não injetar de primeira no emulador lento — tenta de novo.
         var expandTries = 0
         while (!nodesWith("Prioridade: Média") && expandTries < 4) {
