@@ -1,4 +1,4 @@
--- Migração 2 -> 3: tarefas estilo Todoist (projeto, prioridade, prazo,
+-- Migração 2 -> 3: tarefas completas (projeto, prioridade, prazo,
 -- sessão, recorrência, anotação, vínculo com hábito) + subtarefas,
 -- e diário turbinado (energia, sono, etiquetas, foto, pergunta do dia).
 ALTER TABLE task_item ADD COLUMN project TEXT NOT NULL DEFAULT 'entrada';
