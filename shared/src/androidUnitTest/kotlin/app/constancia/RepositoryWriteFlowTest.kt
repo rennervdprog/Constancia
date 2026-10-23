@@ -622,7 +622,7 @@ class RepositoryWriteFlowTest {
         assertEquals(2L, row.priority)
     }
 
-    // ---------- Backlog TickTick (schema v6) ----------
+    // ---------- Hábitos avançados (schema v6) ----------
 
     // Item 4: pular grava um REGISTRO (status SKIPPED) — não é ausência:
     // o streak sobrevive ao dia pulado, e tocar de novo desfaz o pulo.
@@ -750,10 +750,10 @@ class RepositoryWriteFlowTest {
         assertNull(cycles.last().completedAt)
     }
 
-    // Migração 5 -> 6 (TickTick): defaults seguros nas colunas novas,
+    // Migração 5 -> 6: defaults seguros nas colunas novas,
     // status DONE nos check-ins antigos e as tabelas novas utilizáveis.
     @Test
-    fun migration5To6AddsTickTickColumnsAndTables() {
+    fun migration5To6AddsHabitColumnsAndTables() {
         val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
         // Base no formato v5: habit e checkin completos + task/diary da
         // v2 (a cadeia de migrações 2-5 também roda sobre eles).
