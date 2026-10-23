@@ -1,4 +1,4 @@
--- Migração 3 -> 4: backlog do relatório Todoist (Faixas 1 e 2).
+-- Migração 3 -> 4: recursos avançados de tarefas (Faixas 1 e 2).
 -- Tarefas ganham prazo final (deadline) separado da data agendada,
 -- duração estimada, instante de conclusão (base das metas/streak de
 -- tarefas), lembrete relativo e a regra de recorrência estruturada
