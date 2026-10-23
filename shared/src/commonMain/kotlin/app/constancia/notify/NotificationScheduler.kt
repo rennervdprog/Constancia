@@ -1,11 +1,11 @@
 package app.constancia.notify
 
 /**
- * Agendador de notificações locais (itens 3 e 9 do backlog Todoist +
+ * Agendador de notificações locais (lembretes de tarefas e hábitos,
  * Fase C do Plano de Elevação):
  * - lembretes de TAREFA como LISTA (R6.1): cada linha da tabela
  *   task_reminder tem o próprio alarme, identificado pelo id da linha;
- * - lembretes de HÁBITO (absorvidos do TickTick §9.4): vários horários
+ * - lembretes de HÁBITO: vários horários
  *   diários por hábito, identificados pelo id da linha habit_reminder;
  * - Daily Review em canal próprio (R12.4) e o resumo de lembretes
  *   perdidos do catch-up (R6.3).
