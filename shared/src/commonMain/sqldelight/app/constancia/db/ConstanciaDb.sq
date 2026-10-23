@@ -6,7 +6,7 @@ CREATE TABLE habit(
   goal_type TEXT NOT NULL, -- BINARY | QUANTITY
   target_quantity REAL NOT NULL DEFAULT 1.0,
   quantity_unit TEXT NOT NULL DEFAULT '',
-  quantity_step REAL NOT NULL DEFAULT 1.0, -- passo do stepper (TickTick item 1)
+  quantity_step REAL NOT NULL DEFAULT 1.0, -- passo do stepper da meta numérica (item 1)
   show_in_today INTEGER NOT NULL DEFAULT 0, -- opt-in: sempre mostrar na Hoje (item 4)
   show_in_calendar INTEGER NOT NULL DEFAULT 0, -- opt-in: marcas no calendário do diário (item 4)
   ignore_weekdays TEXT NOT NULL DEFAULT '', -- csv ISO 1..7: dias de descanso planejados (R13.1, Fase D)
@@ -33,7 +33,7 @@ CREATE TABLE checkin(
 );
 CREATE INDEX checkin_habit_date ON checkin(habit_id, date);
 
--- Log do hábito (TickTick item 3): nota + emoji por dia e hábito.
+-- Log do hábito: nota + emoji por dia e hábito.
 CREATE TABLE habit_record(
   id TEXT NOT NULL PRIMARY KEY,
   habit_id TEXT NOT NULL REFERENCES habit(id) ON DELETE CASCADE,
@@ -45,7 +45,7 @@ CREATE TABLE habit_record(
 );
 CREATE INDEX habit_record_habit ON habit_record(habit_id, date);
 
--- Ciclos/temporadas do hábito (TickTick item 2): janela início/fim com
+-- Ciclos/temporadas do hábito: janela início/fim com
 -- meta de dias; completed_at preenchido = ciclo concluído (permanente).
 CREATE TABLE habit_cycle(
   id TEXT NOT NULL PRIMARY KEY,
@@ -158,7 +158,7 @@ CREATE TABLE task_reminder(
 );
 CREATE INDEX task_reminder_task ON task_reminder(task_id);
 
--- Lembretes de hábito (TickTick §9.4 absorvido na Fase C): vários
+-- Lembretes de hábito (Fase C): vários
 -- horários "HH:mm" por hábito, repetidos todo dia. As colunas
 -- reminder_enabled/reminder_time do hábito viram espelho (ligado +
 -- primeiro horário) para as telas que ordenam/exibem pelo horário.
@@ -288,7 +288,7 @@ VALUES(?, ?, ?, ?, ?, ?);
 deleteCheckin:
 DELETE FROM checkin WHERE habit_id = ? AND date = ?;
 
--- Log do hábito (TickTick item 3)
+-- Log do hábito
 selectRecord:
 SELECT * FROM habit_record WHERE habit_id = ? AND date = ?;
 
@@ -305,7 +305,7 @@ VALUES(?, ?, ?, ?, ?, ?);
 deleteRecord:
 DELETE FROM habit_record WHERE habit_id = ? AND date = ?;
 
--- Ciclos do hábito (TickTick item 2)
+-- Ciclos do hábito
 selectCyclesForHabit:
 SELECT * FROM habit_cycle WHERE habit_id = ? ORDER BY start_date ASC;
 
