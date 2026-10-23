@@ -478,7 +478,7 @@ fun NewHabitSheet(
                 tagPrefix = "session_opt",
             )
 
-            // Integração opt-in (TickTick item 4): desligado por padrão.
+            // Integração opt-in (item 4): desligado por padrão.
             SheetSectionLabel("Integração")
             Row(
                 modifier = Modifier.fillMaxWidth(),
