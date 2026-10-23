@@ -205,7 +205,7 @@ fun heatGridStart(today: LocalDate, weeks: Int = 18): LocalDate {
 /**
  * Grade do mapa de calor: [weeks] colunas (semanas, começando no domingo),
  * 7 linhas (dom..sáb). Estado de cada dia: futuro, não devido (off),
- * feito, parcial (progresso sem bater a meta — TickTick item 1), pulado
+ * feito, parcial (progresso sem bater a meta), pulado
  * (item 4) ou devido-não-feito.
  */
 fun heatGrid(
