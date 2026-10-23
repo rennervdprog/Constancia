@@ -315,7 +315,7 @@ internal fun computeTodayStatuses(
         val hcs = checkinsByHabit[habit.id].orEmpty()
         val todayCheckin = hcs.firstOrNull { it.date == today }
         val doneDates = doneDatesFor(habit, donePairs(hcs))
-        // Pausas E dias pulados (TickTick item 4) perdoam o streak.
+        // Pausas E dias pulados (item 4) perdoam o streak.
         val forgiven = forgivenDates(pausesByHabit[habit.id].orEmpty(), today) +
             skippedDatesFor(hcs)
         // R13.2 (Fase D): a sequência como objeto (início/fim/recorde);
