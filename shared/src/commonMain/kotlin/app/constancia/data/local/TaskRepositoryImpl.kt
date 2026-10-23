@@ -485,7 +485,7 @@ class TaskRepositoryImpl(
         }
     }
 
-    // -- Backlog Todoist Faixa 1/2 --
+    // -- Tarefas: recursos das Faixas 1 e 2 --
 
     override suspend fun rescheduleAllOverdue(
         todayYmd: String,
