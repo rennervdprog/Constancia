@@ -22,7 +22,7 @@ import kotlin.math.roundToInt
  * Lógica pura — 100% testável, sem Compose. Tudo derivado dos dados que o
  * app já coleta (nenhum dado novo).
  *
- * Regras de honestidade estatística (do plano, modelo Bearable):
+ * Regras de honestidade estatística (do plano de relatórios):
  * - correlação só aparece com amostra mínima e o n fica sempre visível;
  * - linguagem não-causal ("se associa a", nunca "faz você");
  * - sem denominador, sem métrica: toda contagem tem par ou taxa.
