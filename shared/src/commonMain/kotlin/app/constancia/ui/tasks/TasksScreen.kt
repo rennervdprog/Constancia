@@ -202,7 +202,7 @@ fun TasksScreen(
         !it.done && it.dueDate == today
     }
 
-    /** Captura rápida com o mini-Dateist (item 6): o que o parser
+    /** Captura rápida com o parser de linguagem natural (item 6): o que o parser
      *  reconheceu vira campo da tarefa; o resto segue o padrão da visão. */
     fun quickAddParsed(parse: QuickAddParse) {
         val title = parse.title.trim()
