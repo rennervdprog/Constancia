@@ -192,7 +192,7 @@ fun donePairs(checkins: List<Checkin>): List<Pair<String, Double>> =
         .map { it.date to it.quantity }
 
 /**
- * TickTick item 4: dias PULADOS (status SKIPPED) de um hábito. Pular é
+ * Item 4: dias PULADOS (status SKIPPED) de um hábito. Pular é
  * um registro, não uma ausência: o dia entra no conjunto de dias
  * "perdoados" do streak (não conta como feito, mas também não quebra
  * a sequência) — diferente de simplesmente não ter check-in.
