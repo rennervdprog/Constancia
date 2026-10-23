@@ -169,7 +169,7 @@ fun DiaryScreen(
         d.year == viewYear && d.monthNumber == viewMonth
     }.associateBy { it.date.toLocalDate().dayOfMonth }
 
-    // TickTick item 4 (opt-in por hábito): dias feitos de hábitos com
+    // Item 4 (opt-in por hábito): dias feitos de hábitos com
     // "marcar no calendário" viram pontinhos na cor do hábito, sob o
     // número do dia — desligado por padrão, não polui quem não ligou.
     val calendarDots = remember(habits, checkins) {
