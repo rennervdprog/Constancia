@@ -161,7 +161,7 @@ fun HabitsScreen(
     val statuses by deps.habits.todayStatusFlow().collectAsState(initial = emptyList())
     val checkins by deps.checkins.checkinsInRangeFlow(rangeFrom, today)
         .collectAsState(initial = emptyList())
-    // TickTick itens 2 e 3: ciclos e log de todos os hábitos.
+    // Itens 2 e 3: ciclos e log de todos os hábitos.
     val allCycles by deps.habits.allCyclesFlow().collectAsState(initial = emptyList())
     val allRecords by deps.checkins.allRecordsFlow()
         .collectAsState(initial = emptyList())
@@ -671,7 +671,7 @@ private fun HabitCard(
         }
 
         if (!habit.paused) {
-            // TickTick item 4: pular hoje (registro que protege a sequência).
+            // Item 4: pular hoje (registro que protege a sequência).
             val skippedToday = status?.todayCheckin?.status == CheckinStatus.SKIPPED
             if (dueToday || doneToday || skippedToday) {
                 Spacer(Modifier.height(12.dp))
@@ -715,7 +715,7 @@ private fun HabitCard(
                 }
             }
 
-            // TickTick item 2: ciclo/temporada do hábito.
+            // Item 2: ciclo/temporada do hábito.
             HabitCycleSection(
                 habit = habit,
                 cycles = cycles,
@@ -724,7 +724,7 @@ private fun HabitCard(
                 onStartCycle = onStartCycle,
             )
 
-            // TickTick item 3: log do hábito (nota + emoji do dia).
+            // Item 3: log do hábito (nota + emoji do dia).
             HabitLogSection(
                 records = records,
                 todayYmdStr = todayYmdStr,
