@@ -22,8 +22,7 @@ INSERT INTO task_reminder(id, task_id, type, minute_offset, at_millis, auto, cre
 SELECT 'mig7-' || id, id, 'RELATIVE', reminder_minutes_before, NULL, 0, created_at
 FROM task_item WHERE reminder_minutes_before IS NOT NULL;
 
--- Absorvido do backlog TickTick (§9.4 do relatório): lembretes
--- MÚLTIPLOS também para hábitos, no mesmo sistema. Cada linha é um
+-- Lembretes MÚLTIPLOS também para hábitos, no mesmo sistema. Cada linha é um
 -- horário "HH:mm" que se repete todo dia. O hábito tinha um horário
 -- único (reminder_enabled/reminder_time) — vira a primeira linha.
 CREATE TABLE habit_reminder(
