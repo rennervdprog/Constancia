@@ -16,7 +16,7 @@ import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** Item 2 (metas de tarefas, sem Karma) e item 3 (resumo do Daily Review). */
+/** Item 2 (metas de tarefas, sem sistema de pontos) e item 3 (resumo do Daily Review). */
 class TaskGoalsTest {
 
     private val today = LocalDate(2026, 10, 20) // terça-feira
