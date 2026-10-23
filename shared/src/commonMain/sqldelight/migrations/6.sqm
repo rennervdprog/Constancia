@@ -1,12 +1,12 @@
--- Migração 5 -> 6: backlog do TickTick (hábitos/integração, itens 1-4).
+-- Migração 5 -> 6: recursos avançados de hábitos (itens 1-4).
 -- Item 1: hábito quantitativo ganha PASSO (o stepper anda de passo em
 -- passo, não mais de 1 em 1 fixo). A meta (target_quantity) e a unidade
 -- já existiam desde a v1.
 ALTER TABLE habit ADD COLUMN quantity_step REAL NOT NULL DEFAULT 1.0;
 
--- Item 4: integração OPT-IN por hábito (espírito do HabitConfig do
--- TickTick), desligada por padrão: mostrar o hábito no fluxo da Hoje
--- mesmo fora dos dias devidos, e mostrar marcas de check-in no
+-- Item 4: integração OPT-IN por hábito, desligada por padrão:
+-- mostrar o hábito no fluxo da Hoje mesmo fora dos dias devidos, e
+-- mostrar marcas de check-in no
 -- calendário do diário.
 ALTER TABLE habit ADD COLUMN show_in_today INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE habit ADD COLUMN show_in_calendar INTEGER NOT NULL DEFAULT 0;
@@ -16,7 +16,7 @@ ALTER TABLE habit ADD COLUMN show_in_calendar INTEGER NOT NULL DEFAULT 0;
 -- simples ausência de check-in).
 ALTER TABLE checkin ADD COLUMN status TEXT NOT NULL DEFAULT 'DONE';
 
--- Item 3: log do hábito (HabitRecord do TickTick) — nota curta + emoji
+-- Item 3: log do hábito — nota curta + emoji
 -- opcionais por dia, ligados ao hábito. Fica em tabela própria para a
 -- aba Padrões poder cruzar humor-por-hábito no futuro.
 CREATE TABLE habit_record(
@@ -30,7 +30,7 @@ CREATE TABLE habit_record(
 );
 CREATE INDEX habit_record_habit ON habit_record(habit_id, date);
 
--- Item 2: ciclos/temporadas do hábito (HabitCycleModel do TickTick) —
+-- Item 2: ciclos/temporadas do hábito —
 -- janela com início/fim e meta de dias; ciclos concluídos ficam
 -- permanentes (completed_at preenchido), como memória do hábito.
 CREATE TABLE habit_cycle(
