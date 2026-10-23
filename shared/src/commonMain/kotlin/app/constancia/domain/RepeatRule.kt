@@ -12,7 +12,7 @@ import kotlinx.datetime.plus
  * Item 7 — recorrência estruturada (substitui a string solta como fonte
  * da verdade; a string `repeatRule` segue existindo como RÓTULO legível).
  *
- * Modelo (espelha o "Custom repeat" do Todoist):
+ * Modelo de repetição personalizada:
  * - frequência: diária, semanal, mensal ou anual;
  * - intervalo: a cada N (dias/semanas/meses/anos);
  * - dias da semana (semanal): conjunto ISO 1=seg..7=dom; vazio = mesmo
