@@ -231,11 +231,22 @@ class ConstanciaUiTest {
     @Test
     fun telasIniciaisRevisitadas_pularVoltaParaOMais() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
-        // Igual ao mais_progresso: a LazyColumn da Mais só compõe o
-        // item quando ele entra na viewport, então primeiro rola a
-        // lista até a tag existir; depois sobe ~110px para o centro
-        // do item sair da zona do botão + flutuante antes do clique.
-        awaitTag("mais_onboarding", "mais_list")
+        // A LazyColumn da Mais só compõe o item quando ele entra na
+        // viewport. O swipe do Compose na lista não o trouxe à tona
+        // nas 2 rodadas de CI (timeout do awaitTag), então rola com
+        // toques reais na tela (mesmo recurso usado nos ajustes de
+        // posição dos outros testes) até a tag existir; depois sobe
+        // ~110px para o centro do item sair da zona do botão +
+        // flutuante antes do clique.
+        var tries = 0
+        while (!nodesWithTag("mais_onboarding") && tries < 8) {
+            device.swipe(160, 500, 160, 200, 15)
+            composeRule.waitForIdle()
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWithTag("mais_onboarding")
+        }
         composeRule.onNodeWithTag("mais_onboarding").performScrollTo()
         device.swipe(160, 430, 160, 320, 10)
         composeRule.waitForIdle()
