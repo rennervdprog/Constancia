@@ -29,6 +29,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,10 +58,13 @@ import app.constancia.ui.navigation.AppNavigator
 import app.constancia.ui.navigation.AppTab
 import app.constancia.ui.navigation.MaisSection
 import app.constancia.ui.navigation.rememberAppNavigator
+import app.constancia.ui.onboarding.OnboardingScreen
+import app.constancia.ui.onboarding.shouldShowOnboarding
 import app.constancia.ui.paywall.PaywallScreen
 import app.constancia.ui.reports.ReportsScreen
 import app.constancia.ui.tasks.NewTaskSheet
 import app.constancia.ui.tasks.TasksScreen
+import kotlinx.coroutines.launch
 
 /**
  * Ponto de entrada compartilhado do app Constância.
@@ -80,7 +87,16 @@ fun App(driverFactory: DatabaseDriverFactory) {
 @Composable
 fun AppContent(deps: AppDeps) {
     val navigator = rememberAppNavigator()
+    val scope = rememberCoroutineScope()
     val darkTheme by deps.prefs.darkThemeFlow().collectAsState(initial = false)
+    // Telas iniciais: aparecem uma única vez (flag já existente em
+    // PrefsRepository, nunca ligada até agora) e voltam só por "Telas
+    // iniciais" na aba Mais. Null = flag ainda não lida: não mostra
+    // nada, para não piscar o fluxo em quem já concluiu.
+    val onboardingDone by deps.prefs.onboardingDoneFlow()
+        .collectAsState(initial = null)
+    var showOnboardingAgain by remember { mutableStateOf(false) }
+    val showOnboarding = shouldShowOnboarding(onboardingDone, showOnboardingAgain)
     val allTasks by deps.tasks.allTasksFlow().collectAsState(initial = emptyList())
     val today = todayYmd()
     val overdueCount = allTasks.count {
@@ -143,6 +159,7 @@ fun AppContent(deps: AppDeps) {
                         screenModifier,
                         onOpenPaywall = { navigator.showPaywall = true },
                         onOpenSection = { navigator.openMaisSection(it) },
+                        onOpenOnboarding = { showOnboardingAgain = true },
                     )
                 }
             }
@@ -181,6 +198,19 @@ fun AppContent(deps: AppDeps) {
         }
         if (navigator.showPaywall) {
             PaywallScreen(deps = deps, onClose = { navigator.showPaywall = false })
+        }
+        // Sobreposição opaca por cima de tudo (inclusive da barra):
+        // o app principal continua composto embaixo, sem criar dados,
+        // e volta intacto quando o fluxo termina.
+        if (showOnboarding) {
+            OnboardingScreen(
+                onFinish = {
+                    scope.launch {
+                        deps.prefs.setOnboardingDone()
+                        showOnboardingAgain = false
+                    }
+                },
+            )
         }
     }
 }
