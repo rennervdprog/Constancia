@@ -90,6 +90,7 @@ fun MoreScreen(
     modifier: Modifier = Modifier,
     onOpenPaywall: () -> Unit = {},
     onOpenSection: (app.constancia.ui.navigation.MaisSection) -> Unit = {},
+    onOpenOnboarding: () -> Unit = {},
 ) {
     val today = remember { todayYmd() }
     val scope = rememberCoroutineScope()
@@ -282,6 +283,17 @@ fun MoreScreen(
                 onClick = {
                     onOpenSection(app.constancia.ui.navigation.MaisSection.DESAFIOS)
                 },
+            )
+        }
+        item {
+            MenuButton(
+                icon = Icons.Filled.WbSunny,
+                tint = extra.tintSun,
+                iconColor = extra.sunColor,
+                title = "Telas iniciais",
+                subtitle = "Rever as boas-vindas, hábitos e tarefas",
+                tag = "mais_onboarding",
+                onClick = onOpenOnboarding,
             )
         }
         item {
