@@ -95,6 +95,12 @@ class ConstanciaUiTest {
             prefs = PrefsRepositoryImpl(),
         )
         runBlocking { deps.challenges.ensureSeed() }
+        // Telas iniciais: os testes existentes partem do app já
+        // aberto, então a flag de fluxo concluído vem marcada aqui.
+        // O fluxo em si é coberto pelo teste telasIniciaisRevisitadas
+        // (reabertura pela Mais) e pelos unitários de
+        // shouldShowOnboarding.
+        runBlocking { deps.prefs.setOnboardingDone() }
         // Reteste 2: reproduz o ambiente REAL em TODOS os testes — o
         // MainActivity usa enableEdgeToEdge (decorFits=false); sem
         // virar a chave, o conteúdo do teste fica encaixado na janela
@@ -220,6 +226,21 @@ class ConstanciaUiTest {
         shot("01_progresso")
         composeRule.onNodeWithTag("tab_HOJE").performClick()
         composeRule.onNodeWithText("SEU DIA").assertIsDisplayed()
+    }
+
+    @Test
+    fun telasIniciaisRevisitadas_pularVoltaParaOMais() {
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.onNodeWithTag("mais_onboarding").performScrollTo().performClick()
+        composeRule.onNodeWithTag("onboarding_screen").assertIsDisplayed()
+        composeRule.onNodeWithText("Bem-vindo ao Constância").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding_next").performClick()
+        composeRule.onNodeWithText("Hábitos que viram rotina").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding_next").performClick()
+        composeRule.onNodeWithText("Tarefas e diário juntos").assertIsDisplayed()
+        composeRule.onNodeWithTag("onboarding_finish").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("mais_list").assertIsDisplayed()
     }
 
     @Test
