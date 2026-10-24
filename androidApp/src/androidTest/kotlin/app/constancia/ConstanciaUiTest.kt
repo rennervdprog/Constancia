@@ -231,7 +231,15 @@ class ConstanciaUiTest {
     @Test
     fun telasIniciaisRevisitadas_pularVoltaParaOMais() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
-        composeRule.onNodeWithTag("mais_onboarding").performScrollTo().performClick()
+        // Igual ao mais_progresso: a LazyColumn da Mais só compõe o
+        // item quando ele entra na viewport, então primeiro rola a
+        // lista até a tag existir; depois sobe ~110px para o centro
+        // do item sair da zona do botão + flutuante antes do clique.
+        awaitTag("mais_onboarding", "mais_list")
+        composeRule.onNodeWithTag("mais_onboarding").performScrollTo()
+        device.swipe(160, 430, 160, 320, 10)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("mais_onboarding").performClick()
         composeRule.onNodeWithTag("onboarding_screen").assertIsDisplayed()
         composeRule.onNodeWithText("Bem-vindo ao Constância").assertIsDisplayed()
         composeRule.onNodeWithTag("onboarding_next").performClick()
