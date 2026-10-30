@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -453,6 +454,87 @@ class ConstanciaUiTest {
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Tarefa do relógio")
         }
+    }
+
+    @Test
+    fun varredura_relatorios_secoesPeriodoECadeados() {
+        // Relatórios com dado real: hábito criado e feito hoje.
+        createHabit("Meditar")
+        composeRule.onNodeWithTag("habit_check").performClick()
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.onNodeWithTag("mais_progresso").performScrollTo().performClick()
+        awaitText("Evolução", "reports_list")
+        shot("30_relatorios")
+        // Trocar o período muda a revisão exibida.
+        composeRule.onNodeWithText("Últimos 12 meses")
+            .performScrollTo().performClick()
+        awaitText("Revisão do ano", "reports_list")
+        // As superfícies Pro aparecem como cadeado para quem é grátis.
+        awaitText("Padrões cruzados", "reports_list")
+        shot("31_relatorios_cadeados")
+    }
+
+    @Test
+    fun varredura_desafios_listarEComecar() {
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.onNodeWithTag("mais_desafios").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Começar") }
+        shot("32_desafios")
+        composeRule.onAllNodesWithText("Começar").onFirst().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("Dia 1 de", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        // Registro da auditoria: "Concluir" já está ativo no dia 1.
+        composeRule.onNodeWithText("Concluir").assertExists()
+        shot("33_desafio_ativo")
+    }
+
+    @Test
+    fun varredura_diario_sonoEAvisoSemHumor() {
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.onNodeWithTag("mais_diario").performScrollTo().performClick()
+        // Stepper de sono responde ao toque.
+        composeRule.onNodeWithTag("sleep_plus").performScrollTo().performClick()
+        // Salvar sem humor é bloqueado com aviso visível.
+        composeRule.onNodeWithText("Salvar registro de hoje")
+            .performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Escolha um humor para salvar")
+        }
+        shot("34_diario_sem_humor")
+        composeRule.onNodeWithTag("mood_5").performScrollTo().performClick()
+        composeRule.onNodeWithText("Salvar registro de hoje")
+            .performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Salvar alterações")
+        }
+    }
+
+    @Test
+    fun varredura_hoje_pularHabitoEDesfazer() {
+        createHabit("Alongar")
+        awaitText("Pular hoje", "home_list")
+        composeRule.onNodeWithText("Pular hoje").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Pulado hoje — sequência protegida")
+        }
+        shot("35_hoje_pulado")
+        composeRule.onNodeWithText("Desfazer").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Pular hoje") }
+    }
+
+    @Test
+    fun varredura_mais_syncEAjustes() {
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        // Sincronização é placeholder honesto: avisa "em breve".
+        composeRule.onNodeWithTag("mais_sync").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Disponível em breve")
+        }
+        // Ajustes expande e mostra o modo férias.
+        awaitText("Modo férias", "mais_list")
+        shot("36_mais_ajustes")
     }
 
     @Test
