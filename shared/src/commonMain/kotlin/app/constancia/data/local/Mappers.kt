@@ -234,6 +234,9 @@ internal fun ChallengeRow.toModel(): Challenge = Challenge(
     startDate = start_date,
     status = status.toChallengeStatus(),
     isPro = is_pro.isSet(),
+    habitId = habit_id,
+    goalQuantity = goal_quantity,
+    goalUnit = goal_unit,
 )
 
 // Conversoes modelo -> valores de banco (usadas nos inserts/updates).
