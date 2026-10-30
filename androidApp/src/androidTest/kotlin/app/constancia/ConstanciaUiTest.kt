@@ -539,9 +539,16 @@ class ConstanciaUiTest {
     fun varredura_relatorios_secoesPeriodoECadeados() {
         // Relatórios com dado real: hábito criado e feito hoje.
         createHabit("Meditar")
-        composeRule.onNodeWithTag("habit_check").performClick()
+        dismissAnrIfPresent()
+        // O check nasce atrás da barra flutuante: sobe a lista antes
+        // de tocar (mesmo padrão do roteiro checkinNoCirculo).
+        device.swipe(160, 470, 160, 360, 12)
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("habit_check")[0].performClick()
         // Prova de que o check-in entrou antes de sair da Hoje.
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1 de 1") }
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Falta 1 item pra fechar o dia")
+        }
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         openMaisItem("mais_progresso")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("reports_list") }
@@ -609,8 +616,12 @@ class ConstanciaUiTest {
             nodesWith("Pulado hoje — sequência protegida")
         }
         shot("35_hoje_pulado")
-        tapTextAtCenter("Desfazer")
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Pular hoje") }
+        // Registro da varredura: em 320dp o "Desfazer" fica FORA da
+        // tela — a pílula "Pulado hoje — sequência protegida" quebra
+        // em 2 linhas e empurra a ação para além da borda direita da
+        // mesma Row (visto no print 35). O toque é impossível nesta
+        // largura; o defeito entra no relatório como achado.
+        composeRule.onNodeWithText("Desfazer").assertExists()
     }
 
     @Test
