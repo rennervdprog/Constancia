@@ -248,6 +248,25 @@ class RepositoryWriteFlowTest {
         assertTrue(habits.todayStatusFlow(TimeZone.UTC).first().single().isDoneToday)
     }
 
+    @Test
+    fun futureCheckinSkipAndQuantityAreIgnored() = runBlocking {
+        // A2 (varredura 2026-10-30): dia futuro é prévia somente-leitura —
+        // toggle, setQuantity e skip não gravam nada.
+        val db = testDb()
+        val checkins = CheckinRepositoryImpl(db)
+        val habits = HabitRepositoryImpl(db, checkins)
+        habits.save(habit())
+        val future = todayYmd(TimeZone.UTC).toLocalDate()
+            .plus(DatePeriod(days = 7)).toYmd()
+
+        assertFalse(checkins.toggle("h1", future))
+        checkins.setQuantity("h1", future, 5.0)
+        checkins.skip("h1", future)
+
+        assertNull(checkins.get("h1", future))
+        assertTrue(checkins.checkinsForHabit("h1").isEmpty())
+    }
+
     // Bug #4: diário — salvar persiste e o Flow reemite.
     @Test
     fun saveDiaryAppearsInEntryFlow() = runBlocking {
