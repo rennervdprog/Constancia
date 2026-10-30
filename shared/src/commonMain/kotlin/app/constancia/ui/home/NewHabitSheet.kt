@@ -100,6 +100,13 @@ fun NewHabitSheet(
     // Fase C: VÁRIOS horários de lembrete por hábito ("HH:mm").
     var reminderTimes by remember { mutableStateOf<List<String>>(emptyList()) }
     var reminderTimeText by remember { mutableStateOf("") }
+    // M9 (varredura): na edição, os lembretes chegam de forma
+    // assíncrona — salvar antes de carregar apagava todos. O salvar
+    // espera esta carga.
+    var remindersLoaded by remember { mutableStateOf(editing == null) }
+    // M11 (varredura): hora inválida no "Adicionar horário" ganha erro
+    // visível (antes o toque morria em silêncio).
+    var reminderTimeError by remember { mutableStateOf<String?>(null) }
     val habitId = remember { editing?.id ?: newId() }
     var iconKey by remember {
         mutableStateOf(
@@ -130,6 +137,7 @@ fun NewHabitSheet(
         if (editing != null) {
             reminderTimes = deps.habits.habitRemindersFlow(habitId)
                 .first().map { it.time }
+            remindersLoaded = true
         }
     }
 
@@ -413,6 +421,15 @@ fun NewHabitSheet(
                             }
                         }
                     }
+                    if (days.isEmpty()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Escolha pelo menos um dia — sem nenhum " +
+                                "dia marcado, o hábito viraria diário.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.error,
+                        )
+                    }
                 }
                 FrequencyType.DAILY -> Unit
             }
@@ -551,7 +568,10 @@ fun NewHabitSheet(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TimeTextField(
                     value = reminderTimeText,
-                    onValueChange = { value -> reminderTimeText = value },
+                    onValueChange = { value ->
+                        reminderTimeText = value
+                        reminderTimeError = null
+                    },
                     modifier = Modifier.width(110.dp),
                 )
                 Spacer(Modifier.width(8.dp))
@@ -573,6 +593,11 @@ fun NewHabitSheet(
                                     reminderTimes = reminderTimes + hhmm
                                 }
                                 reminderTimeText = ""
+                                reminderTimeError = null
+                            } else {
+                                // M11: antes o toque morria em silêncio.
+                                reminderTimeError =
+                                    "Hora inválida — use HH:mm (ex.: 07:30)."
                             }
                         }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -584,11 +609,20 @@ fun NewHabitSheet(
                     )
                 }
             }
+            reminderTimeError?.let { error ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.error,
+                )
+            }
 
             Spacer(Modifier.height(4.dp))
             // CTA: largura total, raio 18dp, padding vertical 16dp, fundo primary,
             // texto onPrimary Sora 16/700 (titleLarge).
-            val ctaEnabled = name.isNotBlank() && !saving
+            val ctaEnabled = name.isNotBlank() && !saving && remindersLoaded &&
+                !(freqType == FrequencyType.DAYS_OF_WEEK && days.isEmpty())
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
