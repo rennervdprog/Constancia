@@ -1,0 +1,15 @@
+-- Migração 10 -> 11: varredura 2026-10-30 (desafios A4/M5).
+-- O desafio passa a guardar o hábito que ele criou (vínculo real, para
+-- medir o progresso por check-ins e não só pelo calendário) e a meta
+-- de quantidade que a descrição do pacote promete ("2 litros de água",
+-- "20 páginas", "5 minutos") — antes o hábito nascia sempre binário.
+ALTER TABLE challenge ADD COLUMN habit_id TEXT;
+ALTER TABLE challenge ADD COLUMN goal_quantity REAL;
+ALTER TABLE challenge ADD COLUMN goal_unit TEXT NOT NULL DEFAULT '';
+
+-- Preenche a meta dos pacotes padrão já semeados (o ensureSeed só
+-- insere quando a tabela está vazia, então instalação antiga não
+-- receberia os valores novos sem este UPDATE).
+UPDATE challenge SET goal_quantity = 5.0, goal_unit = 'min' WHERE id = 'ch-meditar-7';
+UPDATE challenge SET goal_quantity = 2.0, goal_unit = 'litros' WHERE id = 'ch-agua-7';
+UPDATE challenge SET goal_quantity = 20.0, goal_unit = 'páginas' WHERE id = 'ch-ler-30';
