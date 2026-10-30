@@ -626,9 +626,8 @@ fun TodoRowWithActions(
             scope.launch { deps.tasks.setDueDate(task.id, today.toString()) }
         },
         onPostpone = {
-            val next = task.dueDate?.toLocalDate()
-                ?.plus(kotlinx.datetime.DatePeriod(days = 1))
-                ?: today.plus(kotlinx.datetime.DatePeriod(days = 1))
+            // M8: adiar leva PARA amanhã (postponeTarget).
+            val next = app.constancia.domain.postponeTarget(task.dueDate, today)
             scope.launch { deps.tasks.setDueDate(task.id, next.toString()) }
         },
         onCyclePriority = {
