@@ -84,7 +84,7 @@ private val benefits = listOf(
     ),
     Benefit(
         "Ano em Revista completo",
-        "O ano inteiro + a revista do trimestre, prontos pra compartilhar.",
+        "O ano inteiro em revista + a revista do trimestre.",
     ),
     Benefit(
         "Desafios Pro exclusivos",
@@ -492,8 +492,8 @@ private val featurePages = listOf(
         Icons.Filled.EmojiEvents,
         "Desafios Pro + Ano em Revista",
         "Pacotes guiados com selo Pro e a revista completa do ano e " +
-            "do trimestre: check-ins, tarefas e sua maior sequência, " +
-            "prontos pra compartilhar.",
+            "do trimestre: dias perfeitos, dia mais produtivo, " +
+            "check-ins, tarefas e sua maior sequência.",
     ),
 )
 
