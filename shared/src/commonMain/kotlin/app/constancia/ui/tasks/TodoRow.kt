@@ -16,14 +16,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,8 +96,13 @@ fun TodoRow(
     onCompleteYesterday: () -> Unit = {},
     // R6.1 (Fase C): substituir a LISTA de lembretes da tarefa.
     onSetReminders: (List<app.constancia.model.ReminderSpec>) -> Unit = {},
+    // Auditoria 2026-10-30: abrir o formulário em modo edição e
+    // adicionar subtarefa pelo detalhe (antes não existiam).
+    onEdit: () -> Unit = {},
+    onAddSubtask: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    var newSubText by remember { mutableStateOf("") }
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
     val prioColor = priorityColor(task.priority)
@@ -394,6 +407,61 @@ fun TodoRow(
                         }
                     }
                 }
+                // Adicionar subtarefa pelo detalhe (auditoria
+                // 2026-10-30): a função existia no repositório, mas
+                // nenhuma tela chamava — subtarefa só nascia na criação.
+                if (!task.done) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = newSubText,
+                            onValueChange = {
+                                if (it.length <= 50) newSubText = it
+                            },
+                            placeholder = { Text("Adicionar subtarefa…") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Done,
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    val v = newSubText.trim()
+                                    if (v.isNotEmpty()) {
+                                        onAddSubtask(v)
+                                        newSubText = ""
+                                    }
+                                },
+                            ),
+                            modifier = Modifier.weight(1f)
+                                .testTag("task_detail_sub_input"),
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier.size(40.dp)
+                                .background(scheme.primary, CircleShape)
+                                .testTag("task_detail_sub_add")
+                                .clickable {
+                                    val v = newSubText.trim()
+                                    if (v.isNotEmpty()) {
+                                        onAddSubtask(v)
+                                        newSubText = ""
+                                    }
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = "Adicionar subtarefa",
+                                tint = scheme.onPrimary,
+                                modifier = Modifier.size(19.dp),
+                            )
+                        }
+                    }
+                }
                 // Fase C (R6.1): a LISTA de lembretes é editável aqui,
                 // no detalhe da tarefa (relativos + horário fixo).
                 if (!task.done) {
@@ -412,6 +480,9 @@ fun TodoRow(
                         },
                         onChange = onSetReminders,
                         absoluteDate = task.dueDate?.toLocalDate(),
+                        // Sem data, relativo nunca dispara: chips
+                        // inertes com aviso (auditoria 2026-10-30).
+                        relativeEnabled = task.dueDate != null,
                     )
                 }
                 Spacer(Modifier.height(10.dp))
@@ -502,6 +573,10 @@ fun TodoRow(
                         onClick = onCyclePriority,
                     )
                     TagAction(
+                        text = "Editar",
+                        onClick = onEdit,
+                    )
+                    TagAction(
                         text = "Excluir",
                         onClick = onDelete,
                         danger = true,
@@ -531,6 +606,7 @@ fun TodoRowWithActions(
     // a tela usa para oferecer o "Desfazer" (snackbar/botão).
     onCompleted: (app.constancia.model.CompletionReversal?) -> Unit = {},
 ) {
+    var showEditSheet by remember { mutableStateOf(false) }
     TodoRow(
         task = task,
         today = today,
@@ -569,6 +645,10 @@ fun TodoRowWithActions(
         onSetReminders = { specs ->
             scope.launch { deps.tasks.setTaskReminders(task.id, specs) }
         },
+        onEdit = { showEditSheet = true },
+        onAddSubtask = { title ->
+            scope.launch { deps.tasks.addSubtask(task.id, title) }
+        },
         onCompleteYesterday = {
             scope.launch {
                 val reversal = deps.tasks.setDone(
@@ -580,6 +660,13 @@ fun TodoRowWithActions(
         },
         modifier = modifier,
     )
+    if (showEditSheet) {
+        NewTaskSheet(
+            deps = deps,
+            onDismiss = { showEditSheet = false },
+            existing = task,
+        )
+    }
 }
 
 /** Etiqueta de ação da linha expandida (estilo das tags do protótipo). */
