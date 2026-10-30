@@ -169,10 +169,36 @@ class ConstanciaUiTest {
             tries++
         }
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag(tag) }
-        composeRule.onNodeWithTag(tag).performScrollTo()
-        device.swipe(160, 430, 160, 320, 10)
+        // O item pode sumir num frame transitório da lista: o
+        // scroll+click tenta até 3 vezes antes de desistir.
+        var opened = false
+        var attempts = 0
+        while (!opened && attempts < 3) {
+            attempts++
+            runCatching {
+                composeRule.onNodeWithTag(tag).performScrollTo()
+                device.swipe(160, 430, 160, 320, 10)
+                composeRule.waitForIdle()
+                composeRule.onNodeWithTag(tag).performClick()
+                opened = true
+            }
+            if (!opened) composeRule.waitForIdle()
+        }
+        check(opened) { "openMaisItem: nao consegui clicar em $tag" }
+    }
+
+    /** Toca no centro real de um texto (coordenadas da tela). */
+    private fun tapTextAtCenter(text: String) {
+        var bounds = composeRule.onNodeWithText(text)
+            .fetchSemanticsNode().boundsInRoot
+        if (bounds.center.y > 540) {
+            device.swipe(160, 430, 160, 320, 10)
+            composeRule.waitForIdle()
+            bounds = composeRule.onNodeWithText(text)
+                .fetchSemanticsNode().boundsInRoot
+        }
+        device.click(bounds.center.x.toInt(), bounds.center.y.toInt())
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag(tag).performClick()
     }
 
     /** Espera um texto existir rolando com toques reais na tela. */
@@ -496,7 +522,7 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         openMaisItem("mais_progresso")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("reports_list") }
-        awaitText("Evolução", "reports_list")
+        awaitTextReal("Evolução")
         shot("30_relatorios")
         // Trocar o período muda a revisão exibida.
         composeRule.onNodeWithText("Últimos 12 meses")
@@ -558,10 +584,7 @@ class ConstanciaUiTest {
             nodesWith("Pulado hoje — sequência protegida")
         }
         shot("35_hoje_pulado")
-        composeRule.onNodeWithText("Desfazer").performScrollTo()
-        device.swipe(160, 430, 160, 320, 10)
-        composeRule.waitForIdle()
-        composeRule.onNodeWithText("Desfazer").performClick()
+        tapTextAtCenter("Desfazer")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Pular hoje") }
     }
 
