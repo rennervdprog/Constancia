@@ -212,7 +212,10 @@ CREATE TABLE challenge(
   habit_icon TEXT NOT NULL DEFAULT '',
   start_date TEXT, -- yyyy-MM-dd ou null = ainda não iniciado
   status TEXT NOT NULL DEFAULT 'AVAILABLE', -- AVAILABLE | ACTIVE | DONE | GIVEN_UP
-  is_pro INTEGER NOT NULL DEFAULT 0
+  is_pro INTEGER NOT NULL DEFAULT 0,
+  habit_id TEXT, -- hábito criado ao começar (varredura A4); null = legado sem vínculo
+  goal_quantity REAL, -- meta diária do pacote (varredura M5); null = hábito binário
+  goal_unit TEXT NOT NULL DEFAULT '' -- unidade da meta (ex.: litros, páginas, min)
 );
 
 -- Pausas: intervalos em que o hábito ficou pausado (streak congelada, sem zerar).
@@ -252,6 +255,12 @@ UPDATE habit SET paused = ? WHERE id = ?;
 
 archiveHabit:
 UPDATE habit SET archived = 1 WHERE id = ?;
+
+selectArchivedHabits:
+SELECT * FROM habit WHERE archived = 1 ORDER BY name ASC;
+
+unarchiveHabit:
+UPDATE habit SET archived = 0 WHERE id = ?;
 
 deleteHabit:
 DELETE FROM habit WHERE id = ?;
@@ -526,8 +535,11 @@ SELECT * FROM challenge WHERE id = ?;
 
 insertChallenge:
 INSERT INTO challenge(id, title, description, duration_days, habit_name, habit_icon,
-  start_date, status, is_pro)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);
+  start_date, status, is_pro, habit_id, goal_quantity, goal_unit)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 updateChallengeStatus:
 UPDATE challenge SET status = ?, start_date = ? WHERE id = ?;
+
+startChallenge:
+UPDATE challenge SET status = ?, start_date = ?, habit_id = ? WHERE id = ?;
