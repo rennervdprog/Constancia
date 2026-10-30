@@ -9,6 +9,7 @@ import app.constancia.model.PauseInterval
 import app.constancia.model.StreakInfo
 import app.constancia.model.toLocalDate
 import app.constancia.model.isoDayNumberCompat
+import app.constancia.model.isoToAppDay
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -42,8 +43,28 @@ fun currentStreak(
     return when (habit.frequencyType) {
         FrequencyType.WEEKLY_X -> weeklyStreakRun(habit, doneDates, forgivenDates, todayYmd).count
         FrequencyType.DAILY, FrequencyType.DAYS_OF_WEEK ->
-            dailyStreakRun(doneDates, forgivenDates, ignoredWeekdays, todayYmd).count
+            dailyStreakRun(
+                doneDates, forgivenDates,
+                effectiveIgnoredWeekdays(habit, ignoredWeekdays), todayYmd,
+            ).count
     }
+}
+
+/**
+ * A1 (varredura 2026-10-30): num hábito de dias fixos (DAYS_OF_WEEK), os
+ * dias FORA da agenda não são falta — o hábito nem era devido neles. Sem
+ * somá-los aos perdoados, a caminhada diária quebrava na primeira
+ * terça-feira de um hábito Seg/Qua/Sex e a sequência (e o recorde) nunca
+ * passavam de ~1, mesmo com o hábito cumprido à risca.
+ */
+private fun effectiveIgnoredWeekdays(
+    habit: Habit,
+    ignoredWeekdays: Set<Int>,
+): Set<Int> {
+    if (habit.frequencyType != FrequencyType.DAYS_OF_WEEK) return ignoredWeekdays
+    if (habit.daysOfWeek.isEmpty()) return ignoredWeekdays // vazio = todos os dias
+    val dueIso = (1..7).filter { isoToAppDay(it) in habit.daysOfWeek }.toSet()
+    return ignoredWeekdays + ((1..7).toSet() - dueIso)
 }
 
 /** O dia é "perdoado"? Está numa pausa/skip ou é dia de descanso (R13.1). */
@@ -123,9 +144,12 @@ private fun weeklyStreakRun(
             if (end == null) end = weekEnd
             start = weekStart
             weekStart = weekStart.minus(DatePeriod(days = 7))
-        } else if (isCurrentWeek && doneThisWeek > 0) {
-            // Semana atual ainda em andamento: não quebra nem conta —
-            // segue avaliando as semanas anteriores.
+        } else if (isCurrentWeek) {
+            // Semana atual ainda em andamento (com ou sem feitos —
+            // M7 da varredura: segunda de manhã, antes do primeiro
+            // check-in, a sequência das semanas anteriores continua
+            // valendo): não quebra nem conta — segue avaliando as
+            // semanas anteriores.
             weekStart = weekStart.minus(DatePeriod(days = 7))
         } else {
             break
@@ -150,14 +174,15 @@ fun habitStreakInfo(
     if (doneDates.isEmpty() && forgivenDates.isEmpty()) {
         return StreakInfo(0, null, null, 0)
     }
+    val ignored = effectiveIgnoredWeekdays(habit, ignoredWeekdays)
     val run = when (habit.frequencyType) {
         FrequencyType.WEEKLY_X ->
             weeklyStreakRun(habit, doneDates, forgivenDates, todayYmd)
         FrequencyType.DAILY, FrequencyType.DAYS_OF_WEEK ->
-            dailyStreakRun(doneDates, forgivenDates, ignoredWeekdays, todayYmd)
+            dailyStreakRun(doneDates, forgivenDates, ignored, todayYmd)
     }
     return run.copy(
-        best = bestStreak(habit, doneDates, forgivenDates, ignoredWeekdays),
+        best = bestStreak(habit, doneDates, forgivenDates, ignored),
     )
 }
 
@@ -257,6 +282,7 @@ fun bestStreak(
     return when (habit.frequencyType) {
         FrequencyType.WEEKLY_X -> bestWeeklyStreak(habit, doneDates, forgivenDates)
         FrequencyType.DAILY, FrequencyType.DAYS_OF_WEEK -> {
+            val ignored = effectiveIgnoredWeekdays(habit, ignoredWeekdays)
             val sorted = doneDates.map { it.toLocalDate() }.sorted()
             var best = 1
             var run = 1
@@ -272,7 +298,7 @@ fun bestStreak(
                     var d = prev.plus(DatePeriod(days = 1))
                     var allForgiven = true
                     while (d < cur) {
-                        if (!isForgivenDay(d, forgivenDates, ignoredWeekdays)) {
+                        if (!isForgivenDay(d, forgivenDates, ignored)) {
                             allForgiven = false
                             break
                         }
