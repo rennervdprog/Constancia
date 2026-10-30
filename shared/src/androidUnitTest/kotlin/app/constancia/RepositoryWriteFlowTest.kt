@@ -1001,8 +1001,8 @@ class RepositoryWriteFlowTest {
             0,
         )
 
-        assertEquals(9L, ConstanciaDb.Schema.version)
-        ConstanciaDb.Schema.migrate(driver, 8, ConstanciaDb.Schema.version)
+        assertEquals(10L, ConstanciaDb.Schema.version)
+        ConstanciaDb.Schema.migrate(driver, 8, 9)
 
         val q = ConstanciaDb(driver).constanciaDbQueries
         val h = q.selectHabitById("h1").executeAsOne()
