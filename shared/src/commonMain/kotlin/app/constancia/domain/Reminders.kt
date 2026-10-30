@@ -30,6 +30,20 @@ val REMINDER_OPTIONS: List<Pair<String, Int?>> = listOf(
     "1 dia antes" to 1440,
 )
 
+/**
+ * Texto de horário do formulário -> "HH:mm" canônico, ou null se o
+ * texto não for um horário válido (faixa 0–23 / 0–59). É a validação
+ * do salvamento: o campo de digitação aceita dígitos fora da faixa de
+ * propósito (não reescreve o que o usuário digita), então quem salva
+ * precisa conferir aqui — antes o formulário gravava o texto cru e um
+ * "29:61" ia parar na lista e nos lembretes.
+ */
+fun normalizedTimeOrNull(text: String?): String? {
+    val time = parseTimeOrNull(text) ?: return null
+    return time.hour.toString().padStart(2, '0') + ":" +
+        time.minute.toString().padStart(2, '0')
+}
+
 /** "HH:mm" -> LocalTime, com tolerância a "H:mm"; null se inválido. */
 fun parseTimeOrNull(text: String?): LocalTime? {
     if (text.isNullOrBlank()) return null
