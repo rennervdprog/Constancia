@@ -13,6 +13,7 @@ import app.constancia.db.ConstanciaDb
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.CheckinStatus
+import app.constancia.model.ChallengeStatus
 import app.constancia.model.Habit
 import app.constancia.model.NewTask
 import app.constancia.model.ReminderSpec
@@ -969,7 +970,7 @@ class RepositoryWriteFlowTest {
             0,
         )
 
-        assertEquals(10L, ConstanciaDb.Schema.version)
+        assertEquals(11L, ConstanciaDb.Schema.version)
         ConstanciaDb.Schema.migrate(driver, 7, 8)
 
         val q = ConstanciaDb(driver).constanciaDbQueries
@@ -1020,13 +1021,112 @@ class RepositoryWriteFlowTest {
             0,
         )
 
-        assertEquals(10L, ConstanciaDb.Schema.version)
+        assertEquals(11L, ConstanciaDb.Schema.version)
         ConstanciaDb.Schema.migrate(driver, 8, 9)
 
         val q = ConstanciaDb(driver).constanciaDbQueries
         val h = q.selectHabitById("h1").executeAsOne()
         assertEquals("Meditar", h.name) // dado antigo preservado
         assertEquals("", h.ignore_weekdays) // descanso nasce vazio
+    }
+
+    @Test
+    fun archiveAndUnarchiveRoundTrip() = runBlocking {
+        // M4 (varredura): arquivar tira da lista ativa mas o hábito
+        // continua recuperável pela lista de arquivados.
+        val db = testDb()
+        val habits = HabitRepositoryImpl(db, CheckinRepositoryImpl(db))
+        val habit = Habit(
+            id = "h-arq",
+            name = "Meditar",
+            icon = "meditate",
+            color = 1L,
+            goalType = GoalType.BINARY,
+            targetQuantity = 1.0,
+            quantityUnit = "",
+            frequencyType = FrequencyType.DAILY,
+            daysOfWeek = emptyList(),
+            weeklyTarget = 7,
+            session = Session.MANHA,
+            reminderEnabled = false,
+            reminderTime = "",
+            paused = false,
+            createdAt = "2026-10-30T00:00:00",
+            sortOrder = 0,
+        )
+        habits.save(habit)
+        assertEquals(1, habits.habitsFlow().first().size)
+
+        habits.archive("h-arq")
+        assertEquals(0, habits.habitsFlow().first().size)
+        assertEquals(
+            listOf("h-arq"),
+            habits.archivedFlow().first().map { it.id },
+        )
+
+        habits.unarchive("h-arq")
+        assertEquals(1, habits.habitsFlow().first().size)
+        assertEquals(0, habits.archivedFlow().first().size)
+    }
+
+    @Test
+    fun migration10To11AddsChallengeLinkAndGoal() {
+        val driver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
+        // Base no formato v10 (desafio sem vínculo nem meta).
+        driver.execute(
+            null,
+            "CREATE TABLE challenge(" +
+                "id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, " +
+                "description TEXT NOT NULL, duration_days INTEGER NOT NULL, " +
+                "habit_name TEXT NOT NULL, habit_icon TEXT NOT NULL DEFAULT '', " +
+                "start_date TEXT, status TEXT NOT NULL DEFAULT 'AVAILABLE', " +
+                "is_pro INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO challenge(id, title, description, duration_days, " +
+                "habit_name, habit_icon) VALUES('ch-agua-7', '7 dias de " +
+                "hidratação', '2 litros de água por dia.', 7, 'Beber água', 'water')",
+            0,
+        )
+        driver.execute(
+            null,
+            "INSERT INTO challenge(id, title, description, duration_days, " +
+                "habit_name, habit_icon) VALUES('ch-acordar-21', '21 dias " +
+                "acordando cedo', 'Fixe o hábito em 21 dias.', 21, " +
+                "'Acordar cedo', 'sleep')",
+            0,
+        )
+
+        assertEquals(11L, ConstanciaDb.Schema.version)
+        ConstanciaDb.Schema.migrate(driver, 10, 11)
+
+        val q = ConstanciaDb(driver).constanciaDbQueries
+        val agua = q.selectChallengeById("ch-agua-7").executeAsOne()
+        assertNull(agua.habit_id) // vínculo nasce vazio
+        assertEquals(2.0, agua.goal_quantity) // meta da descrição preenchida
+        assertEquals("litros", agua.goal_unit)
+        val acordar = q.selectChallengeById("ch-acordar-21").executeAsOne()
+        assertNull(acordar.goal_quantity) // sem quantidade na descrição
+    }
+
+    @Test
+    fun challengeStartRecordsLinkedHabitAndGoal() = runBlocking {
+        // A4/M5 (varredura): começar grava o hábito vinculado e o pacote
+        // já nasce com a meta de quantidade da descrição.
+        val db = testDb()
+        val challenges = ChallengeRepositoryImpl(db)
+        challenges.ensureSeed()
+        challenges.start("ch-agua-7", "2026-10-30", "h-agua")
+
+        val agua = challenges.challengesFlow().first()
+            .single { it.id == "ch-agua-7" }
+        assertEquals(ChallengeStatus.ACTIVE, agua.status)
+        assertEquals("2026-10-30", agua.startDate)
+        assertEquals("h-agua", agua.habitId)
+        assertEquals(2.0, agua.goalQuantity)
+        assertEquals("litros", agua.goalUnit)
     }
 
     @Test
