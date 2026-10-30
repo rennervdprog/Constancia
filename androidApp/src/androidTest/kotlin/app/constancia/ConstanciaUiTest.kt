@@ -462,7 +462,9 @@ class ConstanciaUiTest {
         createHabit("Meditar")
         composeRule.onNodeWithTag("habit_check").performClick()
         composeRule.onNodeWithTag("tab_MAIS").performClick()
-        composeRule.onNodeWithTag("mais_progresso").performScrollTo().performClick()
+        awaitText("Relatórios detalhados", "mais_list")
+        composeRule.onNodeWithTag("mais_progresso").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("reports_list") }
         awaitText("Evolução", "reports_list")
         shot("30_relatorios")
         // Trocar o período muda a revisão exibida.
@@ -477,7 +479,8 @@ class ConstanciaUiTest {
     @Test
     fun varredura_desafios_listarEComecar() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
-        composeRule.onNodeWithTag("mais_desafios").performScrollTo().performClick()
+        awaitText("Desafios", "mais_list")
+        composeRule.onNodeWithTag("mais_desafios").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Começar") }
         shot("32_desafios")
         composeRule.onAllNodesWithText("Começar").onFirst().performClick()
@@ -515,12 +518,12 @@ class ConstanciaUiTest {
     fun varredura_hoje_pularHabitoEDesfazer() {
         createHabit("Alongar")
         awaitText("Pular hoje", "home_list")
-        composeRule.onNodeWithText("Pular hoje").performClick()
+        composeRule.onNodeWithText("Pular hoje").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Pulado hoje — sequência protegida")
         }
         shot("35_hoje_pulado")
-        composeRule.onNodeWithText("Desfazer").performClick()
+        composeRule.onNodeWithText("Desfazer").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Pular hoje") }
     }
 
@@ -528,7 +531,8 @@ class ConstanciaUiTest {
     fun varredura_mais_syncEAjustes() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         // Sincronização é placeholder honesto: avisa "em breve".
-        composeRule.onNodeWithTag("mais_sync").performScrollTo().performClick()
+        awaitText("Sincronização", "mais_list")
+        composeRule.onNodeWithTag("mais_sync").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Disponível em breve")
         }
