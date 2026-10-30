@@ -21,9 +21,9 @@ class ChallengeRepositoryImpl(private val db: ConstanciaDb) : ChallengeRepositor
             .mapToList(Dispatchers.Default)
             .map { rows -> rows.map { it.toModel() } }
 
-    override suspend fun start(id: String, startDateYmd: String): Unit =
+    override suspend fun start(id: String, startDateYmd: String, habitId: String): Unit =
         withContext(Dispatchers.Default) {
-            queries.updateChallengeStatus(ChallengeStatus.ACTIVE.name, startDateYmd, id)
+            queries.startChallenge(ChallengeStatus.ACTIVE.name, startDateYmd, habitId, id)
         }
 
     override suspend fun setStatus(id: String, status: ChallengeStatus): Unit =
@@ -46,6 +46,9 @@ class ChallengeRepositoryImpl(private val db: ConstanciaDb) : ChallengeRepositor
                 null,
                 ChallengeStatus.AVAILABLE.name,
                 0,
+                null,
+                5.0,
+                "min",
             )
             queries.insertChallenge(
                 "ch-agua-7",
@@ -57,6 +60,9 @@ class ChallengeRepositoryImpl(private val db: ConstanciaDb) : ChallengeRepositor
                 null,
                 ChallengeStatus.AVAILABLE.name,
                 0,
+                null,
+                2.0,
+                "litros",
             )
             queries.insertChallenge(
                 "ch-acordar-21",
@@ -68,6 +74,9 @@ class ChallengeRepositoryImpl(private val db: ConstanciaDb) : ChallengeRepositor
                 null,
                 ChallengeStatus.AVAILABLE.name,
                 0,
+                null,
+                null,
+                "",
             )
             queries.insertChallenge(
                 "ch-ler-30",
@@ -79,6 +88,9 @@ class ChallengeRepositoryImpl(private val db: ConstanciaDb) : ChallengeRepositor
                 null,
                 ChallengeStatus.AVAILABLE.name,
                 1,
+                null,
+                20.0,
+                "páginas",
             )
         }
     }
