@@ -10,6 +10,7 @@ import app.constancia.domain.donePairs
 import app.constancia.domain.forgivenDates
 import app.constancia.domain.habitStreakInfo
 import app.constancia.domain.nextCycleWindow
+import app.constancia.domain.nextCycleWindowFor
 import app.constancia.domain.skippedDatesFor
 import app.constancia.domain.weekDoneCount
 import app.constancia.model.Checkin
@@ -147,6 +148,17 @@ class HabitRepositoryImpl(
         queries.archiveHabit(id)
     }
 
+    override fun archivedFlow(): Flow<List<Habit>> =
+        queries.selectArchivedHabits()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { rows -> rows.map { it.toModel() } }
+
+    override suspend fun unarchive(id: String): Unit =
+        withContext(Dispatchers.Default) {
+            queries.unarchiveHabit(id)
+        }
+
     override fun cyclesFlow(habitId: String): Flow<List<HabitCycle>> =
         queries.selectCyclesForHabit(habitId)
             .asFlow()
@@ -164,7 +176,14 @@ class HabitRepositoryImpl(
         targetDays: Int,
         startYmd: String,
     ): HabitCycle = withContext(Dispatchers.Default) {
-        val (start, end) = nextCycleWindow(startYmd, targetDays)
+        // M3: a janela conta dias devidos do hábito (dias fixos têm
+        // menos dias devidos que dias corridos).
+        val habitRow = queries.selectHabitById(habitId).executeAsOneOrNull()
+        val (start, end) = if (habitRow != null) {
+            nextCycleWindowFor(habitRow.toModel(), startYmd, targetDays)
+        } else {
+            nextCycleWindow(startYmd, targetDays)
+        }
         val cycle = HabitCycle(
             id = newId(),
             habitId = habitId,
