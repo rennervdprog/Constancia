@@ -87,3 +87,31 @@ fun nextCycleWindow(startYmd: String, targetDays: Int): Pair<String, String> {
     val end = start.plus(DatePeriod(days = (targetDays - 1).coerceAtLeast(0)))
     return start.toYmd() to end.toYmd()
 }
+
+/**
+ * M3 (varredura 2026-10-30): janela do ciclo contando dias DEVIDOS do
+ * hábito. Num Seg/Qua/Sex, um ciclo de 30 dias feitos precisa de ~10
+ * semanas de calendário — com a janela de 30 dias corridos, bater a
+ * meta era impossível (no máximo ~13 dias devidos). A agenda é a de
+ * [isDueOn] sem o flag de pausa atual nem a data de criação: só o
+ * padrão de dias (frequência + descanso planejado).
+ */
+fun nextCycleWindowFor(
+    habit: app.constancia.model.Habit,
+    startYmd: String,
+    targetDays: Int,
+): Pair<String, String> {
+    val agenda = habit.copy(paused = false)
+    val start = startYmd.toLocalDate()
+    var day = start
+    var dueCount = 0
+    var guard = 0
+    while (guard++ < 3700) {
+        if (isDueOn(agenda, day, null)) {
+            dueCount++
+            if (dueCount >= targetDays.coerceAtLeast(1)) break
+        }
+        day = day.plus(DatePeriod(days = 1))
+    }
+    return start.toYmd() to day.toYmd()
+}
