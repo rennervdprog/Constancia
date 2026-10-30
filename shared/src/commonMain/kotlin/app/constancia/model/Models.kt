@@ -361,6 +361,13 @@ data class Challenge(
     val startDate: String?,
     val status: ChallengeStatus,
     val isPro: Boolean,
+    // Varredura 2026-10-30 (A4/M5, schema v11):
+    /** Hábito criado ao começar o pacote — o progresso é medido pelos
+     *  check-ins DELE. Null em desafios legados (resolvido pelo nome). */
+    val habitId: String? = null,
+    /** Meta diária prometida pela descrição; null = hábito binário. */
+    val goalQuantity: Double? = null,
+    val goalUnit: String = "",
 )
 
 /** Gera um id único sem depender de java.util.UUID (minSdk 24, commonMain). */
