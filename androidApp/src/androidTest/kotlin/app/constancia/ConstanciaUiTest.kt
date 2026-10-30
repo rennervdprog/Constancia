@@ -154,6 +154,38 @@ class ConstanciaUiTest {
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith(text) }
     }
 
+    /**
+     * Abre um item da Mais pelo padrão que funciona: toques reais na
+     * tela até a tag ser composta (o swipe do Compose não traz itens
+     * fora da viewport nesta lista — lição das telas iniciais), um
+     * ajuste para o centro do item sair da zona do botão + flutuante,
+     * e só então o clique.
+     */
+    private fun openMaisItem(tag: String) {
+        var tries = 0
+        while (!nodesWithTag(tag) && tries < 8) {
+            device.swipe(160, 500, 160, 200, 15)
+            composeRule.waitForIdle()
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag(tag) }
+        composeRule.onNodeWithTag(tag).performScrollTo()
+        device.swipe(160, 430, 160, 320, 10)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(tag).performClick()
+    }
+
+    /** Espera um texto existir rolando com toques reais na tela. */
+    private fun awaitTextReal(text: String, maxSwipes: Int = 10) {
+        var tries = 0
+        while (!nodesWith(text) && tries < maxSwipes) {
+            device.swipe(160, 500, 160, 200, 15)
+            composeRule.waitForIdle()
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith(text) }
+    }
+
     /** Espera uma tag existir, rolando a lista se necessário. */
     private fun awaitTag(tag: String, listTag: String, maxSwipes: Int = 6) {
         var tries = 0
@@ -462,25 +494,23 @@ class ConstanciaUiTest {
         createHabit("Meditar")
         composeRule.onNodeWithTag("habit_check").performClick()
         composeRule.onNodeWithTag("tab_MAIS").performClick()
-        awaitText("Relatórios detalhados", "mais_list")
-        composeRule.onNodeWithTag("mais_progresso").performClick()
+        openMaisItem("mais_progresso")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("reports_list") }
         awaitText("Evolução", "reports_list")
         shot("30_relatorios")
         // Trocar o período muda a revisão exibida.
         composeRule.onNodeWithText("Últimos 12 meses")
             .performScrollTo().performClick()
-        awaitText("Revisão do ano", "reports_list")
+        awaitTextReal("Revisão do ano")
         // As superfícies Pro aparecem como cadeado para quem é grátis.
-        awaitText("Padrões cruzados", "reports_list")
+        awaitTextReal("Padrões cruzados")
         shot("31_relatorios_cadeados")
     }
 
     @Test
     fun varredura_desafios_listarEComecar() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
-        awaitText("Desafios", "mais_list")
-        composeRule.onNodeWithTag("mais_desafios").performClick()
+        openMaisItem("mais_desafios")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Começar") }
         shot("32_desafios")
         composeRule.onAllNodesWithText("Começar").onFirst().performClick()
@@ -518,12 +548,20 @@ class ConstanciaUiTest {
     fun varredura_hoje_pularHabitoEDesfazer() {
         createHabit("Alongar")
         awaitText("Pular hoje", "home_list")
-        composeRule.onNodeWithText("Pular hoje").performScrollTo().performClick()
+        composeRule.onNodeWithText("Pular hoje").performScrollTo()
+        // O centro da linha pode cair na zona da navegação flutuante:
+        // sobe um pouco antes de clicar (mesmo ajuste das telas iniciais).
+        device.swipe(160, 430, 160, 320, 10)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Pular hoje").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Pulado hoje — sequência protegida")
         }
         shot("35_hoje_pulado")
-        composeRule.onNodeWithText("Desfazer").performScrollTo().performClick()
+        composeRule.onNodeWithText("Desfazer").performScrollTo()
+        device.swipe(160, 430, 160, 320, 10)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Desfazer").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Pular hoje") }
     }
 
@@ -531,13 +569,12 @@ class ConstanciaUiTest {
     fun varredura_mais_syncEAjustes() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         // Sincronização é placeholder honesto: avisa "em breve".
-        awaitText("Sincronização", "mais_list")
-        composeRule.onNodeWithTag("mais_sync").performClick()
+        openMaisItem("mais_sync")
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Disponível em breve")
         }
         // Ajustes expande e mostra o modo férias.
-        awaitText("Modo férias", "mais_list")
+        awaitTextReal("Modo férias")
         shot("36_mais_ajustes")
     }
 
