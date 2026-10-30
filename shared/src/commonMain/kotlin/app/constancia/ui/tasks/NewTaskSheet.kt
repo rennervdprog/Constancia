@@ -54,10 +54,16 @@ import app.constancia.domain.RepeatBase
 import app.constancia.domain.RepeatFreq
 import app.constancia.domain.RepeatRule
 import app.constancia.domain.WEEKDAYS_ISO_PT
+import app.constancia.domain.dueDateLabel
+import app.constancia.domain.effectiveRepeatSpec
 import app.constancia.domain.encodeRepeatSpec
+import app.constancia.domain.normalizedTimeOrNull
 import app.constancia.domain.repeatLabel
+import app.constancia.domain.sessionForHour
 import app.constancia.model.NewTask
 import app.constancia.model.Session
+import app.constancia.model.Subtask
+import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
@@ -67,55 +73,170 @@ import app.constancia.ui.common.SegmentedRow
 import app.constancia.ui.common.SheetSectionLabel
 import app.constancia.ui.common.TimeTextField
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 
 /**
- * Formulário completo de nova tarefa (protótipo aprovado): nome, lista com
- * cor, prioridade, quando, sessão, horário, repetir, subtarefas e anotação.
+ * Formulário completo de tarefa (protótipo aprovado): nome, lista com
+ * cor, prioridade, quando, sessão, horário, repetir, subtarefas e
+ * anotação. Sem [existing], cria; com [existing], edita a tarefa
+ * (mesma tela, estados preenchidos — auditoria de 2026-10-30: antes
+ * não havia edição, só excluir e recriar).
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
+fun NewTaskSheet(
+    deps: AppDeps,
+    onDismiss: () -> Unit,
+    existing: TaskItem? = null,
+) {
     val scope = rememberCoroutineScope()
     val scheme = MaterialTheme.colorScheme
     val today = remember { todayYmd() }
+    val todayDate = remember { today.toLocalDate() }
+    val editing = existing != null
 
-    var name by remember { mutableStateOf("") }
-    var project by remember { mutableStateOf(TaskProject.ENTRADA) }
-    var priority by remember { mutableStateOf(2) } // 1 alta, 2 média, 3 baixa
-    var dueChoice by remember { mutableStateOf(1) } // 0 sem data, 1 hoje, 2 amanhã
-    var session by remember { mutableStateOf(Session.MANHA) }
-    var timeText by remember { mutableStateOf("") }
+    // Datas fora das 3 opções rápidas (edição de tarefa com outra
+    // data, ex.: daqui a 5 dias ou atrasada) ficam guardadas à parte
+    // e valem enquanto a escolha for a "personalizada" (3 no quando,
+    // 5 no prazo).
+    val existingDue = remember { existing?.dueDate?.toLocalDate() }
+    val existingDeadline = remember { existing?.deadlineDate?.toLocalDate() }
+    val existingRule = remember {
+        existing?.let {
+            effectiveRepeatSpec(
+                it.repeatSpec, it.repeatRule, existingDue ?: todayDate,
+            )
+        }
+    }
+
+    var name by remember { mutableStateOf(existing?.title ?: "") }
+    var project by remember {
+        mutableStateOf(existing?.project ?: TaskProject.ENTRADA)
+    }
+    var priority by remember { mutableStateOf(existing?.priority ?: 2) } // 1 alta, 2 média, 3 baixa
+    var customDue by remember {
+        mutableStateOf(
+            existingDue?.takeIf {
+                it != todayDate && it != todayDate.plus(DatePeriod(days = 1))
+            },
+        )
+    }
+    var dueChoice by remember {
+        // 0 sem data, 1 hoje, 2 amanhã, 3 = data atual (edição)
+        mutableStateOf(
+            when {
+                existingDue == null -> if (editing) 0 else 1
+                existingDue == todayDate -> 1
+                existingDue == todayDate.plus(DatePeriod(days = 1)) -> 2
+                else -> 3
+            },
+        )
+    }
+    var session by remember {
+        // Padrão = sessão da hora atual (antes o formulário fixava
+        // Manhã e a captura rápida caía sempre na Tarde).
+        mutableStateOf(
+            existing?.session ?: sessionForHour(
+                Clock.System.now()
+                    .toLocalDateTime(TimeZone.currentSystemDefault()).hour,
+            ),
+        )
+    }
+    var timeText by remember { mutableStateOf(existing?.dueTime ?: "") }
     // Item 7: construtor de recorrência estruturada.
-    var repeatOn by remember { mutableStateOf(false) }
-    var freq by remember { mutableStateOf(RepeatFreq.DAILY) }
-    var interval by remember { mutableStateOf(1) }
-    var weekdays by remember { mutableStateOf<Set<Int>>(emptySet()) }
-    var monthlyMode by remember { mutableStateOf(0) } // 0 = no dia, 1 = na Nª semana
-    var monthWeek by remember { mutableStateOf(1) }
-    var repeatBase by remember { mutableStateOf(RepeatBase.DUE_DATE) }
-    var endsMonths by remember { mutableStateOf<Int?>(null) } // null = nunca
+    var repeatOn by remember { mutableStateOf(existingRule != null) }
+    var freq by remember {
+        mutableStateOf(existingRule?.freq ?: RepeatFreq.DAILY)
+    }
+    var interval by remember { mutableStateOf(existingRule?.interval ?: 1) }
+    var weekdays by remember {
+        mutableStateOf(existingRule?.weekdays ?: emptySet())
+    }
+    var monthlyMode by remember {
+        // 0 = no dia, 1 = na Nª semana
+        mutableStateOf(if (existingRule?.monthWeek != null) 1 else 0)
+    }
+    var monthWeek by remember { mutableStateOf(existingRule?.monthWeek ?: 1) }
+    var repeatBase by remember {
+        mutableStateOf(existingRule?.base ?: RepeatBase.DUE_DATE)
+    }
+    var endsMonths by remember {
+        // null = nunca; na edição, término que não é +1/+3/+6/+12
+        // meses da âncora fica como data personalizada.
+        mutableStateOf(
+            existingRule?.endsOn?.let { ends ->
+                val anchor = existingDue ?: todayDate
+                listOf(1, 3, 6, 12).firstOrNull {
+                    anchor.plus(DatePeriod(months = it)) == ends
+                }
+            },
+        )
+    }
+    var customEndsOn by remember {
+        mutableStateOf(
+            existingRule?.endsOn?.takeIf { ends ->
+                val anchor = existingDue ?: todayDate
+                listOf(1, 3, 6, 12).none {
+                    anchor.plus(DatePeriod(months = it)) == ends
+                }
+            },
+        )
+    }
     // Itens 8 e 9: prazo final, duração estimada e lembrete.
-    var deadlineChoice by remember { mutableStateOf(0) } // 0 sem, 1 hoje, 2 amanhã, 3 +7d, 4 +30d
-    var duration by remember { mutableStateOf<Int?>(null) }
+    var customDeadline by remember {
+        mutableStateOf(
+            existingDeadline?.takeIf { dl ->
+                dl != todayDate &&
+                    dl != todayDate.plus(DatePeriod(days = 1)) &&
+                    dl != todayDate.plus(DatePeriod(days = 7)) &&
+                    dl != todayDate.plus(DatePeriod(days = 30))
+            },
+        )
+    }
+    var deadlineChoice by remember {
+        // 0 sem, 1 hoje, 2 amanhã, 3 +7d, 4 +30d, 5 = data atual (edição)
+        mutableStateOf(
+            when (existingDeadline) {
+                null -> 0
+                todayDate -> 1
+                todayDate.plus(DatePeriod(days = 1)) -> 2
+                todayDate.plus(DatePeriod(days = 7)) -> 3
+                todayDate.plus(DatePeriod(days = 30)) -> 4
+                else -> 5
+            },
+        )
+    }
+    var duration by remember { mutableStateOf(existing?.durationMinutes) }
     // Fase C (R6.1): o lembrete virou LISTA (relativos + absolutos).
     var reminderSpecs by remember {
-        mutableStateOf<List<app.constancia.model.ReminderSpec>>(emptyList())
+        mutableStateOf(
+            existing?.reminders?.map {
+                app.constancia.model.ReminderSpec(
+                    it.type, it.minuteOffset, it.atMillis,
+                )
+            } ?: emptyList(),
+        )
     }
     // Fase A (desvio vínculo): hábito vinculado — concluir a tarefa
     // marca o hábito do dia. Até aqui habitId só existia no modelo.
     val habits by deps.habits.habitsFlow()
         .collectAsState(initial = emptyList())
-    var habitId by remember { mutableStateOf<String?>(null) }
-    var note by remember { mutableStateOf("") }
-    var subs by remember { mutableStateOf<List<String>>(emptyList()) }
+    var habitId by remember { mutableStateOf(existing?.habitId) }
+    var note by remember { mutableStateOf(existing?.note ?: "") }
+    var subs by remember {
+        mutableStateOf<List<Subtask>>(existing?.subtasks ?: emptyList())
+    }
     var subText by remember { mutableStateOf("") }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    val todayDate = remember { today.toLocalDate() }
     val anchorDate = when (dueChoice) {
         2 -> todayDate.plus(DatePeriod(days = 1))
+        3 -> customDue ?: todayDate
         else -> todayDate
     }
 
@@ -152,14 +273,20 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
             base = repeatBase,
             endsOn = endsMonths?.let {
                 anchorDate.plus(DatePeriod(months = it))
-            },
+            } ?: customEndsOn,
         )
     }
 
     fun addSub() {
         val v = subText.trim()
         if (v.isEmpty()) return
-        subs = subs + v
+        subs = subs + Subtask(
+            id = "",
+            taskId = existing?.id ?: "",
+            title = v,
+            done = false,
+            sortOrder = subs.size,
+        )
         subText = ""
     }
 
@@ -181,7 +308,7 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Nova tarefa",
+                    text = if (editing) "Editar tarefa" else "Nova tarefa",
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f),
                 )
@@ -190,7 +317,11 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 }
             }
             Text(
-                text = "Tudo o que a tarefa precisa — o resto é opcional.",
+                text = if (editing) {
+                    "Altere o que precisar — o resto fica como está."
+                } else {
+                    "Tudo o que a tarefa precisa — o resto é opcional."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = scheme.onSurfaceVariant,
             )
@@ -240,6 +371,19 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 onSelect = { dueChoice = it },
                 tagPrefix = "task_due",
             )
+            if (dueChoice == 3 && customDue != null) {
+                // Edição de tarefa com data fora das opções rápidas:
+                // a data atual fica visível e vale até trocar acima.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PickChip(dueDateLabel(customDue!!, todayDate), true) {}
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "data atual da tarefa",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             SheetSectionLabel("Sessão e horário")
             SegmentedRow(
@@ -420,13 +564,26 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    PickChip("Nunca", endsMonths == null) { endsMonths = null }
+                    PickChip(
+                        "Nunca",
+                        endsMonths == null && customEndsOn == null,
+                    ) {
+                        endsMonths = null
+                        customEndsOn = null
+                    }
                     listOf(1 to "+1 mês", 3 to "+3 meses", 6 to "+6 meses", 12 to "+1 ano")
                         .forEach { (value, label) ->
                             PickChip(label, endsMonths == value) {
                                 endsMonths = value
+                                customEndsOn = null
                             }
                         }
+                    if (customEndsOn != null && endsMonths == null) {
+                        PickChip(
+                            "Em " + dueDateLabel(customEndsOn!!, todayDate),
+                            true,
+                        ) {}
+                    }
                 }
                 currentRule()?.let { rule ->
                     Text(
@@ -453,6 +610,17 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 tagPrefix = "task_deadline",
                 allowWrap = true,
             )
+            if (deadlineChoice == 5 && customDeadline != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PickChip(dueDateLabel(customDeadline!!, todayDate), true) {}
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "prazo atual da tarefa",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             SheetSectionLabel("Duração estimada")
             FlowRow(
@@ -469,16 +637,37 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
             }
 
             SheetSectionLabel("Lembretes")
-            ReminderListEditor(
-                specs = reminderSpecs,
-                onChange = { reminderSpecs = it },
-                // Sem data só há âncora absoluta se a série repetir
-                // (a primeira ocorrência ancora em hoje, como no salvar).
-                absoluteDate = when (dueChoice) {
-                    0 -> if (repeatOn) todayDate else null
-                    else -> anchorDate
-                },
-            )
+            if (dueChoice == 0 && !repeatOn) {
+                // Sem data e sem repetição não há âncora: lembrete
+                // nenhum dispararia (auditoria 2026-10-30 — antes os
+                // chips aceitavam a configuração em silêncio).
+                Text(
+                    text = "Escolha uma data acima (ou ative Repetir) " +
+                        "para poder adicionar lembretes.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+            } else {
+                ReminderListEditor(
+                    specs = reminderSpecs,
+                    onChange = { reminderSpecs = it },
+                    // Sem data só há âncora absoluta se a série repetir
+                    // (a primeira ocorrência ancora em hoje, como no salvar).
+                    absoluteDate = anchorDate,
+                )
+                if (repeatOn && reminderSpecs.any {
+                        it.type == app.constancia.model.ReminderType.ABSOLUTE
+                    }
+                ) {
+                    Text(
+                        text = "O horário fixo vale só para a primeira " +
+                            "ocorrência; os lembretes relativos " +
+                            "acompanham a série.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             SheetSectionLabel("Hábito vinculado")
             if (habits.isEmpty()) {
@@ -502,8 +691,11 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                 }
                 if (habitId != null) {
                     Text(
+                        // Texto = comportamento real (auditoria
+                        // 2026-10-30): o check-in é sempre no dia da
+                        // conclusão, mesmo se a tarefa era de ontem.
                         text = "Concluir a tarefa marca esse hábito no " +
-                            "dia do prazo (hoje ou ontem).",
+                            "dia da conclusão.",
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
@@ -525,8 +717,18 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                         )
                     }
                     Text(
-                        text = sub,
+                        text = sub.title,
                         style = MaterialTheme.typography.bodyMedium,
+                        color = if (sub.done) {
+                            scheme.onSurfaceVariant
+                        } else {
+                            scheme.onSurface
+                        },
+                        textDecoration = if (sub.done) {
+                            androidx.compose.ui.text.style.TextDecoration.LineThrough
+                        } else {
+                            null
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -581,7 +783,7 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
             }
 
             CtaButton(
-                text = "Adicionar tarefa",
+                text = if (editing) "Salvar alterações" else "Adicionar tarefa",
                 tag = "task_save",
                 onClick = {
                     val title = name.trim()
@@ -589,51 +791,80 @@ fun NewTaskSheet(deps: AppDeps, onDismiss: () -> Unit) {
                         errorMsg = "Dê um nome à tarefa"
                         return@CtaButton
                     }
+                    // Horário: valida de verdade (auditoria 2026-10-30).
+                    // O campo aceita dígitos fora da faixa de propósito;
+                    // aqui, texto que não é um horário válido vira erro
+                    // visível — antes "29:61" salvava cru e o lembrete
+                    // caía em silêncio para as 09:00.
+                    val time: String? = if (timeText.isBlank()) {
+                        null
+                    } else {
+                        val normalized = normalizedTimeOrNull(timeText.trim())
+                        if (normalized == null) {
+                            errorMsg = "Horário inválido — use HH:mm " +
+                                "(00:00 a 23:59) ou apague o campo."
+                            return@CtaButton
+                        }
+                        normalized
+                    }
                     val rule = currentRule()
                     val dueDate = when (dueChoice) {
                         // Repetição sem data: a série ancora em hoje.
                         0 -> if (rule != null) today else null
                         1 -> today
-                        else -> today.toLocalDate()
-                            .plus(DatePeriod(days = 1))
-                            .toString()
+                        2 -> todayDate.plus(DatePeriod(days = 1)).toString()
+                        else -> customDue?.toString()
                     }
                     val deadline = when (deadlineChoice) {
                         1 -> today
                         2 -> todayDate.plus(DatePeriod(days = 1)).toString()
                         3 -> todayDate.plus(DatePeriod(days = 7)).toString()
                         4 -> todayDate.plus(DatePeriod(days = 30)).toString()
+                        5 -> customDeadline?.toString()
                         else -> null
                     }
-                    val time = timeText.trim().takeIf {
-                        it.matches(Regex("^\\d{1,2}:\\d{2}$"))
+                    // Prazo final antes da data da tarefa não faz
+                    // sentido (a tarefa já nasceria com o prazo
+                    // estourado) — auditoria 2026-10-30.
+                    if (deadline != null && dueDate != null && deadline < dueDate) {
+                        errorMsg = "O prazo final não pode ser antes " +
+                            "da data da tarefa."
+                        return@CtaButton
                     }
+                    errorMsg = null
+                    val newTask = NewTask(
+                        title = title,
+                        note = note.trim(),
+                        project = project,
+                        priority = priority,
+                        dueDate = dueDate,
+                        session = session,
+                        dueTime = time,
+                        repeatRule = rule?.let { repeatLabel(it) } ?: "",
+                        repeatSpec = rule?.let {
+                            encodeRepeatSpec(it)
+                        } ?: "",
+                        deadlineDate = deadline,
+                        durationMinutes = duration,
+                        reminderMinutesBefore = reminderSpecs
+                            .firstOrNull {
+                                it.type ==
+                                    app.constancia.model.ReminderType.RELATIVE
+                            }?.minuteOffset,
+                        reminders = reminderSpecs,
+                        habitId = habitId,
+                        subtaskTitles = if (editing) {
+                            emptyList()
+                        } else {
+                            subs.map { it.title }
+                        },
+                    )
                     scope.launch {
-                        deps.tasks.add(
-                            NewTask(
-                                title = title,
-                                note = note.trim(),
-                                project = project,
-                                priority = priority,
-                                dueDate = dueDate,
-                                session = session,
-                                dueTime = time,
-                                repeatRule = rule?.let { repeatLabel(it) } ?: "",
-                                repeatSpec = rule?.let {
-                                    encodeRepeatSpec(it)
-                                } ?: "",
-                                deadlineDate = deadline,
-                                durationMinutes = duration,
-                                reminderMinutesBefore = reminderSpecs
-                                    .firstOrNull {
-                                        it.type ==
-                                            app.constancia.model.ReminderType.RELATIVE
-                                    }?.minuteOffset,
-                                reminders = reminderSpecs,
-                                habitId = habitId,
-                                subtaskTitles = subs,
-                            ),
-                        )
+                        if (editing) {
+                            deps.tasks.update(existing!!.id, newTask, subs)
+                        } else {
+                            deps.tasks.add(newTask)
+                        }
                         onDismiss()
                     }
                 },
