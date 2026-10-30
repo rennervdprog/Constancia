@@ -77,6 +77,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -170,6 +171,7 @@ private fun freqShort(habit: Habit, weekDone: Int): String = when (habit.frequen
 fun HomeScreen(
     deps: AppDeps,
     modifier: Modifier = Modifier,
+    onCreate: () -> Unit = {},
     onOpenDiary: (String) -> Unit = {},
     onOpenReports: () -> Unit = {},
 ) {
@@ -310,6 +312,16 @@ fun HomeScreen(
                     selectedDate = selectedDate,
                     onSelectDate = { selectedDate = it },
                 )
+            }
+
+            // M12 (varredura 2026-10-30): quem ainda não tem NENHUM
+            // hábito nem tarefa ganha um estado vazio com chamada de
+            // criação dentro da própria Hoje (antes era só o herói
+            // "0 de 0" e as pílulas, sem caminho daqui).
+            if (isToday && habits.isEmpty() && allTasks.isEmpty()) {
+                item {
+                    EmptyHomeCard(onCreate = onCreate)
+                }
             }
 
             Session.entries.forEach { session ->
@@ -1261,6 +1273,56 @@ private fun HabitSessionRow(
 }
 
 /**
+ * M12: estado vazio da Hoje para quem está começando (nenhum hábito,
+ * nenhuma tarefa): convite direto para criar o primeiro item.
+ */
+@Composable
+private fun EmptyHomeCard(onCreate: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(extra.pageCard)
+            .padding(horizontal = 20.dp, vertical = 22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = "Seu dia começa aqui",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = scheme.onSurface,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "Crie seu primeiro hábito ou tarefa e veja o dia " +
+                "ganhar forma nesta tela.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = extra.ink2,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(14.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(scheme.primary)
+                .clickable(onClick = onCreate)
+                .testTag("home_empty_create")
+                .padding(horizontal = 22.dp, vertical = 11.dp),
+        ) {
+            Text(
+                text = "Criar hábito ou tarefa",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onPrimary,
+            )
+        }
+    }
+}
+
+/**
  * Linha do "pular" na Hoje: chip "Pulado hoje" + Desfazer quando o dia
  * foi pulado; ação discreta "Pular hoje" quando ainda não foi feito.
  */
@@ -1512,9 +1574,10 @@ private fun TaskSessionRow(
                 ) {
                     if (!task.done) {
                         MiniAct(text = "Adiar p/ amanhã") {
-                            val next = task.dueDate?.toLocalDate()
-                                ?.plus(DatePeriod(days = 1))
-                                ?: today.plus(DatePeriod(days = 1))
+                            // M8: adiar leva PARA amanhã (postponeTarget).
+                            val next = app.constancia.domain.postponeTarget(
+                                task.dueDate, today,
+                            )
                             scope.launch { deps.tasks.setDueDate(task.id, next.toString()) }
                         }
                         MiniAct(text = "Prioridade: " + prioName(task.priority)) {
