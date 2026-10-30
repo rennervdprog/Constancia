@@ -1,0 +1,5 @@
+-- Migração 9 -> 10: auditoria da tela de nova tarefa (2026-10-30).
+-- Itens do modelo passam a guardar as subtarefas da tarefa de origem
+-- (títulos separados por quebra de linha) — antes salvar um modelo
+-- perdia as subtarefas em silêncio.
+ALTER TABLE task_template_item ADD COLUMN subtasks TEXT NOT NULL DEFAULT '';
