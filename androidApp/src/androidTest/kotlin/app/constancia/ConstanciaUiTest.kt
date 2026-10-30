@@ -363,6 +363,70 @@ class ConstanciaUiTest {
     }
 
     @Test
+    fun auditoria_horarioInvalidoNoFormulario_mostraErroENaoSalva() {
+        // Auditoria 2026-10-30 (bug nº 1): "29:61" salvava cru; agora
+        // o formulário valida no salvar, mostra o erro e não cria.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_task").performClick()
+        composeRule.onNodeWithTag("task_name_field")
+            .performTextInput("Tarefa hora errada")
+        composeRule.onNodeWithTag("task_time_field").performScrollTo()
+            .performTextInput("2961")
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            displayTextOf("task_time_field") == "29:61"
+        }
+        runCatching { device.pressBack() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("task_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("Horário inválido", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        // A folha continua aberta e a tarefa não foi criada.
+        composeRule.onNodeWithTag("task_name_field").assertExists()
+        composeRule.onNodeWithText("Cancelar").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        org.junit.Assert.assertFalse(nodesWith("Tarefa hora errada"))
+    }
+
+    @Test
+    fun auditoria_editarTarefa_adicionaSubtarefaERenomeia() {
+        // Auditoria 2026-10-30 (lacunas de edição): subtarefa nova
+        // pelo detalhe + Editar abrindo o formulário preenchido.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("tasks_quick_input")
+            .performTextInput("Tarefa auditada")
+        composeRule.onNodeWithTag("tasks_quick_add").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Tarefa auditada") }
+        runCatching { device.pressBack() }
+        composeRule.waitForIdle()
+        var expandTries = 0
+        while (!nodesWith("Prioridade: Média") && expandTries < 4) {
+            runCatching {
+                composeRule.onNodeWithText("Tarefa auditada").performClick()
+            }
+            composeRule.waitForIdle()
+            expandTries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Prioridade: Média") }
+        // Subtarefa nova direto no detalhe.
+        composeRule.onNodeWithTag("task_detail_sub_input")
+            .performScrollTo().performTextInput("Passo novo")
+        composeRule.onNodeWithTag("task_detail_sub_add").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Passo novo") }
+        // Editar: a folha abre preenchida; renomear salva por cima.
+        composeRule.onNodeWithText("Editar").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Editar tarefa") }
+        composeRule.onNodeWithTag("task_name_field")
+            .performTextReplacement("Tarefa corrigida")
+        composeRule.onNodeWithTag("task_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Tarefa corrigida") }
+        org.junit.Assert.assertFalse(nodesWith("Tarefa auditada"))
+        shot("19_editar_tarefa")
+    }
+
+    @Test
     fun habitos_mostraTilesEMapaDeCalor() {
         createHabit("Meditar")
         composeRule.onNodeWithTag("tab_HABITOS").performClick()
