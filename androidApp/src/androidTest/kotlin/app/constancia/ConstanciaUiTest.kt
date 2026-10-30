@@ -258,7 +258,7 @@ class ConstanciaUiTest {
         composeRule.onNodeWithText("Hábitos que viram rotina").assertIsDisplayed()
         shot("18_onboarding_2")
         composeRule.onNodeWithTag("onboarding_next").performClick()
-        composeRule.onNodeWithText("Planeje e reflita, juntos").assertIsDisplayed()
+        composeRule.onNodeWithText("Planeje e reflita").assertIsDisplayed()
         shot("18_onboarding_3")
         composeRule.onNodeWithTag("onboarding_finish").performClick()
         composeRule.waitForIdle()
