@@ -372,6 +372,20 @@ class RepositoryWriteFlowTest {
             0,
         )
 
+        // A cadeia completa ate a v11 toca a tabela challenge
+        // (migracao 10->11) — o esquema parcial destes testes nao a
+        // criava; num banco real ela sempre existe desde a v1.
+        driver.execute(
+            null,
+            "CREATE TABLE challenge(" +
+                "id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, " +
+                "description TEXT NOT NULL, duration_days INTEGER NOT NULL, " +
+                "habit_name TEXT NOT NULL, habit_icon TEXT NOT NULL DEFAULT '', " +
+                "start_date TEXT, status TEXT NOT NULL DEFAULT 'AVAILABLE', " +
+                "is_pro INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+
         ConstanciaDb.Schema.migrate(driver, 1, ConstanciaDb.Schema.version)
 
         val db = ConstanciaDb(driver)
@@ -631,6 +645,20 @@ class RepositoryWriteFlowTest {
             0,
         )
 
+        // A cadeia completa ate a v11 toca a tabela challenge
+        // (migracao 10->11) — o esquema parcial destes testes nao a
+        // criava; num banco real ela sempre existe desde a v1.
+        driver.execute(
+            null,
+            "CREATE TABLE challenge(" +
+                "id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, " +
+                "description TEXT NOT NULL, duration_days INTEGER NOT NULL, " +
+                "habit_name TEXT NOT NULL, habit_icon TEXT NOT NULL DEFAULT '', " +
+                "start_date TEXT, status TEXT NOT NULL DEFAULT 'AVAILABLE', " +
+                "is_pro INTEGER NOT NULL DEFAULT 0)",
+            0,
+        )
+
         ConstanciaDb.Schema.migrate(driver, 1, ConstanciaDb.Schema.version)
 
         val db = ConstanciaDb(driver)
@@ -828,6 +856,20 @@ class RepositoryWriteFlowTest {
             null,
             "INSERT INTO checkin(id, habit_id, date, quantity, created_at) " +
                 "VALUES('c1', 'h1', '2026-10-20', 1.0, 'agora')",
+            0,
+        )
+
+        // A cadeia completa ate a v11 toca a tabela challenge
+        // (migracao 10->11) — o esquema parcial destes testes nao a
+        // criava; num banco real ela sempre existe desde a v1.
+        driver.execute(
+            null,
+            "CREATE TABLE challenge(" +
+                "id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, " +
+                "description TEXT NOT NULL, duration_days INTEGER NOT NULL, " +
+                "habit_name TEXT NOT NULL, habit_icon TEXT NOT NULL DEFAULT '', " +
+                "start_date TEXT, status TEXT NOT NULL DEFAULT 'AVAILABLE', " +
+                "is_pro INTEGER NOT NULL DEFAULT 0)",
             0,
         )
 
