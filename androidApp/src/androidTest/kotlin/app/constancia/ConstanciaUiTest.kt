@@ -427,6 +427,32 @@ class ConstanciaUiTest {
     }
 
     @Test
+    fun horario_abreSeletorDeRelogioEConfirma() {
+        // O botão do relógio abre o seletor visual; confirmar preenche
+        // o campo com um HH:mm válido, sem digitar nada.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_task").performClick()
+        composeRule.onNodeWithTag("task_name_field")
+            .performTextInput("Tarefa do relógio")
+        composeRule.onNodeWithTag("task_time_pick")
+            .performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Escolher horário")
+        }
+        shot("20_seletor_horario")
+        composeRule.onNodeWithText("OK").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            displayTextOf("task_time_field")
+                .matches(Regex("\\d{2}:\\d{2}"))
+        }
+        composeRule.onNodeWithTag("task_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Tarefa do relógio")
+        }
+    }
+
+    @Test
     fun habitos_mostraTilesEMapaDeCalor() {
         createHabit("Meditar")
         composeRule.onNodeWithTag("tab_HABITOS").performClick()
