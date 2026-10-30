@@ -214,7 +214,7 @@ fun NewTaskSheet(
     var duration by remember { mutableStateOf(existing?.durationMinutes) }
     // Fase C (R6.1): o lembrete virou LISTA (relativos + absolutos).
     var reminderSpecs by remember {
-        mutableStateOf(
+        mutableStateOf<List<app.constancia.model.ReminderSpec>>(
             existing?.reminders?.map {
                 app.constancia.model.ReminderSpec(
                     it.type, it.minuteOffset, it.atMillis,
