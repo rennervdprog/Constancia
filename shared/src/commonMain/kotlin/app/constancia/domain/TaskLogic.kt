@@ -163,6 +163,18 @@ fun dueDateLabel(due: LocalDate, today: LocalDate): String = when (due) {
     }
 }
 
+/**
+ * Sessão do dia correspondente a uma hora (as mesmas faixas exibidas
+ * na Hoje: Manhã até 12h, Tarde 12h–18h, Noite depois das 18h). É o
+ * padrão dos caminhos de criação (formulário e captura rápida) — antes
+ * cada um abria numa sessão fixa diferente (Manhã × Tarde).
+ */
+fun sessionForHour(hour: Int): app.constancia.model.Session = when {
+    hour < 12 -> app.constancia.model.Session.MANHA
+    hour < 18 -> app.constancia.model.Session.TARDE
+    else -> app.constancia.model.Session.NOITE
+}
+
 /** Título de um grupo da visão Próximos: "Amanhã · 21 de out" / "Quinta · 22 de out". */
 fun upcomingGroupTitle(day: LocalDate, today: LocalDate): String {
     val name = if (day == today.plus(DatePeriod(days = 1))) {
