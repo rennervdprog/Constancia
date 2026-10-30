@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.constancia.domain.REMINDER_OPTIONS
@@ -50,14 +51,24 @@ fun ReminderListEditor(
     onChange: (List<ReminderSpec>) -> Unit,
     absoluteDate: LocalDate?,
     modifier: Modifier = Modifier,
+    // Sem data-âncora (tarefa sem data e sem repetição), lembrete
+    // relativo nunca dispara: os chips ficam visíveis mas inertes,
+    // com o aviso — antes dava pra montar a configuração em silêncio.
+    relativeEnabled: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
     var absTimeText by remember { mutableStateOf("") }
+    var absError by remember { mutableStateOf(false) }
 
     Column(modifier = modifier) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = if (relativeEnabled) {
+                Modifier
+            } else {
+                Modifier.alpha(0.45f)
+            },
         ) {
             REMINDER_OPTIONS.forEach { (label, value) ->
                 val offset = value ?: return@forEach
@@ -66,6 +77,7 @@ fun ReminderListEditor(
                         it.minuteOffset == offset
                 }
                 PickChip(label, selected) {
+                    if (!relativeEnabled) return@PickChip
                     onChange(
                         if (selected) {
                             specs.filterNot {
@@ -81,6 +93,14 @@ fun ReminderListEditor(
                     )
                 }
             }
+        }
+        if (!relativeEnabled) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Sem uma data, lembretes relativos não disparam.",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
         }
 
         val absolutes = specs.filter { it.type == ReminderType.ABSOLUTE }
@@ -111,13 +131,21 @@ fun ReminderListEditor(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TimeTextField(
                     value = absTimeText,
-                    onValueChange = { value -> absTimeText = value },
+                    onValueChange = { value ->
+                        absTimeText = value
+                        absError = false
+                    },
                     modifier = Modifier.width(104.dp),
                 )
                 Spacer(Modifier.width(8.dp))
                 PickChip("Adicionar horário fixo", false) {
+                    // Hora inválida agora AVISA (antes o toque morria
+                    // em silêncio e parecia que o botão não funcionava).
                     val time = parseTimeOrNull(absTimeText)
-                        ?: return@PickChip
+                    if (time == null) {
+                        absError = true
+                        return@PickChip
+                    }
                     val atMillis = LocalDateTime(absoluteDate, time)
                         .toInstant(TimeZone.currentSystemDefault())
                         .toEpochMilliseconds()
@@ -128,6 +156,14 @@ fun ReminderListEditor(
                     )
                     absTimeText = ""
                 }
+            }
+            if (absError) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Hora inválida — use o formato HH:mm.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.error,
+                )
             }
             Spacer(Modifier.height(4.dp))
             Text(
