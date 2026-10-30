@@ -627,12 +627,15 @@ class ConstanciaUiTest {
             nodesWith("Pulado hoje — sequência protegida")
         }
         shot("35_hoje_pulado")
-        // Registro da varredura: em 320dp o "Desfazer" fica FORA da
-        // tela — a pílula "Pulado hoje — sequência protegida" quebra
-        // em 2 linhas e empurra a ação para além da borda direita da
-        // mesma Row (visto no print 35). O toque é impossível nesta
-        // largura; o defeito entra no relatório como achado.
-        composeRule.onNodeWithText("Desfazer").assertExists()
+        // M17 corrigido: chip e "Desfazer" agora empilham — a ação
+        // está visível e tocável em 320dp. Desfazer de verdade e
+        // provar que o "Pular hoje" volta (o gesto que falhava).
+        composeRule.onNodeWithText("Desfazer").assertIsDisplayed()
+        composeRule.onNodeWithText("Desfazer").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Pular hoje")
+        }
+        shot("35b_hoje_desfeito")
     }
 
     @Test
