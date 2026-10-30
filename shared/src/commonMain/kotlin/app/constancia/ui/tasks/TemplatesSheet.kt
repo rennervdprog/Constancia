@@ -172,6 +172,7 @@ fun TemplatesSheet(
                                     project = task.project,
                                     priority = task.priority,
                                     session = task.session,
+                                    subtaskTitles = task.subtasks.map { it.title },
                                 )
                             },
                         )
