@@ -124,6 +124,7 @@ fun AppContent(deps: AppDeps) {
                 AppTab.HOJE -> HomeScreen(
                     deps,
                     screenModifier,
+                    onCreate = { navigator.showCreate = true },
                     onOpenDiary = { date -> navigator.openDiary(date) },
                     onOpenReports = {
                         navigator.openMaisSection(MaisSection.PROGRESSO)
