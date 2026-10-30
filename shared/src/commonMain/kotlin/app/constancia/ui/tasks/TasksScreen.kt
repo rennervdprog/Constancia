@@ -87,6 +87,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
 
 /** "terça" a partir da data (nome do dia sem o "-feira"). */
 private fun weekdayShortPt(date: LocalDate): String =
@@ -219,6 +220,15 @@ fun TasksScreen(
                     title = title,
                     project = parse.project ?: TaskProject.ENTRADA,
                     priority = parse.priority ?: 2,
+                    // Sessão = a da hora atual, como no formulário
+                    // (auditoria 2026-10-30: a captura caía sempre
+                    // na Tarde pelo padrão do modelo).
+                    session = app.constancia.domain.sessionForHour(
+                        kotlinx.datetime.Clock.System.now()
+                            .toLocalDateTime(
+                                kotlinx.datetime.TimeZone.currentSystemDefault(),
+                            ).hour,
+                    ),
                     dueDate = parse.dueDate?.toYmd() ?: defaultDue,
                     dueTime = parse.dueTime,
                     repeatRule = parse.repeat?.let { repeatLabel(it) } ?: "",
