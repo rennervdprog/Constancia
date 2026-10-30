@@ -259,6 +259,7 @@ data class TaskTemplateItem(
     val priority: Int = 2,
     val session: Session = Session.TARDE,
     val note: String = "",
+    val subtaskTitles: List<String> = emptyList(),
     val sortOrder: Int = 0,
 )
 
