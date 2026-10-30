@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -124,7 +126,7 @@ fun OnboardingScreen(
     val current = ONBOARDING_PAGES[page]
     val isLast = page == ONBOARDING_PAGES.lastIndex
 
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(
@@ -139,6 +141,13 @@ fun OnboardingScreen(
             .windowInsetsPadding(WindowInsets.statusBars)
             .testTag("onboarding_screen"),
     ) {
+        // Tela baixa (ex.: 640dp de altura): a cena encolhe e os
+        // cartões de prévia são escalados, para os 3 benefícios da
+        // folha caberem sem rolagem. Em telas altas, cena cheia.
+        val compact = maxHeight < 700.dp
+        val sceneHeight = if (compact) 176.dp else 252.dp
+        val sceneScale = if (compact) 0.78f else 1f
+        Column(modifier = Modifier.fillMaxSize()) {
         // Topo sobre o gradiente: progresso segmentado + Pular em vidro.
         Row(
             modifier = Modifier
@@ -194,7 +203,7 @@ fun OnboardingScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(252.dp)
+                .height(sceneHeight)
                 .clip(RectangleShape),
             contentAlignment = Alignment.Center,
         ) {
@@ -221,10 +230,17 @@ fun OnboardingScreen(
                         CircleShape,
                     ),
             )
-            when (page) {
-                0 -> SceneDayCard()
-                1 -> SceneHabitCard()
-                else -> SceneTasksDiaryCards()
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    scaleX = sceneScale
+                    scaleY = sceneScale
+                },
+            ) {
+                when (page) {
+                    0 -> SceneDayCard()
+                    1 -> SceneHabitCard()
+                    else -> SceneTasksDiaryCards()
+                }
             }
         }
 
@@ -241,7 +257,7 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 24.dp, end = 24.dp, top = 24.dp),
+                    .padding(start = 24.dp, end = 24.dp, top = 20.dp),
             ) {
                 Text(
                     text = current.kicker,
@@ -256,7 +272,7 @@ fun OnboardingScreen(
                 Text(
                     text = current.title,
                     style = MaterialTheme.typography.headlineSmall.copy(
-                        fontSize = 27.sp,
+                        fontSize = 26.sp,
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -268,11 +284,11 @@ fun OnboardingScreen(
                     ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(14.dp))
                 current.bullets.forEachIndexed { index, bullet ->
                     BenefitRow(index = index, text = bullet)
                     if (index < current.bullets.lastIndex) {
-                        Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(10.dp))
                     }
                 }
                 Spacer(Modifier.height(16.dp))
@@ -364,10 +380,11 @@ fun OnboardingScreen(
                 }
             }
         }
+        }
     }
 }
 
-/** Linha de benefício: tile 36dp raio 11 em cor suave (ciclo de 3
+/** Linha de benefício: tile 34dp raio 11 em cor suave (ciclo de 3
  *  cores do tema) com o check sólido e o texto em 14,5/700. */
 @Composable
 private fun BenefitRow(index: Int, text: String) {
@@ -382,7 +399,7 @@ private fun BenefitRow(index: Int, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(34.dp)
                 .clip(RoundedCornerShape(11.dp))
                 .background(tint),
             contentAlignment = Alignment.Center,
@@ -391,7 +408,7 @@ private fun BenefitRow(index: Int, text: String) {
                 Icons.Filled.Check,
                 contentDescription = null,
                 tint = solid,
-                modifier = Modifier.size(19.dp),
+                modifier = Modifier.size(18.dp),
             )
         }
         Spacer(Modifier.width(12.dp))
