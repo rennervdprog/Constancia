@@ -66,6 +66,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -1045,6 +1046,7 @@ private fun CheckCircleButton(
     done: Boolean,
     onToggle: () -> Unit,
     tag: String = "habit_check",
+    enabled: Boolean = true,
 ) {
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
@@ -1082,7 +1084,10 @@ private fun CheckCircleButton(
                 if (done) Modifier
                 else Modifier.border(2.5.dp, extra.checkBorder, CircleShape),
             )
-            .clickable(onClick = onToggle),
+            .then(if (enabled) Modifier else Modifier.alpha(0.35f))
+            .then(
+                if (enabled) Modifier.clickable(onClick = onToggle) else Modifier,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (done) {
@@ -1116,6 +1121,9 @@ private fun HabitSessionRow(
     val habitColor = habitColorOf(habit.color)
     val isQuantity = habit.goalType == GoalType.QUANTITY
     val currentQty = status.todayCheckin?.quantity ?: 0.0
+    // A2 (varredura 2026-10-30): dia futuro é prévia somente-leitura —
+    // sem check, sem stepper e sem pular (o repositório também barra).
+    val readOnly = dateYmd > todayYmd()
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1215,9 +1223,10 @@ private fun HabitSessionRow(
             CheckCircleButton(
                 done = status.isDoneToday,
                 onToggle = { scope.launch { deps.checkins.toggle(habit.id, dateYmd) } },
+                enabled = !readOnly,
             )
         }
-        if (isQuantity) {
+        if (isQuantity && !readOnly) {
             Spacer(Modifier.height(9.dp))
             Box(modifier = Modifier.padding(start = 54.dp)) {
                 QuantityStepper(
@@ -1241,7 +1250,7 @@ private fun HabitSessionRow(
         // Item 4: pular o dia é um registro — não quebra a
         // sequência. Some quando o dia já está feito.
         val skippedDay = status.todayCheckin?.status == CheckinStatus.SKIPPED
-        if (skippedDay || !status.isDoneToday) {
+        if (!readOnly && (skippedDay || !status.isDoneToday)) {
             HabitSkipRow(
                 skipped = skippedDay,
                 onSkip = { scope.launch { deps.checkins.skip(habit.id, dateYmd) } },
