@@ -227,10 +227,14 @@ fun heatGrid(
             val ymd = day.toYmd()
             when {
                 day > today -> HeatCell.FUTURE
-                !isDueOn(habit, day, activeFrom) -> HeatCell.OFF
+                // M2 (varredura 2026-10-30): o fato registrado vem
+                // ANTES do "era devido?" — pausar o hábito hoje não
+                // apaga o histórico (isDueOn responde false para tudo
+                // enquanto pausado e as 18 semanas viravam OFF).
                 doneDates.contains(ymd) -> HeatCell.DONE
                 skippedDates.contains(ymd) -> HeatCell.SKIPPED
                 progressDates.contains(ymd) -> HeatCell.PARTIAL
+                !isDueOn(habit, day, activeFrom) -> HeatCell.OFF
                 else -> HeatCell.MISSED
             }
         }
@@ -257,9 +261,13 @@ fun completionRateLast30(
     while (day <= today) {
         val ymd = day.toYmd()
         habits.forEach { h ->
-            if (isDueOn(h, day, activeFromByHabit[h.id])) {
+            if (doneByHabit[h.id].orEmpty().contains(ymd)) {
+                // M2: dia FEITO conta sempre (devido + feito) — o
+                // flag de pausa atual não apaga o passado da taxa.
                 due++
-                if (doneByHabit[h.id].orEmpty().contains(ymd)) done++
+                done++
+            } else if (isDueOn(h, day, activeFromByHabit[h.id])) {
+                due++
             }
         }
         day = day.plus(DatePeriod(days = 1))
