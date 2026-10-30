@@ -522,6 +522,7 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         openMaisItem("mais_progresso")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("reports_list") }
+        composeRule.onRoot().printToLog("VAR_REL")
         awaitTextReal("Evolução")
         shot("30_relatorios")
         // Trocar o período muda a revisão exibida.
@@ -536,6 +537,8 @@ class ConstanciaUiTest {
     @Test
     fun varredura_desafios_listarEComecar() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
+        composeRule.waitForIdle()
+        composeRule.onRoot().printToLog("VAR_DES")
         openMaisItem("mais_desafios")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Começar") }
         shot("32_desafios")
@@ -584,6 +587,7 @@ class ConstanciaUiTest {
             nodesWith("Pulado hoje — sequência protegida")
         }
         shot("35_hoje_pulado")
+        composeRule.onRoot().printToLog("VAR_HOJE")
         tapTextAtCenter("Desfazer")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Pular hoje") }
     }
