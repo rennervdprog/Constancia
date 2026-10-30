@@ -1152,6 +1152,96 @@ class RepositoryWriteFlowTest {
         assertEquals(1, fromFlow.reminders.size)
     }
 
+    // Auditoria 2026-10-30: edição completa da tarefa — campos,
+    // reconciliação de subtarefas (mantém id/estado, apaga removida,
+    // insere nova) e troca da lista de lembretes com espelho legado.
+    @Test
+    fun updateTaskEditsFieldsAndReconcilesSubtasks() = runBlocking {
+        val tasks = TaskRepositoryImpl(testDb())
+        val date = todayYmd(TimeZone.UTC)
+        val id = tasks.add(
+            NewTask(
+                title = "Relatório mensal",
+                project = TaskProject.TRABALHO,
+                priority = 2,
+                dueDate = date,
+                session = Session.MANHA,
+                subtaskTitles = listOf("Coletar dados", "Revisar"),
+                reminders = listOf(
+                    ReminderSpec(ReminderType.RELATIVE, minuteOffset = 30),
+                ),
+            ),
+        )
+        val created = assertNotNull(tasks.getById(id))
+        assertEquals(2, created.subtasks.size)
+        // Marca a 1ª subtarefa: a edição tem que preservar o estado.
+        tasks.setSubtaskDone(created.subtasks[0].id, true)
+        val before = assertNotNull(tasks.getById(id))
+
+        tasks.update(
+            id,
+            NewTask(
+                title = "Relatório trimestral",
+                project = TaskProject.TRABALHO,
+                priority = 1,
+                dueDate = null,
+                session = Session.NOITE,
+                dueTime = "18:30",
+                reminders = listOf(
+                    ReminderSpec(ReminderType.RELATIVE, minuteOffset = 10),
+                ),
+            ),
+            subtasks = listOf(
+                before.subtasks[0], // mantida (feita)
+                app.constancia.model.Subtask(
+                    id = "", taskId = id, title = "Enviar",
+                    done = false, sortOrder = 1,
+                ),
+            ),
+        )
+
+        val after = assertNotNull(tasks.getById(id))
+        assertEquals("Relatório trimestral", after.title)
+        assertEquals(1, after.priority)
+        assertNull(after.dueDate)
+        assertEquals(Session.NOITE, after.session)
+        assertEquals("18:30", after.dueTime)
+        assertFalse(after.done)
+        assertEquals(
+            listOf("Coletar dados", "Enviar"),
+            after.subtasks.map { it.title },
+        )
+        assertTrue(after.subtasks[0].done)
+        assertFalse(after.subtasks[1].done)
+        assertEquals(1, after.reminders.size)
+        assertEquals(10, after.reminders[0].minuteOffset)
+        assertEquals(10, after.reminderMinutesBefore)
+    }
+
+    // Auditoria 2026-10-30: modelo guarda as subtarefas e a
+    // instanciação as recria junto com a tarefa.
+    @Test
+    fun templateKeepsSubtasksWhenInstantiated() = runBlocking {
+        val tasks = TaskRepositoryImpl(testDb())
+        val templateId = tasks.saveTemplate(
+            "Rotina",
+            listOf(
+                NewTask(
+                    title = "Fechar o caixa",
+                    subtaskTitles = listOf("Contar notas", "Lançar no sistema"),
+                ),
+            ),
+        )
+        val created = tasks.instantiateTemplate(templateId, null)
+        assertEquals(1, created)
+        val task = tasks.allTasksFlow().first().single()
+        assertEquals("Fechar o caixa", task.title)
+        assertEquals(
+            listOf("Contar notas", "Lançar no sistema"),
+            task.subtasks.map { it.title },
+        )
+    }
+
     @Test
     fun habitRemindersReplaceListAndMirror() = runBlocking {
         val db = testDb()
