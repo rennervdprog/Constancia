@@ -39,6 +39,9 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Whatshot
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -85,6 +88,8 @@ import app.constancia.domain.ReportData
 import app.constancia.domain.ReportPeriod
 import app.constancia.domain.SleepLagPattern
 import app.constancia.domain.WEEKDAYS_ISO_PT
+import app.constancia.domain.ProFeature
+import app.constancia.domain.ProGate
 import app.constancia.domain.buildExportCsv
 import app.constancia.domain.buildSummary
 import app.constancia.domain.computeReport
@@ -272,7 +277,7 @@ fun ReportsScreen(
             Spacer(Modifier.height(12.dp))
 
             PatternsSection(
-                isPro = isPro,
+                isPro = ProGate.isUnlocked(ProFeature.CROSS_PATTERNS, isPro),
                 morning = morningPattern,
                 sleep = sleepPattern,
                 onOpenPaywall = onOpenPaywall,
@@ -304,13 +309,17 @@ fun ReportsScreen(
             InsightsSection(data.insights)
             Spacer(Modifier.height(12.dp))
 
-            XraySection(xray = xray, isPro = isPro, onOpenPaywall = onOpenPaywall)
+            XraySection(
+                xray = xray,
+                isPro = ProGate.isUnlocked(ProFeature.OVERDUE_XRAY, isPro),
+                onOpenPaywall = onOpenPaywall,
+            )
             Spacer(Modifier.height(12.dp))
 
             YearReviewSection(
                 year = yearHl,
                 quarter = quarterHl,
-                isPro = isPro,
+                isPro = ProGate.isUnlocked(ProFeature.ADVANCED_REVIEW, isPro),
                 today = today,
             )
             Spacer(Modifier.height(12.dp))
@@ -334,6 +343,18 @@ fun ReportsScreen(
                     text = "Copiar resumo",
                 )
             }
+            Spacer(Modifier.height(8.dp))
+            // M15 (varredura): o CSV exporta a janela DOBRADA do
+            // relatório (período atual + anterior, para os deltas) —
+            // agora a tela diz o recorte em vez de exportar em
+            // silêncio um intervalo maior que o exibido.
+            Text(
+                text = "O CSV cobre de " + formatDay(fromYmd.toLocalDate()) +
+                    " a " + formatDay(toYmd.toLocalDate()) +
+                    " (o período e o anterior, usados nas comparações).",
+                style = MaterialTheme.typography.bodySmall,
+                color = extra.ink3,
+            )
             Spacer(Modifier.height(118.dp))
         }
     }
@@ -1913,7 +1934,7 @@ private fun YearReviewSection(
                         append(" e o humor em alta em ")
                         append(MONTHS_PT[it - 1])
                     }
-                    append(" — montado automaticamente, pronto pra compartilhar.")
+                    append(" — montado automaticamente dos seus registros.")
                 },
                 fontSize = 13.5.sp,
                 lineHeight = 20.sp,
@@ -1929,6 +1950,55 @@ private fun YearReviewSection(
             )
             Spacer(Modifier.height(12.dp))
             if (isPro) {
+                // M16 (varredura): os destaques calculados
+                // (periodHighlights) nao apareciam em lugar nenhum —
+                // a revista completa do Pro e esta lista de fatos.
+                Column {
+                    if (year.bestStreak > 0) {
+                        HighlightFact(
+                            icon = Icons.Filled.Whatshot,
+                            tint = Color(0xFFFBBF24),
+                            text = "Maior sequência: " + year.bestStreak +
+                                " dias" + (year.bestStreakHabit?.let {
+                                    " de " + it
+                                } ?: ""),
+                            color = Color(0xFFE0D3F7),
+                        )
+                    }
+                    if (year.perfectDays > 0) {
+                        HighlightFact(
+                            icon = Icons.Filled.CheckCircle,
+                            tint = Color(0xFFA7F3D0),
+                            text = year.perfectDays.toString() +
+                                if (year.perfectDays == 1) {
+                                    " dia perfeito (todos os hábitos feitos)"
+                                } else {
+                                    " dias perfeitos (todos os hábitos feitos)"
+                                },
+                            color = Color(0xFFE0D3F7),
+                        )
+                    }
+                    year.mostProductiveWeekday?.let { wd ->
+                        HighlightFact(
+                            icon = Icons.Filled.CalendarMonth,
+                            tint = Color(0xFFC4A6F5),
+                            text = "Dia mais produtivo: " +
+                                WEEKDAYS_ISO_PT[wd - 1],
+                            color = Color(0xFFE0D3F7),
+                        )
+                    }
+                    if (year.happiestMonth != null && year.happiestMonthAvg != null) {
+                        HighlightFact(
+                            icon = Icons.Filled.EmojiEmotions,
+                            tint = Color(0xFFFDE68A),
+                            text = "Humor em alta em " +
+                                MONTHS_PT[year.happiestMonth - 1] +
+                                " (média " + fmt1(year.happiestMonthAvg) + ")",
+                            color = Color(0xFFE0D3F7),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
                 Text(
                     text = "Trimestre em revista: " + quarter.tasksDone +
                         " tarefas concluídas · " + quarter.totalCheckins +
@@ -1940,8 +2010,9 @@ private fun YearReviewSection(
                 )
             } else {
                 Text(
-                    text = "No Constância Pro: versão completa do ano + " +
-                        "revista do trimestre.",
+                    text = "No Constância Pro: a revista completa — " +
+                        "dias perfeitos, seu dia mais produtivo, a maior " +
+                        "sequência detalhada e a revista do trimestre.",
                     fontSize = 12.5.sp,
                     color = Color(0xFFC4A6F5),
                 )
@@ -1955,8 +2026,8 @@ private fun HighlightFact(
     icon: ImageVector,
     tint: Color,
     text: String,
+    color: Color = MaterialTheme.colorScheme.onBackground,
 ) {
-    val cs = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(vertical = 3.dp),
@@ -1967,7 +2038,7 @@ private fun HighlightFact(
             text,
             fontSize = 13.5.sp,
             fontWeight = FontWeight.SemiBold,
-            color = cs.onBackground,
+            color = color,
         )
     }
 }
