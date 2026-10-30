@@ -1,6 +1,8 @@
 package app.constancia
 
 import app.constancia.domain.cyclePriority
+import app.constancia.domain.dayFlowTasks
+import app.constancia.domain.postponeTarget
 import app.constancia.domain.doneTasks
 import app.constancia.domain.doneTodayTasks
 import app.constancia.domain.dueDateLabel
@@ -174,6 +176,38 @@ class TaskLogicTest {
         assertEquals(3, cyclePriority(1)) // alta -> baixa
         assertEquals(1, cyclePriority(2)) // média -> alta
         assertEquals(2, cyclePriority(3)) // baixa -> média
+    }
+
+    // ---------- Varredura 2026-10-30: A3 + M8 ----------
+
+    @Test
+    fun dayFlow_excludesTasksCompletedOnEarlierDays() {
+        val tasks = listOf(
+            task("pendente-hoje", dueDate = "2026-10-20"),
+            task("atrasada", dueDate = "2026-10-18"),
+            task("feita-hoje", dueDate = "2026-10-19", done = true)
+                .copy(completedAt = "2026-10-20T09:00:00Z"),
+            task("feita-ontem", dueDate = "2026-10-19", done = true)
+                .copy(completedAt = "2026-10-19T18:00:00Z"),
+            task("futura", dueDate = "2026-10-21"),
+            task("sem-data", dueDate = null),
+        )
+        assertEquals(
+            listOf("pendente-hoje", "atrasada", "feita-hoje"),
+            dayFlowTasks(tasks, today).map { it.id },
+        )
+    }
+
+    @Test
+    fun postponeTarget_alwaysLandsTomorrowOrLater() {
+        // Atrasada há 3 dias: vai PARA amanhã (não continua atrasada).
+        assertEquals(LocalDate(2026, 10, 21), postponeTarget("2026-10-17", today))
+        // Vence hoje: amanhã.
+        assertEquals(LocalDate(2026, 10, 21), postponeTarget("2026-10-20", today))
+        // Sem data: amanhã.
+        assertEquals(LocalDate(2026, 10, 21), postponeTarget(null, today))
+        // Já está amanhã: adia mais um dia a partir dela.
+        assertEquals(LocalDate(2026, 10, 22), postponeTarget("2026-10-21", today))
     }
 
     @Test
