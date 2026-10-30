@@ -33,11 +33,15 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
         }
 
     // Retorna true se o dia ficou marcado como feito apos o toggle.
+    // A2 (varredura 2026-10-30): dia FUTURO é prévia somente-leitura —
+    // check-in, quantidade e pulo não gravam nada para datas futuras.
     override suspend fun toggle(
         habitId: String,
         dateYmd: String,
         quantity: Double,
-    ): Boolean = withContext(Dispatchers.Default) {
+    ): Boolean {
+        if (dateYmd > todayYmd()) return false
+        return withContext(Dispatchers.Default) {
         val existing = queries.selectCheckin(habitId, dateYmd).executeAsOneOrNull()
         val done = when {
             // Dia pulado: tocar de novo transforma o pulo em check-in feito.
@@ -64,6 +68,7 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
         syncLinkedTasks(habitId, dateYmd, done)
         refreshCycleCompletion(habitId)
         done
+        }
     }
 
     override suspend fun setQuantity(
@@ -71,6 +76,7 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
         dateYmd: String,
         quantity: Double,
     ): Unit = withContext(Dispatchers.Default) {
+        if (dateYmd > todayYmd()) return@withContext // A2: futuro é prévia
         // Registrar quantidade é progresso: o dia sai do estado "pulado".
         queries.upsertCheckin(
             newId(), habitId, dateYmd, quantity,
@@ -89,6 +95,7 @@ class CheckinRepositoryImpl(private val db: ConstanciaDb) : CheckinRepository {
 
     override suspend fun skip(habitId: String, dateYmd: String): Unit =
         withContext(Dispatchers.Default) {
+            if (dateYmd > todayYmd()) return@withContext // A2: futuro é prévia
             // Pular substitui qualquer progresso do dia: vira o registro
             // SKIPPED (quantidade 0), que o streak trata como perdoado.
             queries.upsertCheckin(
