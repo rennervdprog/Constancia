@@ -163,43 +163,63 @@ class ConstanciaUiTest {
      * e só então o clique.
      */
     private fun openMaisItem(tag: String) {
-        var tries = 0
-        while (!nodesWithTag(tag) && tries < 8) {
-            device.swipe(160, 500, 160, 200, 15)
+        // Toque por coordenadas: rola a lista com gestos reais ate o
+        // centro do item ficar na zona segura (longe do cabecalho e da
+        // navegacao flutuante) e toca exatamente no centro dele.
+        var rounds = 0
+        while (rounds < 8) {
             composeRule.waitForIdle()
-            tries++
-        }
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag(tag) }
-        // O item pode sumir num frame transitório da lista: o
-        // scroll+click tenta até 3 vezes antes de desistir.
-        var opened = false
-        var attempts = 0
-        while (!opened && attempts < 3) {
-            attempts++
-            runCatching {
-                composeRule.onNodeWithTag(tag).performScrollTo()
-                device.swipe(160, 430, 160, 320, 10)
-                composeRule.waitForIdle()
-                composeRule.onNodeWithTag(tag).performClick()
-                opened = true
+            val node = runCatching {
+                composeRule.onNodeWithTag(tag).fetchSemanticsNode()
+            }.getOrNull()
+            if (node != null) {
+                val b = node.boundsInRoot
+                when {
+                    b.center.y in 150f..490f -> {
+                        device.click(b.center.x.toInt(), b.center.y.toInt())
+                        composeRule.waitForIdle()
+                        return
+                    }
+                    b.center.y > 490f ->
+                        device.swipe(160, 470, 160, 300, 12)
+                    else ->
+                        device.swipe(160, 300, 160, 470, 12)
+                }
+            } else {
+                device.swipe(160, 470, 160, 300, 12)
             }
-            if (!opened) composeRule.waitForIdle()
+            rounds++
         }
-        check(opened) { "openMaisItem: nao consegui clicar em $tag" }
+        composeRule.onNodeWithTag(tag).performClick()
     }
 
-    /** Toca no centro real de um texto (coordenadas da tela). */
+    /** Toca no centro real de um texto, rolando ate ele ficar visivel. */
     private fun tapTextAtCenter(text: String) {
-        var bounds = composeRule.onNodeWithText(text)
-            .fetchSemanticsNode().boundsInRoot
-        if (bounds.center.y > 540) {
-            device.swipe(160, 430, 160, 320, 10)
+        var rounds = 0
+        while (rounds < 8) {
             composeRule.waitForIdle()
-            bounds = composeRule.onNodeWithText(text)
-                .fetchSemanticsNode().boundsInRoot
+            val node = runCatching {
+                composeRule.onNodeWithText(text).fetchSemanticsNode()
+            }.getOrNull()
+            if (node != null) {
+                val b = node.boundsInRoot
+                when {
+                    b.center.y in 140f..485f -> {
+                        device.click(b.center.x.toInt(), b.center.y.toInt())
+                        composeRule.waitForIdle()
+                        return
+                    }
+                    b.center.y > 485f ->
+                        device.swipe(160, 470, 160, 330, 12)
+                    else ->
+                        device.swipe(160, 330, 160, 470, 12)
+                }
+            } else {
+                device.swipe(160, 470, 160, 330, 12)
+            }
+            rounds++
         }
-        device.click(bounds.center.x.toInt(), bounds.center.y.toInt())
-        composeRule.waitForIdle()
+        composeRule.onNodeWithText(text).performClick()
     }
 
     /** Espera um texto existir rolando com toques reais na tela. */
@@ -520,16 +540,18 @@ class ConstanciaUiTest {
         // Relatórios com dado real: hábito criado e feito hoje.
         createHabit("Meditar")
         composeRule.onNodeWithTag("habit_check").performClick()
+        // Prova de que o check-in entrou antes de sair da Hoje.
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1 de 1") }
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         openMaisItem("mais_progresso")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("reports_list") }
-        composeRule.onRoot().printToLog("VAR_REL")
-        awaitTextReal("Evolução")
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Evolução") }
         shot("30_relatorios")
         // Trocar o período muda a revisão exibida.
-        composeRule.onNodeWithText("Últimos 12 meses")
-            .performScrollTo().performClick()
-        awaitTextReal("Revisão do ano")
+        composeRule.onNodeWithText("Ano").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Revisão do ano")
+        }
         // As superfícies Pro aparecem como cadeado para quem é grátis.
         awaitTextReal("Padrões cruzados")
         shot("31_relatorios_cadeados")
@@ -539,7 +561,6 @@ class ConstanciaUiTest {
     fun varredura_desafios_listarEComecar() {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         composeRule.waitForIdle()
-        composeRule.onRoot().printToLog("VAR_DES")
         openMaisItem("mais_desafios")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Começar") }
         shot("32_desafios")
@@ -588,7 +609,6 @@ class ConstanciaUiTest {
             nodesWith("Pulado hoje — sequência protegida")
         }
         shot("35_hoje_pulado")
-        composeRule.onRoot().printToLog("VAR_HOJE")
         tapTextAtCenter("Desfazer")
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Pular hoje") }
     }
