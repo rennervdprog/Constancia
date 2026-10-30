@@ -26,8 +26,11 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -54,6 +57,7 @@ import app.constancia.AppDeps
 import app.constancia.domain.CycleState
 import app.constancia.domain.DOW_SHORT
 import app.constancia.domain.HeatCell
+import app.constancia.domain.fmtQty
 import app.constancia.domain.completionRateLast30
 import app.constancia.domain.cycleDoneDays
 import app.constancia.domain.cycleState
@@ -66,6 +70,7 @@ import app.constancia.domain.skippedDatesFor
 import app.constancia.model.Checkin
 import app.constancia.model.CheckinStatus
 import app.constancia.model.FrequencyType
+import app.constancia.model.GoalType
 import app.constancia.model.Habit
 import app.constancia.model.isoToAppDay
 import app.constancia.model.habitActiveFrom
@@ -158,6 +163,10 @@ fun HabitsScreen(
         todayDate.minus(DatePeriod(days = 400)).toString()
     }
     val habits by deps.habits.habitsFlow().collectAsState(initial = emptyList())
+    // M4: arquivados ganham seção própria com restaurar/excluir —
+    // arquivar deixou de ser um caminho sem volta.
+    val archived by deps.habits.archivedFlow().collectAsState(initial = emptyList())
+    var archivedDeleteId by remember { mutableStateOf<String?>(null) }
     val statuses by deps.habits.todayStatusFlow().collectAsState(initial = emptyList())
     val checkins by deps.checkins.checkinsInRangeFlow(rangeFrom, today)
         .collectAsState(initial = emptyList())
@@ -291,7 +300,40 @@ fun HabitsScreen(
                         .filter { it.habitId == habit.id },
                     todayYmdStr = today,
                     onCheck = {
-                        scope.launch { deps.checkins.toggle(habit.id, today) }
+                        scope.launch {
+                            // M1 (varredura): em hábito de quantidade,
+                            // o círculo NÃO usa o toggle binário (que
+                            // apagava o progresso parcial do dia):
+                            // incompleto -> completa a meta; feito ->
+                            // desmarca limpando o registro.
+                            if (habit.goalType == GoalType.QUANTITY) {
+                                if (status?.isDoneToday == true) {
+                                    deps.checkins.remove(habit.id, today)
+                                } else {
+                                    deps.checkins.setQuantity(
+                                        habit.id, today, habit.targetQuantity,
+                                    )
+                                }
+                            } else {
+                                deps.checkins.toggle(habit.id, today)
+                            }
+                        }
+                    },
+                    onSetQuantity = { qty ->
+                        scope.launch {
+                            deps.checkins.setQuantity(habit.id, today, qty)
+                        }
+                    },
+                    onPauseToggle = {
+                        scope.launch {
+                            deps.habits.setPaused(habit.id, !habit.paused)
+                        }
+                    },
+                    onArchive = {
+                        scope.launch { deps.habits.archive(habit.id) }
+                    },
+                    onDelete = {
+                        scope.launch { deps.habits.delete(habit.id) }
                     },
                     onSkip = {
                         scope.launch { deps.checkins.skip(habit.id, today) }
@@ -314,6 +356,62 @@ fun HabitsScreen(
                         }
                     },
                 )
+            }
+        }
+
+        if (archived.isNotEmpty()) {
+            item {
+                Text(
+                    text = "Arquivados (" + archived.size + ")",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 10.dp, bottom = 2.dp),
+                )
+            }
+            items(archived, key = { "arch-" + it.id }) { habit ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            MaterialTheme.colorScheme.surface,
+                            RoundedCornerShape(15.dp),
+                        )
+                        .border(
+                            1.dp,
+                            MaterialTheme.constanciaExtra.lineSoft,
+                            RoundedCornerShape(15.dp),
+                        )
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = habit.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "Restaurar",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                scope.launch {
+                                    deps.habits.unarchive(habit.id)
+                                }
+                            }
+                            .testTag("habit_unarchive_" + habit.id)
+                            .padding(8.dp),
+                    )
+                    Text(
+                        text = "Excluir",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { archivedDeleteId = habit.id }
+                            .padding(8.dp),
+                    )
+                }
             }
         }
 
@@ -360,6 +458,35 @@ fun HabitsScreen(
             deps = deps,
             onDismiss = { editingHabit = null },
             editing = habit,
+        )
+    }
+
+    // M4: confirmação de exclusão a partir da seção de arquivados.
+    archivedDeleteId?.let { id ->
+        val target = archived.firstOrNull { it.id == id }
+        AlertDialog(
+            onDismissRequest = { archivedDeleteId = null },
+            title = { Text("Excluir hábito?") },
+            text = {
+                Text(
+                    "O hábito \"" + (target?.name ?: "") + "\" e todo o " +
+                        "histórico de check-ins dele são apagados. " +
+                        "Não dá para desfazer.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        archivedDeleteId = null
+                        scope.launch { deps.habits.delete(id) }
+                    },
+                ) { Text("Excluir") }
+            },
+            dismissButton = {
+                TextButton(onClick = { archivedDeleteId = null }) {
+                    Text("Cancelar")
+                }
+            },
         )
     }
 }
@@ -420,6 +547,10 @@ private fun HabitCard(
     habitReminders: List<app.constancia.model.HabitReminder>,
     todayYmdStr: String,
     onCheck: () -> Unit,
+    onSetQuantity: (Double) -> Unit,
+    onPauseToggle: () -> Unit,
+    onArchive: () -> Unit,
+    onDelete: () -> Unit,
     onSkip: () -> Unit,
     onUnskip: () -> Unit,
     onStartCycle: (Int) -> Unit,
@@ -435,6 +566,10 @@ private fun HabitCard(
     val doneToday = status?.isDoneToday == true
     val weekDone = status?.weekDone ?: 0
     val weekTarget = weekTargetOf(habit)
+    // M4 (varredura): menu de acoes por habito (pausar/arquivar/excluir
+    // existiam no repositorio sem nenhuma entrada na interface).
+    var menuOpen by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -518,6 +653,84 @@ private fun HabitCard(
                         )
                     }
                 }
+            }
+            // M4: menu de acoes do habito.
+            Box {
+                Icon(
+                    Icons.Filled.MoreVert,
+                    contentDescription = "Ações de " + habit.name,
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .clickable { menuOpen = true }
+                        .testTag("habit_menu_" + habit.id)
+                        .padding(9.dp),
+                )
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(if (habit.paused) "Retomar" else "Pausar")
+                        },
+                        onClick = { menuOpen = false; onPauseToggle() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Arquivar") },
+                        onClick = { menuOpen = false; onArchive() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Excluir") },
+                        onClick = { menuOpen = false; confirmDelete = true },
+                    )
+                }
+            }
+        }
+
+        // M1: em habito de quantidade, o progresso de hoje se ajusta
+        // aqui (antes so existia na Hoje; o circulo apagava o parcial).
+        if (!habit.paused && habit.goalType == GoalType.QUANTITY &&
+            (dueToday || doneToday)
+        ) {
+            val currentQty = status?.todayCheckin?.quantity ?: 0.0
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Hoje",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                CardQtyButton(
+                    text = "−",
+                    tag = "habit_qty_dec_" + habit.id,
+                    onClick = {
+                        onSetQuantity(
+                            (currentQty - habit.quantityStep)
+                                .coerceAtLeast(0.0),
+                        )
+                    },
+                )
+                Text(
+                    text = fmtQty(currentQty) + " de " +
+                        fmtQty(habit.targetQuantity) + " " + habit.quantityUnit,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                    ),
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                )
+                CardQtyButton(
+                    text = "+",
+                    tag = "habit_qty_inc_" + habit.id,
+                    onClick = {
+                        onSetQuantity(
+                            (currentQty + habit.quantityStep)
+                                .coerceAtMost(habit.targetQuantity),
+                        )
+                    },
+                )
             }
         }
 
@@ -738,6 +951,54 @@ private fun HabitCard(
                 onSetReminders = onSetHabitReminders,
             )
         }
+    }
+
+    // M4: excluir pede confirmação (apaga o histórico junto).
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Excluir hábito?") },
+            text = {
+                Text(
+                    "O hábito \"" + habit.name + "\" e todo o histórico " +
+                        "de check-ins dele são apagados. Não dá para desfazer.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { confirmDelete = false; onDelete() },
+                ) { Text("Excluir") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) {
+                    Text("Cancelar")
+                }
+            },
+        )
+    }
+}
+
+/** Botão +/− do ajuste de quantidade no cartão (M1). */
+@Composable
+private fun CardQtyButton(text: String, tag: String, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(30.dp)
+            .clip(CircleShape)
+            .background(scheme.surfaceVariant)
+            .clickable(onClick = onClick)
+            .testTag(tag),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = 16.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = scheme.onSurface,
+        )
     }
 }
 
