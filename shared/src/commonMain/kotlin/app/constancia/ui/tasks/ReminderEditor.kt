@@ -26,6 +26,12 @@ import androidx.compose.ui.unit.dp
 import app.constancia.domain.REMINDER_OPTIONS
 import app.constancia.domain.parseTimeOrNull
 import app.constancia.domain.taskReminderLabel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.platform.testTag
+import app.constancia.ui.common.TimePickerDialog
 import app.constancia.ui.common.TimeTextField
 import app.constancia.model.ReminderSpec
 import app.constancia.model.ReminderType
@@ -58,6 +64,7 @@ fun ReminderListEditor(
 ) {
     val scheme = MaterialTheme.colorScheme
     var absTimeText by remember { mutableStateOf("") }
+    var showAbsPicker by remember { mutableStateOf(false) }
     var absError by remember { mutableStateOf(false) }
 
     Column(modifier = modifier) {
@@ -135,9 +142,19 @@ fun ReminderListEditor(
                         absTimeText = value
                         absError = false
                     },
-                    modifier = Modifier.width(104.dp),
+                    modifier = Modifier.width(96.dp),
                 )
-                Spacer(Modifier.width(8.dp))
+                IconButton(
+                    onClick = { showAbsPicker = true },
+                    modifier = Modifier.testTag("reminder_time_pick"),
+                ) {
+                    Icon(
+                        Icons.Filled.Schedule,
+                        contentDescription = "Escolher no relógio",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
                 PickChip("Adicionar horário fixo", false) {
                     // Hora inválida agora AVISA (antes o toque morria
                     // em silêncio e parecia que o botão não funcionava).
@@ -163,6 +180,17 @@ fun ReminderListEditor(
                     text = "Hora inválida — use o formato HH:mm.",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.error,
+                )
+            }
+            if (showAbsPicker) {
+                TimePickerDialog(
+                    initialText = absTimeText,
+                    onDismiss = { showAbsPicker = false },
+                    onConfirm = { picked ->
+                        absTimeText = picked
+                        absError = false
+                        showAbsPicker = false
+                    },
                 )
             }
             Spacer(Modifier.height(4.dp))
