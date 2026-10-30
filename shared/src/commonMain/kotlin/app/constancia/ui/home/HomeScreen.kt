@@ -110,6 +110,7 @@ import app.constancia.model.HabitStatus
 import app.constancia.model.Session
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
+import app.constancia.domain.isGoalMet
 import app.constancia.model.todayYmd
 import app.constancia.model.toLocalDate
 import app.constancia.model.isoDayNumberCompat
@@ -411,7 +412,6 @@ fun HomeScreen(
         timerTarget?.let { target ->
             FocusTimerDialog(
                 status = target,
-                today = selYmd,
                 deps = deps,
                 onDismiss = { timerTarget = null },
             )
@@ -1333,11 +1333,11 @@ private fun HabitSkipRow(
     onUnskip: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier.padding(start = 54.dp, top = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (skipped) {
+    if (skipped) {
+        // M17 (varredura): chip e "Desfazer" EMPILHADOS — lado a lado,
+        // a pílula ocupava a largura toda do cartão em 320dp e o
+        // "Desfazer" nascia fora da tela, sem como desfazer o pulo.
+        Column(modifier = Modifier.padding(start = 54.dp, top = 9.dp)) {
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
@@ -1352,7 +1352,7 @@ private fun HabitSkipRow(
                     color = scheme.onSurfaceVariant,
                 )
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.height(4.dp))
             Text(
                 text = "Desfazer",
                 style = MaterialTheme.typography.labelLarge,
@@ -1362,7 +1362,12 @@ private fun HabitSkipRow(
                     .clickable(onClick = onUnskip)
                     .padding(4.dp),
             )
-        } else {
+        }
+    } else {
+        Row(
+            modifier = Modifier.padding(start = 54.dp, top = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
                 text = "Pular hoje",
                 style = MaterialTheme.typography.labelMedium,
@@ -1856,7 +1861,6 @@ private val FOCUS_PRESETS = listOf(5, 10, 15, 25)
 @Composable
 private fun FocusTimerDialog(
     status: HabitStatus,
-    today: String,
     deps: AppDeps,
     onDismiss: () -> Unit,
 ) {
@@ -1887,18 +1891,23 @@ private fun FocusTimerDialog(
 
     LaunchedEffect(finished) {
         if (!finished) return@LaunchedEffect
-        if (!status.isDoneToday) {
+        // M13 (varredura): o check-in cai no dia de HOJE de verdade —
+        // antes caía no dia selecionado nas pílulas da Hoje (dava
+        // para "concluir" ontem ou amanhã). E o diálogo NÃO fecha
+        // sozinho: o "Concluído!" fica na tela até a pessoa fechar.
+        val realToday = todayYmd()
+        val existingQty = deps.checkins.get(habit.id, realToday)?.quantity ?: 0.0
+        if (!isGoalMet(habit, existingQty)) {
             if (habit.goalType == GoalType.BINARY) {
-                deps.checkins.toggle(habit.id, today)
+                deps.checkins.toggle(habit.id, realToday)
             } else {
                 deps.checkins.setQuantity(
                     habit.id,
-                    today,
-                    (status.todayCheckin?.quantity ?: 0.0) + habit.quantityStep,
+                    realToday,
+                    existingQty + habit.quantityStep,
                 )
             }
         }
-        onDismiss()
     }
 
     val minutes = (remaining / 60).toString().padStart(2, '0')
@@ -1926,7 +1935,7 @@ private fun FocusTimerDialog(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = habit.name + " · ao terminar, o hábito é marcado sozinho.",
+                    text = habit.name + " · ao terminar, marca o hábito no dia de hoje.",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                 )
@@ -1988,19 +1997,22 @@ private fun FocusTimerDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(scheme.primary, RoundedCornerShape(15.dp))
-                        .clickable { running = !running }
+                        .clickable { if (finished) onDismiss() else running = !running }
                         .padding(vertical = 15.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = null,
-                            tint = scheme.onPrimary,
-                        )
-                        Spacer(Modifier.width(8.dp))
+                        if (!finished) {
+                            Icon(
+                                if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = null,
+                                tint = scheme.onPrimary,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                        }
                         Text(
                             text = when {
+                                finished -> "Fechar"
                                 running -> "Pausar"
                                 remaining < selectedMinutes * 60 -> "Retomar foco"
                                 else -> "Iniciar foco"
@@ -2010,20 +2022,22 @@ private fun FocusTimerDialog(
                         )
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable(onClick = onDismiss)
-                        .padding(vertical = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Cancelar",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = scheme.primary,
-                    )
+                if (!finished) {
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(onClick = onDismiss)
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Cancelar",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = scheme.primary,
+                        )
+                    }
                 }
             }
         }
