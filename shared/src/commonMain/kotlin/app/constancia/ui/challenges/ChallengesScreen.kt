@@ -30,8 +30,10 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,19 +42,25 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.constancia.AppDeps
 import app.constancia.domain.ProGate
+import app.constancia.domain.doneDatesFor
+import app.constancia.domain.donePairs
 import app.constancia.model.Challenge
 import app.constancia.model.ChallengeStatus
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
 import app.constancia.model.Session
+import app.constancia.model.Checkin
 import app.constancia.model.newId
 import app.constancia.model.toLocalDate
+import app.constancia.model.toYmd
 import app.constancia.model.todayYmd
 import app.constancia.theme.HabitPalette
 import app.constancia.ui.common.argbLongOf
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.minus
 
 @Composable
 fun ChallengesScreen(
@@ -65,6 +73,44 @@ fun ChallengesScreen(
     val isPro by deps.entitlement.isProFlow.collectAsState(initial = false)
     val scope = rememberCoroutineScope()
     val today = remember { todayYmd() }
+    // A4 (varredura): o progresso do desafio é medido pelos check-ins
+    // do hábito vinculado — coleta hábitos e uma janela larga de
+    // check-ins (400 dias, como os relatórios).
+    val habits by deps.habits.habitsFlow().collectAsState(initial = emptyList())
+    val wideFrom = remember {
+        today.toLocalDate().minus(DatePeriod(days = 400)).toYmd()
+    }
+    val allCheckins by deps.checkins.checkinsInRangeFlow(wideFrom, today)
+        .collectAsState(initial = emptyList())
+    // Trava de toque duplo (B14): um começo por vez.
+    var starting by remember { mutableStateOf(false) }
+
+    fun buildHabitFor(challenge: Challenge): Habit = Habit(
+        id = newId(),
+        name = challenge.habitName,
+        icon = challenge.habitIcon,
+        // ARGB Long canônico (0xFF0B7A55) — o formato que Habit.color
+        // guarda e lê.
+        color = argbLongOf(HabitPalette[0]),
+        // M5: a descrição promete quantidade ("2 litros", "20 páginas",
+        // "5 minutos") — o hábito nasce com essa meta, não binário.
+        goalType = if (challenge.goalQuantity != null) {
+            GoalType.QUANTITY
+        } else {
+            GoalType.BINARY
+        },
+        targetQuantity = challenge.goalQuantity ?: 1.0,
+        quantityUnit = challenge.goalUnit,
+        frequencyType = FrequencyType.DAILY,
+        daysOfWeek = emptyList(),
+        weeklyTarget = 7,
+        session = Session.MANHA,
+        reminderEnabled = false,
+        reminderTime = "",
+        paused = false,
+        createdAt = "",
+        sortOrder = 0,
+    )
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -84,39 +130,58 @@ fun ChallengesScreen(
             }
         }
         items(challenges, key = { it.id }) { challenge ->
+            val linked = linkedHabit(challenge, habits)
             ChallengeCard(
                 challenge = challenge,
                 isPro = isPro,
+                doneDays = challengeDoneDays(challenge, linked, allCheckins),
+                startEnabled = !starting,
                 onOpenPaywall = onOpenPaywall,
                 onStart = {
-                    scope.launch {
-                        deps.challenges.start(challenge.id, today)
-                        deps.habits.save(
-                            Habit(
-                                newId(),
-                                challenge.habitName,
-                                challenge.habitIcon,
-                                // ARGB Long canônico (0xFF0B7A55) — o
-                                // formato que Habit.color guarda e lê.
-                                argbLongOf(HabitPalette[0]),
-                                GoalType.BINARY,
-                                1.0,
-                                "",
-                                FrequencyType.DAILY,
-                                emptyList(),
-                                7,
-                                Session.MANHA,
-                                false,
-                                "",
-                                false,
-                                "",
-                                0,
-                            )
-                        )
+                    if (!starting) {
+                        starting = true
+                        scope.launch {
+                            try {
+                                val habit = buildHabitFor(challenge)
+                                deps.habits.save(habit)
+                                deps.challenges.start(challenge.id, today, habit.id)
+                            } finally {
+                                starting = false
+                            }
+                        }
+                    }
+                },
+                onRestart = {
+                    if (!starting) {
+                        starting = true
+                        scope.launch {
+                            try {
+                                // M6: recomeçar reaproveita o hábito
+                                // do pacote (retoma se estava
+                                // pausado); se ele sumiu, cria um novo
+                                // com a mesma meta.
+                                val habit = linked ?: buildHabitFor(challenge)
+                                    .also { deps.habits.save(it) }
+                                if (habit.paused) {
+                                    deps.habits.setPaused(habit.id, false)
+                                }
+                                deps.challenges.start(challenge.id, today, habit.id)
+                            } finally {
+                                starting = false
+                            }
+                        }
                     }
                 },
                 onFinish = { scope.launch { deps.challenges.setStatus(challenge.id, ChallengeStatus.DONE) } },
-                onGiveUp = { scope.launch { deps.challenges.setStatus(challenge.id, ChallengeStatus.GIVEN_UP) } },
+                onGiveUp = {
+                    scope.launch {
+                        deps.challenges.setStatus(challenge.id, ChallengeStatus.GIVEN_UP)
+                        // M6: o hábito do pacote não fica órfão ativo —
+                        // ele pausa junto (dá para retomar na aba
+                        // Hábitos ou recomeçando o desafio).
+                        linked?.let { deps.habits.setPaused(it.id, true) }
+                    }
+                },
                 todayYmd = today,
             )
         }
@@ -127,8 +192,11 @@ fun ChallengesScreen(
 private fun ChallengeCard(
     challenge: Challenge,
     isPro: Boolean,
+    doneDays: Int,
+    startEnabled: Boolean,
     onOpenPaywall: () -> Unit,
     onStart: () -> Unit,
+    onRestart: () -> Unit,
     onFinish: () -> Unit,
     onGiveUp: () -> Unit,
     todayYmd: String,
@@ -178,7 +246,7 @@ private fun ChallengeCard(
                 // Fase F: pacote Pro só COMEÇA com entitlement — quem já
                 // começou segue usando mesmo após downgrade (ProGate).
                 if (ProGate.canStartChallenge(challenge.isPro, challenge.status, isPro)) {
-                    CtaButton(text = "Começar", onClick = onStart)
+                    CtaButton(text = "Começar", onClick = onStart, enabled = startEnabled)
                 } else {
                     CtaButton(
                         text = "Desbloquear no Pro",
@@ -188,23 +256,46 @@ private fun ChallengeCard(
             }
             ChallengeStatus.ACTIVE -> {
                 Spacer(Modifier.height(12.dp))
+                // A4: o progresso é por MÉRITO — dias com check-in do
+                // hábito vinculado desde o início — e o "Concluir" só
+                // libera quando todos os dias estão feitos. O dia
+                // corrido continua visível, como contexto.
                 val currentDay = activeDay(challenge, todayYmd)
+                val complete = doneDays >= challenge.durationDays
                 Text(
-                    "Dia $currentDay de ${challenge.durationDays}",
+                    "$doneDays de ${challenge.durationDays} dias feitos · " +
+                        "dia corrido $currentDay",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(6.dp))
                 LinearProgressIndicator(
-                    progress = { currentDay.toFloat() / challenge.durationDays.toFloat() },
+                    progress = {
+                        (doneDays.toFloat() / challenge.durationDays.toFloat())
+                            .coerceIn(0f, 1f)
+                    },
                     modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape),
                     color = MaterialTheme.colorScheme.secondary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CtaButton(text = "Concluir", onClick = onFinish, modifier = Modifier.weight(1f))
+                    CtaButton(
+                        text = "Concluir",
+                        onClick = onFinish,
+                        modifier = Modifier.weight(1f),
+                        enabled = complete,
+                    )
                     SecondaryButton(text = "Desistir", onClick = onGiveUp, modifier = Modifier.weight(1f))
+                }
+                if (!complete) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Faltam ${challenge.durationDays - doneDays} " +
+                            "dias de check-in para concluir.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
             ChallengeStatus.DONE -> {
@@ -215,6 +306,19 @@ private fun ChallengeCard(
                     container = MaterialTheme.colorScheme.primaryContainer,
                     content = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Você fez $doneDays de ${challenge.durationDays} dias. " +
+                        "O hábito continua ativo na sua rotina.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                SecondaryButton(
+                    text = "Fazer de novo",
+                    onClick = onRestart,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             ChallengeStatus.GIVEN_UP -> {
                 Spacer(Modifier.height(12.dp))
@@ -224,9 +328,44 @@ private fun ChallengeCard(
                     container = MaterialTheme.colorScheme.surfaceVariant,
                     content = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "Você tinha feito $doneDays de ${challenge.durationDays} " +
+                        "dias. O hábito do pacote ficou pausado.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                SecondaryButton(
+                    text = "Tentar de novo",
+                    onClick = onRestart,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }
+}
+
+/**
+ * O hábito de um desafio: pelo vínculo gravado (schema v11); desafios
+ * legados sem vínculo caem para o hábito de mesmo nome mais antigo.
+ */
+private fun linkedHabit(challenge: Challenge, habits: List<Habit>): Habit? {
+    challenge.habitId?.let { id -> habits.firstOrNull { it.id == id }?.let { return it } }
+    return habits.filter { it.name == challenge.habitName }
+        .minByOrNull { it.createdAt }
+}
+
+/** Dias FEITOS (check-in batendo a meta) do hábito desde o início. */
+private fun challengeDoneDays(
+    challenge: Challenge,
+    habit: Habit?,
+    checkins: List<Checkin>,
+): Int {
+    if (habit == null) return 0
+    val start = challenge.startDate ?: return 0
+    val mine = checkins.filter { it.habitId == habit.id }
+    return doneDatesFor(habit, donePairs(mine)).count { it >= start }
 }
 
 private fun activeDay(challenge: Challenge, todayYmd: String): Int {
@@ -286,20 +425,25 @@ private fun CtaButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(MaterialTheme.colorScheme.primary)
-            .clickable(onClick = onClick)
+            .background(
+                if (enabled) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surfaceVariant,
+            )
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text,
             style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = if (enabled) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
