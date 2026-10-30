@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Whatshot
@@ -44,7 +45,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -69,9 +69,9 @@ private val ONBOARDING_PAGES = listOf(
         title = "Tudo do seu dia, num só lugar",
         subtitle = "Constância se constrói um dia de cada vez.",
         bullets = listOf(
-            "Sem cadastro: começa em segundos",
-            "Um dia de cada vez, sem pressa e sem pontos",
-            "Tudo salvo no aparelho, mesmo sem internet",
+            "Sem cadastro, começa já",
+            "Sem pressa e sem pontos",
+            "Salvo no aparelho, sem internet",
         ),
     ),
     OnboardingPage(
@@ -80,18 +80,18 @@ private val ONBOARDING_PAGES = listOf(
         subtitle = "Pequenos passos, todos os dias.",
         bullets = listOf(
             "Check-in simples, em segundos",
-            "Sequência e recorde à vista, com dias de folga",
-            "Pular um dia não quebra a sequência",
+            "Sequência à vista, com folgas",
+            "Folga não quebra a sequência",
         ),
     ),
     OnboardingPage(
         kicker = "TAREFAS E DIÁRIO",
-        title = "Planeje e reflita, juntos",
+        title = "Planeje e reflita",
         subtitle = "O que fazer e como foi o dia, lado a lado.",
         bullets = listOf(
-            "Tarefas com prazo, recorrência e lembretes",
-            "Diário com humor, sono e nota do dia",
-            "Revisão do dia para fechar com calma",
+            "Prazo, recorrência e lembretes",
+            "Humor, sono e nota do dia",
+            "Revisão do dia, com calma",
         ),
     ),
 )
@@ -141,39 +141,70 @@ fun OnboardingScreen(
             .windowInsetsPadding(WindowInsets.statusBars)
             .testTag("onboarding_screen"),
     ) {
-        // Tela baixa (ex.: 640dp de altura): a cena encolhe e os
-        // cartões de prévia são escalados, para os 3 benefícios da
+        // Tela baixa (ex.: 640dp de altura): a cena encolhe (e a
+        // cena 3 usa cartões compactos), para os 3 benefícios da
         // folha caberem sem rolagem. Em telas altas, cena cheia.
         val compact = maxHeight < 700.dp
-        val sceneHeight = if (compact) 176.dp else 252.dp
-        val sceneScale = if (compact) 0.78f else 1f
+        val sceneHeight = if (compact) 190.dp else 252.dp
         Column(modifier = Modifier.fillMaxSize()) {
-        // Topo sobre o gradiente: progresso segmentado + Pular em vidro.
+        // Topo sobre o gradiente: voltar (vidro, da 2ª tela em diante),
+        // progresso segmentado e Pular em vidro.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(start = 20.dp, end = 20.dp, top = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ONBOARDING_PAGES.forEachIndexed { index, _ ->
+            if (page > 0) {
                 Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(
-                            if (index <= page) {
-                                Color.White
-                            } else {
-                                Color.White.copy(alpha = 0.25f)
-                            },
-                        ),
-                )
-                if (index < ONBOARDING_PAGES.lastIndex) {
-                    Spacer(Modifier.width(6.dp))
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.14f))
+                        .border(
+                            1.dp,
+                            Color.White.copy(alpha = 0.20f),
+                            CircleShape,
+                        )
+                        .testTag("onboarding_back")
+                        .clickable { page -= 1 },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.ArrowBack,
+                        contentDescription = "Voltar",
+                        tint = Color.White,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+            } else {
+                Spacer(Modifier.width(32.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ONBOARDING_PAGES.forEachIndexed { index, _ ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(
+                                if (index <= page) {
+                                    Color.White
+                                } else {
+                                    Color.White.copy(alpha = 0.25f)
+                                },
+                            ),
+                    )
+                    if (index < ONBOARDING_PAGES.lastIndex) {
+                        Spacer(Modifier.width(6.dp))
+                    }
                 }
             }
-            Spacer(Modifier.width(14.dp))
+            Spacer(Modifier.width(12.dp))
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(99.dp))
@@ -230,17 +261,10 @@ fun OnboardingScreen(
                         CircleShape,
                     ),
             )
-            Box(
-                modifier = Modifier.graphicsLayer {
-                    scaleX = sceneScale
-                    scaleY = sceneScale
-                },
-            ) {
-                when (page) {
-                    0 -> SceneDayCard()
-                    1 -> SceneHabitCard()
-                    else -> SceneTasksDiaryCards()
-                }
+            when (page) {
+                0 -> SceneDayCard()
+                1 -> SceneHabitCard()
+                else -> SceneTasksDiaryCards(compact = compact)
             }
         }
 
@@ -257,7 +281,7 @@ fun OnboardingScreen(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(start = 24.dp, end = 24.dp, top = 20.dp),
+                    .padding(start = 24.dp, end = 24.dp, top = 16.dp),
             ) {
                 Text(
                     text = current.kicker,
@@ -295,7 +319,7 @@ fun OnboardingScreen(
             }
             Column(
                 modifier = Modifier.padding(
-                    start = 24.dp, end = 24.dp, bottom = 18.dp,
+                    start = 24.dp, end = 24.dp, bottom = 16.dp,
                 ),
             ) {
                 Row(
@@ -336,14 +360,14 @@ fun OnboardingScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
                 if (isLast) {
                     CtaButton(
                         text = "Começar",
                         onClick = onFinish,
                         tag = "onboarding_finish",
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         text = "Sem cadastro. Seus dados ficam no aparelho.",
                         style = MaterialTheme.typography.bodySmall,
@@ -357,26 +381,6 @@ fun OnboardingScreen(
                         onClick = { page += 1 },
                         tag = "onboarding_next",
                     )
-                }
-                if (page > 0) {
-                    Spacer(Modifier.height(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("onboarding_back")
-                            .clickable { page -= 1 }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Voltar",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                            ),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                 }
             }
         }
@@ -425,6 +429,7 @@ private fun BenefitRow(index: Int, text: String) {
 @Composable
 private fun PreviewCard(
     modifier: Modifier = Modifier,
+    padding: androidx.compose.ui.unit.Dp = 16.dp,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
     Column(
@@ -438,7 +443,7 @@ private fun PreviewCard(
             )
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White)
-            .padding(16.dp),
+            .padding(padding),
         content = content,
     )
 }
@@ -699,26 +704,28 @@ private fun CheckCircle(filled: Boolean) {
     }
 }
 
-/** Cena 3: tarefas do dia + a pergunta de humor do diário. */
+/** Cena 3: tarefas do dia + a pergunta de humor do diário.
+ *  Em tela baixa, cartões compactos para caber na cena menor. */
 @Composable
-private fun SceneTasksDiaryCards() {
+private fun SceneTasksDiaryCards(compact: Boolean) {
+    val cardPadding = if (compact) 12.dp else 16.dp
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        PreviewCard {
+        PreviewCard(padding = cardPadding) {
             SceneTaskRow(title = "Enviar proposta", meta = "Hoje · Trabalho", done = true)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(if (compact) 8.dp else 10.dp))
             SceneTaskRow(title = "Comprar presente", meta = "Amanhã · Pessoal", done = false)
         }
-        Spacer(Modifier.height(10.dp))
-        PreviewCard {
+        Spacer(Modifier.height(if (compact) 8.dp else 10.dp))
+        PreviewCard(padding = cardPadding) {
             Text(
                 text = "Como foi o seu dia?",
                 style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.5.sp),
                 color = PREVIEW_INK,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(if (compact) 6.dp else 8.dp))
             Row {
                 (1..5).forEach { mood ->
-                    MoodFace(mood = mood, size = 30.dp)
+                    MoodFace(mood = mood, size = if (compact) 26.dp else 30.dp)
                     if (mood < 5) Spacer(Modifier.width(9.dp))
                 }
             }
