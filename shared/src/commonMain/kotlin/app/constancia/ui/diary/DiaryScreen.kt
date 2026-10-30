@@ -137,11 +137,14 @@ fun DiaryScreen(
     var note by remember(formDate, editing?.id) {
         mutableStateOf(editing?.note ?: "")
     }
+    // M14 (varredura): energia/sono nascem NULOS num registro novo —
+    // antes o form salvava 3 e 7,0h "de fábrica" mesmo sem a pessoa
+    // tocar nos steppers, fabricando dado de sono/energia.
     var energy by remember(formDate, editing?.id) {
-        mutableStateOf(editing?.energy ?: 3)
+        mutableStateOf(editing?.energy)
     }
     var sleep by remember(formDate, editing?.id) {
-        mutableStateOf(editing?.sleepHours ?: 7.0)
+        mutableStateOf(editing?.sleepHours)
     }
     var tags by remember(formDate, editing?.id) {
         mutableStateOf(editing?.tags ?: emptyList())
@@ -305,11 +308,11 @@ fun DiaryScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             StepBtn("−", "energy_minus") {
-                                energy = (energy - 1).coerceAtLeast(1)
+                                energy = ((energy ?: 3) - 1).coerceAtLeast(1)
                             }
                             Text(
                                 text = buildAnnotatedString {
-                                    append(energy.toString())
+                                    append(energy?.toString() ?: "—")
                                     withStyle(
                                         SpanStyle(
                                             color = scheme.onSurfaceVariant,
@@ -327,7 +330,7 @@ fun DiaryScreen(
                                 modifier = Modifier.weight(1f),
                             )
                             StepBtn("+", "energy_plus") {
-                                energy = (energy + 1).coerceAtMost(5)
+                                energy = ((energy ?: 3) + 1).coerceAtMost(5)
                             }
                         }
                     }
@@ -339,10 +342,11 @@ fun DiaryScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             StepBtn("−", "sleep_minus") {
-                                sleep = (sleep - 10.0 / 60.0).coerceAtLeast(4.0)
+                                sleep = ((sleep ?: 7.0) - 10.0 / 60.0)
+                                    .coerceAtLeast(4.0)
                             }
                             Text(
-                                text = formatSleep(sleep),
+                                text = sleep?.let { formatSleep(it) } ?: "—",
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.ExtraBold,
@@ -351,7 +355,8 @@ fun DiaryScreen(
                                 modifier = Modifier.weight(1f),
                             )
                             StepBtn("+", "sleep_plus") {
-                                sleep = (sleep + 10.0 / 60.0).coerceAtMost(10.0)
+                                sleep = ((sleep ?: 7.0) + 10.0 / 60.0)
+                                    .coerceAtMost(10.0)
                             }
                         }
                     }
