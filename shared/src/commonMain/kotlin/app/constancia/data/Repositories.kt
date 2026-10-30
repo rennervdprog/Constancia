@@ -37,6 +37,10 @@ interface HabitRepository {
     suspend fun save(habit: Habit) // insert ou update pelo id
     suspend fun setPaused(id: String, paused: Boolean)
     suspend fun archive(id: String)
+    /** Hábitos arquivados (a seção "Arquivados" da aba Hábitos). */
+    fun archivedFlow(): Flow<List<Habit>>
+    /** Tira o hábito do arquivo (volta para a lista ativa). */
+    suspend fun unarchive(id: String)
     suspend fun delete(id: String)
     /** Intervalos de pausa de um hábito (para congelar o streak). */
     suspend fun pauseIntervals(habitId: String): List<PauseInterval>
@@ -213,7 +217,8 @@ interface DiaryRepository {
 
 interface ChallengeRepository {
     fun challengesFlow(): Flow<List<Challenge>>
-    suspend fun start(id: String, startDateYmd: String)
+    /** Começa (ou recomeça) o pacote já gravando o hábito vinculado. */
+    suspend fun start(id: String, startDateYmd: String, habitId: String)
     suspend fun setStatus(id: String, status: ChallengeStatus)
     /** Garante que os pacotes padrão existam (idempotente). */
     suspend fun ensureSeed()
