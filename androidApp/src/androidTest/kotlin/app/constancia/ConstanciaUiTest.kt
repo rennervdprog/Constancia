@@ -331,6 +331,12 @@ class ConstanciaUiTest {
         device.swipe(160, 430, 160, 320, 10)
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("mais_onboarding").performClick()
+        // Espera a navegação assentar: a assertiva imediata após o
+        // clique já falhou uma vez no CI por corrida (clique na lista
+        // da Mais ainda assentando) sem defeito no app.
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWithTag("onboarding_screen")
+        }
         composeRule.onNodeWithTag("onboarding_screen").assertIsDisplayed()
         composeRule.onNodeWithText("Tudo do seu dia, num só lugar").assertIsDisplayed()
         shot("18_onboarding_1")
@@ -573,11 +579,16 @@ class ConstanciaUiTest {
         shot("32_desafios")
         composeRule.onAllNodesWithText("Começar").onFirst().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) {
-            composeRule.onAllNodesWithText("Dia 1 de", substring = true)
+            composeRule.onAllNodesWithText("0 de 7 dias feitos", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        // Registro da auditoria: "Concluir" já está ativo no dia 1.
+        // A4 corrigido: o progresso é por check-in (0 feitos) e o
+        // "Concluir" fica bloqueado pelo portão de mérito — o aviso
+        // de que faltam os 7 dias é a prova na tela.
         composeRule.onNodeWithText("Concluir").assertExists()
+        composeRule.onAllNodesWithText(
+            "Faltam 7 dias de check-in", substring = true,
+        ).onFirst().assertExists()
         shot("33_desafio_ativo")
     }
 
@@ -664,7 +675,8 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         composeRule.onNodeWithTag("mais_diario").performScrollTo().performClick()
         composeRule.onNodeWithTag("mood_4").performClick()
-        // Energia é um stepper no protótipo: 3 → 5 com dois toques no +.
+        // Energia: M14 — nasce sem valor; o 1º toque parte do meio
+        // (3 → 4) e o 2º chega a 5.
         composeRule.onNodeWithTag("energy_plus").performScrollTo().performClick()
         composeRule.onNodeWithTag("energy_plus").performClick()
         composeRule.onNodeWithTag("diary_tag_Treino").performScrollTo().performClick()
