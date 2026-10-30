@@ -6,6 +6,7 @@ import app.constancia.domain.diaryDayLabel
 import app.constancia.domain.diaryMatchesQuery
 import app.constancia.domain.diaryStreak
 import app.constancia.domain.heatGrid
+import app.constancia.domain.completionRateLast30
 import app.constancia.domain.promptFor
 import app.constancia.domain.promptIndexFor
 import app.constancia.domain.weekFractions
@@ -130,6 +131,30 @@ class DiaryLogicTest {
         assertEquals(0.0, fractions[2]) // hoje pendente
         assertEquals(-1.0, fractions[3]) // futuro
         assertEquals(-1.0, fractions[6])
+    }
+
+    @Test
+    fun heatGridKeepsHistoryWhenHabitPaused() {
+        // M2 (varredura): pausar hoje não apaga o que foi feito —
+        // a célula de segunda continua DONE mesmo com paused = true.
+        val h = habit().copy(paused = true)
+        val checkins = listOf(checkin("h1", "2026-10-19"))
+        val grid = heatGrid(h, checkins, today)
+        val lastWeek = grid.last()
+        assertEquals(HeatCell.DONE, lastWeek[1]) // segunda 19 feita (pausado agora)
+        assertEquals(HeatCell.OFF, lastWeek[2]) // terça 20: pausado, nada feito
+    }
+
+    @Test
+    fun completionRateCountsDoneDaysOfPausedHabit() {
+        // M2: a taxa de 30 dias conta os dias feitos de um hábito
+        // pausado hoje (antes o denominador e o numerador o ignoravam).
+        val h = habit().copy(paused = true)
+        val checkins = listOf(
+            checkin("h1", "2026-10-21"),
+            checkin("h1", "2026-10-20"),
+        )
+        assertEquals(1.0, completionRateLast30(listOf(h), checkins, today))
     }
 
     @Test
