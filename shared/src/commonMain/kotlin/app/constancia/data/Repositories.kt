@@ -16,6 +16,7 @@ import app.constancia.model.PauseInterval
 import app.constancia.model.ReminderSpec
 import app.constancia.model.SavedView
 import app.constancia.model.Session
+import app.constancia.model.Subtask
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskOccurrence
 import app.constancia.model.TaskProject
@@ -144,6 +145,15 @@ interface TaskRepository {
     suspend fun setViewOptions(viewKey: String, groupBy: String, sortMode: String)
     suspend fun setPriority(id: String, priority: Int)
     suspend fun setDueDate(id: String, dueDate: String?)
+
+    /**
+     * Edição completa (formulário em modo edição): regrava todos os
+     * campos editáveis da tarefa, reconcilia as subtarefas (mantém id
+     * e estado das que continuam, apaga as removidas, insere as novas)
+     * e substitui a lista de lembretes. Não toca em done/completed_at.
+     * [subtasks] é a lista final desejada (id vazio = subtarefa nova).
+     */
+    suspend fun update(id: String, task: NewTask, subtasks: List<Subtask>)
     suspend fun addSubtask(taskId: String, title: String)
     suspend fun setSubtaskDone(subtaskId: String, done: Boolean)
     suspend fun delete(id: String)
