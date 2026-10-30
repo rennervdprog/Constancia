@@ -125,6 +125,51 @@ class StreaksTest {
         assertEquals(2, currentStreak(h, done, "2026-10-18", TZ))
     }
 
+    // ---------- DAYS_OF_WEEK (A1, varredura 2026-10-30) ----------
+
+    @Test
+    fun fixedDaysStreak_ignoresNonDueWeekdays() {
+        // Seg/Qua/Sex (app: 2=seg, 4=qua, 6=sex), cumprido à risca por
+        // duas semanas; hoje é sábado (fora da agenda).
+        val h = habit(
+            frequencyType = FrequencyType.DAYS_OF_WEEK,
+            daysOfWeek = listOf(2, 4, 6),
+        )
+        val done = setOf(
+            "2026-10-14", "2026-10-16", "2026-10-19",
+            "2026-10-21", "2026-10-23",
+        )
+        assertEquals(5, currentStreak(h, done, "2026-10-24", TZ))
+        val info = habitStreakInfo(h, done, emptySet(), "2026-10-24")
+        assertEquals(5, info.count)
+        assertEquals(5, info.best)
+    }
+
+    @Test
+    fun fixedDaysStreak_breaksOnMissedDueDay() {
+        // Faltou a quarta 21/10 (dia devido, sem pulo/pausa): a
+        // sequência recomeça da sexta 23/10.
+        val h = habit(
+            frequencyType = FrequencyType.DAYS_OF_WEEK,
+            daysOfWeek = listOf(2, 4, 6),
+        )
+        val done = setOf("2026-10-14", "2026-10-16", "2026-10-19", "2026-10-23")
+        assertEquals(1, currentStreak(h, done, "2026-10-24", TZ))
+    }
+
+    @Test
+    fun weeklyStreak_mondayMorningWithZeroThisWeekKeepsPastWeeks() {
+        // M7 (varredura 2026-10-30): segunda de manhã, nenhum feito
+        // ainda nesta semana — as duas semanas anteriores batidas
+        // continuam valendo (antes mostrava 0 até o primeiro check-in).
+        val h = habit(frequencyType = FrequencyType.WEEKLY_X, weeklyTarget = 3)
+        val done = setOf(
+            "2026-10-12", "2026-10-14", "2026-10-16",
+            "2026-10-19", "2026-10-21", "2026-10-23",
+        )
+        assertEquals(2, currentStreak(h, done, "2026-10-26", TZ))
+    }
+
     @Test
     fun weeklyStreak_currentWeekInProgressDoesNotBreak() {
         val h = habit(frequencyType = FrequencyType.WEEKLY_X, weeklyTarget = 3)
