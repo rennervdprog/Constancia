@@ -176,6 +176,7 @@ internal fun TaskTemplateItemRow.toModel(): TaskTemplateItem = TaskTemplateItem(
     priority = priority.toInt(),
     session = session.toSession(),
     note = note,
+    subtaskTitles = subtasks.split("\n").filter { it.isNotBlank() },
     sortOrder = sort_order.toInt(),
 )
 
