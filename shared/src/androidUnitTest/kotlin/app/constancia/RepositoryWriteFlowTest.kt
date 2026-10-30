@@ -950,8 +950,8 @@ class RepositoryWriteFlowTest {
             0,
         )
 
-        assertEquals(9L, ConstanciaDb.Schema.version)
-        ConstanciaDb.Schema.migrate(driver, 7, ConstanciaDb.Schema.version)
+        assertEquals(10L, ConstanciaDb.Schema.version)
+        ConstanciaDb.Schema.migrate(driver, 7, 8)
 
         val q = ConstanciaDb(driver).constanciaDbQueries
         // O lembrete único da tarefa virou linha RELATIVE da lista.
