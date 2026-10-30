@@ -113,6 +113,7 @@ CREATE TABLE task_template_item(
   priority INTEGER NOT NULL DEFAULT 2,
   session TEXT NOT NULL DEFAULT 'TARDE',
   note TEXT NOT NULL DEFAULT '',
+  subtasks TEXT NOT NULL DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
@@ -348,6 +349,14 @@ UPDATE task_item SET priority = ? WHERE id = ?;
 setTaskDueDate:
 UPDATE task_item SET due_date = ?, date = ? WHERE id = ?;
 
+-- Edição completa da tarefa (formulário em modo edição): todos os
+-- campos editáveis de uma vez; done/completed_at/created_at ficam.
+updateTaskFull:
+UPDATE task_item SET title = ?, note = ?, project = ?, priority = ?,
+  due_date = ?, date = ?, session = ?, due_time = ?, repeat_rule = ?,
+  repeat_spec = ?, deadline_date = ?, duration_minutes = ?, habit_id = ?
+WHERE id = ?;
+
 -- Sincronia do vínculo tarefa<->hábito: concluir o hábito marca as tarefas
 -- vinculadas com prazo em (hoje, ontem) — e desmarcar desmarca junto.
 setLinkedTasksDone:
@@ -456,8 +465,8 @@ SELECT * FROM task_template_item ORDER BY template_id ASC, sort_order ASC, creat
 
 insertTemplateItem:
 INSERT INTO task_template_item(id, template_id, title, project, priority,
-  session, note, sort_order, created_at)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?);
+  session, note, subtasks, sort_order, created_at)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteTemplateItems:
 DELETE FROM task_template_item WHERE template_id = ?;
@@ -486,6 +495,9 @@ UPDATE subtask SET done = ? WHERE id = ?;
 
 deleteSubtasksForTask:
 DELETE FROM subtask WHERE task_id = ?;
+
+deleteSubtask:
+DELETE FROM subtask WHERE id = ?;
 
 -- Diário
 selectDiaryForDate:
