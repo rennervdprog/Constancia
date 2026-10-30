@@ -235,6 +235,71 @@ class TaskRepositoryImpl(
         ),
     )
 
+    override suspend fun update(
+        id: String,
+        task: NewTask,
+        subtasks: List<Subtask>,
+    ) {
+        val current = getById(id) ?: return
+        // Sem data nova, o "date" mantém o dia atual da tarefa (a mesma
+        // regra do setDueDate); com data, o "date" acompanha.
+        val belongsDate = task.dueDate ?: current.date
+        withContext(Dispatchers.Default) {
+            queries.updateTaskFull(
+                task.title,
+                task.note,
+                task.project.toDbValue(),
+                task.priority.toLong(),
+                task.dueDate,
+                belongsDate,
+                task.session.name,
+                task.dueTime,
+                task.repeatRule,
+                task.repeatSpec,
+                task.deadlineDate,
+                task.durationMinutes?.toLong(),
+                task.habitId,
+                id,
+            )
+            // Subtarefas: apaga as removidas e regrava a lista final
+            // preservando id e estado das que continuam (criadas de
+            // novo com o mesmo id — a ordem vem da lista).
+            val keptIds = subtasks.map { it.id }.filter { it.isNotBlank() }
+            current.subtasks.forEach { old ->
+                if (old.id !in keptIds) queries.deleteSubtask(old.id)
+            }
+            val now = Clock.System.now().toString()
+            subtasks.forEachIndexed { index, sub ->
+                if (sub.id.isNotBlank()) {
+                    queries.deleteSubtask(sub.id)
+                }
+                queries.insertSubtask(
+                    if (sub.id.isNotBlank()) sub.id else newId(),
+                    id,
+                    sub.title,
+                    if (sub.done) 1 else 0,
+                    index.toLong(),
+                    now,
+                )
+            }
+        }
+        // Lembretes: substitui a lista (alarmes antigos cancelados pelo
+        // id antes da troca, como no setTaskReminders). Sem lista
+        // explícita, o atalho legado de 1 lembrete vale igual ao add().
+        val specs = task.reminders.ifEmpty {
+            task.reminderMinutesBefore?.let {
+                listOf(ReminderSpec(ReminderType.RELATIVE, minuteOffset = it))
+            } ?: emptyList()
+        }
+        cancelReminderAlarms(id)
+        withContext(Dispatchers.Default) {
+            queries.deleteRemindersForTask(id)
+        }
+        if (specs.isNotEmpty()) insertReminderRows(id, specs)
+        syncLegacyReminderColumn(id)
+        refreshReminders(id)
+    }
+
     override suspend fun setDone(
         id: String,
         done: Boolean,
@@ -565,6 +630,7 @@ class TaskRepositoryImpl(
                 queries.insertTemplateItem(
                     newId(), id, item.title, item.project.toDbValue(),
                     item.priority.toLong(), item.session.name, item.note,
+                    item.subtaskTitles.joinToString("\n"),
                     index.toLong(), now,
                 )
             }
@@ -598,6 +664,7 @@ class TaskRepositoryImpl(
                     priority = item.priority,
                     dueDate = dueDate,
                     session = item.session,
+                    subtaskTitles = item.subtaskTitles,
                 ),
             )
         }
@@ -616,7 +683,9 @@ class TaskRepositoryImpl(
                     queries.insertTemplateItem(
                         newId(), templateId, item.title,
                         item.project.toDbValue(), item.priority.toLong(),
-                        item.session.name, item.note, index.toLong(), now,
+                        item.session.name, item.note,
+                        item.subtaskTitles.joinToString("\n"),
+                        index.toLong(), now,
                     )
                 }
             }
