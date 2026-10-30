@@ -884,9 +884,12 @@ private fun MenuButton(
 private suspend fun doExport(deps: AppDeps, today: String, csv: Boolean): String {
     return try {
         val habits = deps.habits.habitsFlow().first()
-        val checkins = deps.checkins.checkinsInRangeFlow(today.take(4) + "-01-01", today).first()
-        val tasks = deps.tasks.tasksForDateFlow(today).first()
-        val diary = deps.diary.recentFlow(365).first()
+        // A5 (varredura): "exportar meus dados" era truncado em
+        // silêncio — check-ins só do ano corrente, tarefas só de hoje
+        // e diário só de 365 dias. Agora é tudo: histórico completo.
+        val checkins = deps.checkins.checkinsInRangeFlow("0001-01-01", "9999-12-31").first()
+        val tasks = deps.tasks.allTasksFlow().first()
+        val diary = deps.diary.allEntriesFlow().first()
         val (fileName, content, mime) = if (csv) {
             Triple("constancia.csv", buildExportCsv(habits, checkins), "text/csv")
         } else {
