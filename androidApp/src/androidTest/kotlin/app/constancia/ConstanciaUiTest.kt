@@ -421,8 +421,11 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("task_name_field")
             .performTextReplacement("Tarefa corrigida")
         composeRule.onNodeWithTag("task_save").performScrollTo().performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Tarefa corrigida") }
-        org.junit.Assert.assertFalse(nodesWith("Tarefa auditada"))
+        // Espera a LISTA refletir a edição (o nome novo no campo da
+        // folha aberta não vale): nome novo presente E antigo fora.
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Tarefa corrigida") && !nodesWith("Tarefa auditada")
+        }
         shot("19_editar_tarefa")
     }
 
