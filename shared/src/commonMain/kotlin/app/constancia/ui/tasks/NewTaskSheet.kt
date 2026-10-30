@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,6 +72,7 @@ import app.constancia.model.todayYmd
 import app.constancia.ui.common.CtaButton
 import app.constancia.ui.common.SegmentedRow
 import app.constancia.ui.common.SheetSectionLabel
+import app.constancia.ui.common.TimePickerDialog
 import app.constancia.ui.common.TimeTextField
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
@@ -148,6 +150,7 @@ fun NewTaskSheet(
         )
     }
     var timeText by remember { mutableStateOf(existing?.dueTime ?: "") }
+    var showTimePicker by remember { mutableStateOf(false) }
     // Item 7: construtor de recorrência estruturada.
     var repeatOn by remember { mutableStateOf(existingRule != null) }
     var freq by remember {
@@ -404,7 +407,27 @@ fun NewTaskSheet(
                 TimeTextField(
                     value = timeText,
                     onValueChange = { v -> timeText = v },
-                    modifier = Modifier.width(110.dp).testTag("task_time_field"),
+                    modifier = Modifier.width(96.dp).testTag("task_time_field"),
+                )
+                IconButton(
+                    onClick = { showTimePicker = true },
+                    modifier = Modifier.testTag("task_time_pick"),
+                ) {
+                    Icon(
+                        Icons.Filled.Schedule,
+                        contentDescription = "Escolher no relógio",
+                        tint = scheme.primary,
+                    )
+                }
+            }
+            if (showTimePicker) {
+                TimePickerDialog(
+                    initialText = timeText,
+                    onDismiss = { showTimePicker = false },
+                    onConfirm = { picked ->
+                        timeText = picked
+                        showTimePicker = false
+                    },
                 )
             }
 
