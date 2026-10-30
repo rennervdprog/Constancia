@@ -144,7 +144,31 @@ fun upcomingGroups(
 /** Tarefas do fluxo do dia (Hoje): prazo hoje ou atrasadas, para misturar com os hábitos. */
 fun dayFlowTasks(tasks: List<TaskItem>, today: LocalDate): List<TaskItem> {
     val todayYmd = today.toYmd()
-    return tasks.filter { it.dueDate != null && it.dueDate <= todayYmd }
+    return tasks.filter { t ->
+        val due = t.dueDate ?: return@filter false
+        if (due > todayYmd) return@filter false
+        // A3 (varredura 2026-10-30): tarefa concluída em dia ANTERIOR
+        // sai do fluxo do dia — só fica a concluída no próprio dia
+        // (o usuário vê o que já fechou hoje). A convenção do dia da
+        // conclusão é completedAt.take(10), como no resto do sistema.
+        !t.done || t.completedAt?.take(10) == todayYmd
+    }
+}
+
+/**
+ * M8 (varredura 2026-10-30): destino do "Adiar p/ amanhã". Adiar leva
+ * PARA amanhã — nunca "um dia depois do prazo atual": tarefa atrasada
+ * há 3 dias continuava atrasada (há 2) com o +1 cego. Se o prazo já é
+ * amanhã ou depois, adiar empurra mais um dia a partir dele.
+ */
+fun postponeTarget(dueDate: String?, today: LocalDate): LocalDate {
+    val tomorrow = today.plus(DatePeriod(days = 1))
+    val due = dueDate?.toLocalDate()
+    return if (due != null && due >= tomorrow) {
+        due.plus(DatePeriod(days = 1))
+    } else {
+        tomorrow
+    }
 }
 
 /** Rótulo do prazo: "Hoje", "Amanhã", "Ontem" ou "seg, 12 de out". Null = sem data. */
