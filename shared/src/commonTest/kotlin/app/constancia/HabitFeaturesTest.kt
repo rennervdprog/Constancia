@@ -12,6 +12,7 @@ import app.constancia.domain.heatGrid
 import app.constancia.domain.isCycleComplete
 import app.constancia.domain.isGoalMet
 import app.constancia.domain.nextCycleWindow
+import app.constancia.domain.nextCycleWindowFor
 import app.constancia.domain.cycleStreak
 import app.constancia.domain.skippedDatesFor
 import app.constancia.model.Checkin
@@ -260,6 +261,23 @@ class HabitFeaturesTest {
         assertEquals(1, cycleStreak(c, done, emptySet(), "2026-10-07"))
         // Antes do início do ciclo, streak do ciclo é 0.
         assertEquals(0, cycleStreak(c, done, forgiven, "2026-09-30"))
+    }
+
+    @Test
+    fun nextCycleWindowForCountsDueDaysOnly() {
+        // M3 (varredura): Seg/Qua/Sex com meta de 6 dias feitos a
+        // partir de quarta 21/10 — devidos: 21, 23, 26, 28, 30 e 02/11.
+        val h = testHabit().copy(
+            frequencyType = FrequencyType.DAYS_OF_WEEK,
+            daysOfWeek = listOf(2, 4, 6),
+        )
+        val (start, end) = nextCycleWindowFor(h, "2026-10-21", 6)
+        assertEquals("2026-10-21", start)
+        assertEquals("2026-11-02", end)
+        // Hábito diário: a janela é a de dias corridos de sempre.
+        val (s2, e2) = nextCycleWindowFor(testHabit(), "2026-10-21", 21)
+        assertEquals("2026-10-21", s2)
+        assertEquals("2026-11-10", e2)
     }
 
     @Test
