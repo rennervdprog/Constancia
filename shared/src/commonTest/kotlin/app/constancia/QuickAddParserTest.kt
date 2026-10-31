@@ -4,6 +4,7 @@ import app.constancia.domain.QuickSpanKind
 import app.constancia.domain.RepeatFreq
 import app.constancia.domain.RepeatRule
 import app.constancia.domain.parseQuickAdd
+import app.constancia.model.Session
 import app.constancia.model.TaskProject
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
@@ -236,5 +237,50 @@ class QuickAddParserTest {
         assertEquals(
             90, parseQuickAdd("Treinar por 90 min", today).durationMinutes,
         )
+    }
+
+    // ---- T5: parte do dia vira sessão -------------------------------
+
+    @Test
+    fun daypartBecomesSession() {
+        val tarde = parseQuickAdd("Ligar para o cliente à tarde", today)
+        assertEquals(Session.TARDE, tarde.session)
+        assertEquals("Ligar para o cliente", tarde.title)
+
+        val manha = parseQuickAdd("Reunião amanhã de manhã", today)
+        assertEquals(Session.MANHA, manha.session)
+        assertEquals("Reunião", manha.title)
+        assertEquals(
+            today.plus(kotlinx.datetime.DatePeriod(days = 1)),
+            manha.dueDate,
+        )
+
+        val noite = parseQuickAdd("Estudar pela noite", today)
+        assertEquals(Session.NOITE, noite.session)
+        assertEquals("Estudar", noite.title)
+    }
+
+    @Test
+    fun daypartFalseFriendsDoNotMatch() {
+        // "de amanhã" é data, não "de manhã"; "boa noite" é
+        // cumprimento, não sessão.
+        val amanha = parseQuickAdd("Pagar a conta de amanhã", today)
+        assertNull(amanha.session)
+        assertEquals(
+            today.plus(kotlinx.datetime.DatePeriod(days = 1)),
+            amanha.dueDate,
+        )
+        val boaNoite = parseQuickAdd("Desejar boa noite para a vó", today)
+        assertNull(boaNoite.session)
+    }
+
+    @Test
+    fun daypartAndTimeCoexist() {
+        // Os dois são reconhecidos; quem decide a sessão final é o
+        // resolveQuickSession (o horário manda) — testado no domínio.
+        val parse = parseQuickAdd("Reunião às 15h à noite", today)
+        assertEquals("15:00", parse.dueTime)
+        assertEquals(Session.NOITE, parse.session)
+        assertEquals("Reunião", parse.title)
     }
 }
