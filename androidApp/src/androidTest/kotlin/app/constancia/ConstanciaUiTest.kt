@@ -449,6 +449,55 @@ class ConstanciaUiTest {
     }
 
     @Test
+    fun auditoriaTarefas_sessaoSegueHorario_dataPeloCalendario_eBusca() {
+        // T1+T2+O2 (auditoria de tarefas 2026-10-30): o horário move
+        // a sessão; a data sai pelo calendário; a busca filtra tudo.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_task").performClick()
+        composeRule.onNodeWithTag("task_name_field")
+            .performTextInput("Reunião com cliente")
+        // T1: digitar 15:14 — o print 37 mostra o segmento em Tarde.
+        composeRule.onNodeWithTag("task_time_field").performScrollTo()
+            .performTextInput("1514")
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            displayTextOf("task_time_field") == "15:14"
+        }
+        composeRule.onNodeWithTag("task_session_1").performScrollTo()
+        shot("37_form_sessao_tarde")
+        // T2: "Escolher data…" abre o calendário; OK confirma a data
+        // inicial (hoje) e o chip de data personalizada aparece.
+        composeRule.onAllNodesWithText("Escolher data…")[0]
+            .performScrollTo().performClick()
+        composeRule.onNodeWithText("OK").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("data atual da tarefa")
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("task_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Reunião com cliente")
+        }
+        // O2: a busca acha a tarefa criada; termo sem par mostra o aviso.
+        composeRule.onNodeWithText("Buscar").performScrollTo().performClick()
+        composeRule.onNodeWithTag("task_search_field").performScrollTo()
+            .performTextInput("Reunião")
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Resultados da busca")
+        }
+        composeRule.onNodeWithText("Reunião com cliente")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("task_search_field")
+            .performTextReplacement("zzz inexistente")
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText(
+                "Nenhuma tarefa encontrada para a busca.",
+            ).fetchSemanticsNodes().isNotEmpty()
+        }
+        shot("38_busca_sem_resultado")
+    }
+
+    @Test
     fun auditoria_horarioInvalidoNoFormulario_mostraErroENaoSalva() {
         // Auditoria 2026-10-30 (bug nº 1): "29:61" salvava cru; agora
         // o formulário valida no salvar, mostra o erro e não cria.
