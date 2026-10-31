@@ -7,6 +7,7 @@ import app.constancia.domain.parseQuickAdd
 import app.constancia.model.Session
 import app.constancia.model.TaskProject
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
