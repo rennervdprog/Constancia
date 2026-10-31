@@ -21,7 +21,7 @@ import kotlinx.datetime.plus
  * - em sobreposição, ganha o trecho que começa antes (e o mais longo);
  * - trechos ignorados pelo usuário (desfazer) voltam ao título.
  */
-enum class QuickSpanKind { DATE, TIME, PRIORITY, PROJECT, REPEAT, REMINDER, DURATION }
+enum class QuickSpanKind { DATE, TIME, PRIORITY, PROJECT, REPEAT, REMINDER, DURATION, SESSION }
 
 data class QuickSpan(
     val start: Int,
@@ -45,10 +45,13 @@ data class QuickAddParse(
     // R3.3 (Fase C): "!30m" vira lembrete; "por 30min" vira duração.
     val reminderMinutes: Int? = null,
     val durationMinutes: Int? = null,
+    // T5 (auditoria de tarefas 2026-10-30): "à tarde", "de manhã" e
+    // "à noite" viram a sessão da tarefa quando não há horário.
+    val session: app.constancia.model.Session? = null,
 )
 
 /** Remove acentos e baixa a caixa, mantendo os índices 1:1. */
-private fun normalizePt(text: String): String {
+internal fun normalizePt(text: String): String {
     val sb = StringBuilder(text.length)
     for (c in text) {
         sb.append(
@@ -110,6 +113,7 @@ private data class Candidate(
     val repeat: RepeatRule? = null,
     val reminderMinutes: Int? = null,
     val durationMinutes: Int? = null,
+    val session: app.constancia.model.Session? = null,
 )
 
 /**
@@ -323,6 +327,35 @@ fun parseQuickAdd(
         )
     }
 
+    // ---------------- Parte do dia (T5) --------------------------------
+    // "de manhã", "à tarde", "à noite" viram a sessão. As fronteiras
+    // de palavra protegem os falsos amigos: "de amanhã" não casa
+    // "de manhã" e o "a" de "boa noite" não tem fronteira antes dele.
+    val daypartPatterns = listOf(
+        Regex("""\b(?:de|pela)\s+manha\b""") to
+            app.constancia.model.Session.MANHA,
+        Regex("""\b(?:a|pela)\s+tarde\b""") to
+            app.constancia.model.Session.TARDE,
+        Regex("""\b(?:a|pela|de)\s+noite\b""") to
+            app.constancia.model.Session.NOITE,
+    )
+    for ((regex, daypart) in daypartPatterns) {
+        for (m in regex.findAll(norm)) {
+            add(
+                Candidate(
+                    m.range.first, m.range.last + 1,
+                    QuickSpanKind.SESSION,
+                    label = when (daypart) {
+                        app.constancia.model.Session.MANHA -> "Manhã"
+                        app.constancia.model.Session.TARDE -> "Tarde"
+                        app.constancia.model.Session.NOITE -> "Noite"
+                    },
+                    session = daypart,
+                ),
+            )
+        }
+    }
+
     // ---------------- Prioridade --------------------------------------
     for (m in Regex("""\bp([1-3])\b""").findAll(norm)) {
         val prio = m.groupValues[1].toIntOrNull() ?: continue
@@ -456,6 +489,9 @@ fun parseQuickAdd(
         durationMinutes = accepted.firstOrNull {
             it.kind == QuickSpanKind.DURATION
         }?.durationMinutes,
+        session = accepted.firstOrNull {
+            it.kind == QuickSpanKind.SESSION
+        }?.session,
     )
 }
 
@@ -496,6 +532,7 @@ fun quickSpanSummary(span: QuickSpan): String = when (span.kind) {
     QuickSpanKind.REPEAT -> span.label
     QuickSpanKind.REMINDER -> span.label
     QuickSpanKind.DURATION -> span.label
+    QuickSpanKind.SESSION -> span.label
 }
 
 /** yyyy-MM-dd da data resolvida (atalho para a UI/testes). */
