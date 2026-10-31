@@ -12,9 +12,12 @@ import app.constancia.domain.overdueTasks
 import app.constancia.domain.prioCode
 import app.constancia.domain.projectPendingCount
 import app.constancia.domain.projectTasks
+import app.constancia.domain.resolveQuickSession
+import app.constancia.domain.sessionForTimeText
 import app.constancia.domain.sortByPrio
 import app.constancia.domain.subtaskProgress
 import app.constancia.domain.taskCounts
+import app.constancia.domain.taskMatchesQuery
 import app.constancia.domain.todayTasks
 import app.constancia.domain.upcomingGroupTitle
 import app.constancia.domain.upcomingGroups
@@ -25,6 +28,7 @@ import app.constancia.model.TaskProject
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -223,5 +227,65 @@ class TaskLogicTest {
         assertEquals(2, progress?.done)
         assertEquals(3, progress?.total)
         assertEquals(66, progress?.pct)
+    }
+
+    // ---- T1/T5/O2 (auditoria de tarefas 2026-10-30) ----------------
+
+    @Test
+    fun sessionForTimeTextDerivesFromValidTime() {
+        assertEquals(Session.MANHA, sessionForTimeText("07:30"))
+        assertEquals(Session.MANHA, sessionForTimeText("11:59"))
+        // O caso do print do Renner: 15:14 é Tarde, não Manhã.
+        assertEquals(Session.TARDE, sessionForTimeText("15:14"))
+        assertEquals(Session.TARDE, sessionForTimeText("12:00"))
+        assertEquals(Session.NOITE, sessionForTimeText("18:00"))
+        assertEquals(Session.NOITE, sessionForTimeText("23:59"))
+        assertNull(sessionForTimeText(null))
+        assertNull(sessionForTimeText(""))
+        assertNull(sessionForTimeText("29:61"))
+        assertNull(sessionForTimeText("15"))
+    }
+
+    @Test
+    fun resolveQuickSessionTimeBeatsDaypartBeatsNow() {
+        // Horário reconhecido manda sobre a parte do dia dita.
+        assertEquals(
+            Session.TARDE,
+            resolveQuickSession("15:00", Session.NOITE, nowHour = 9),
+        )
+        // Sem horário, a parte do dia do texto vale.
+        assertEquals(
+            Session.NOITE,
+            resolveQuickSession(null, Session.NOITE, nowHour = 9),
+        )
+        // Sem nada, a sessão da hora atual.
+        assertEquals(
+            Session.MANHA,
+            resolveQuickSession(null, null, nowHour = 9),
+        )
+        assertEquals(
+            Session.NOITE,
+            resolveQuickSession(null, null, nowHour = 21),
+        )
+    }
+
+    @Test
+    fun taskMatchesQueryIgnoresCaseAndAccents() {
+        val t = TaskItem(
+            id = "x",
+            title = "Reunião com o cliente",
+            dueTime = null,
+            done = false,
+            date = "2026-10-20",
+            note = "Levar o contrato de manutenção",
+        )
+        assertTrue(taskMatchesQuery(t, "reuniao"))
+        assertTrue(taskMatchesQuery(t, "CLIENTE"))
+        // A anotação também é buscável.
+        assertTrue(taskMatchesQuery(t, "manutencao"))
+        assertTrue(taskMatchesQuery(t, "contrato"))
+        assertFalse(taskMatchesQuery(t, "dentista"))
+        assertFalse(taskMatchesQuery(t, ""))
+        assertFalse(taskMatchesQuery(t, "   "))
     }
 }
