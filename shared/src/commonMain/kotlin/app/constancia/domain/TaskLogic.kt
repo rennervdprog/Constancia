@@ -199,6 +199,43 @@ fun sessionForHour(hour: Int): app.constancia.model.Session = when {
     else -> app.constancia.model.Session.NOITE
 }
 
+/**
+ * T1 (auditoria de tarefas 2026-10-30): a sessão derivada de um
+ * horário — se o texto é um horário completo e válido, a sessão é
+ * a daquela hora; senão, null e quem chama decide o padrão. É a
+ * regra que reconcilia Sessão × Horário: antes os dois divergiam
+ * em silêncio (tarefa das 15:14 salva na Manhã, e a Hoje agrupa
+ * pela sessão — ela aparecia sob "Manhã · até 12h").
+ */
+fun sessionForTimeText(timeText: String?): app.constancia.model.Session? {
+    val normalized = normalizedTimeOrNull(timeText) ?: return null
+    val hour = normalized.substring(0, 2).toIntOrNull() ?: return null
+    return sessionForHour(hour)
+}
+
+/**
+ * Sessão final de uma tarefa da captura rápida (T1 + T5): o
+ * horário reconhecido manda; sem horário, vale a parte do dia
+ * dita no texto; sem nenhum dos dois, a sessão da hora atual.
+ */
+fun resolveQuickSession(
+    dueTime: String?,
+    daypart: app.constancia.model.Session?,
+    nowHour: Int,
+): app.constancia.model.Session =
+    sessionForTimeText(dueTime) ?: daypart ?: sessionForHour(nowHour)
+
+/**
+ * O2 (busca de tarefas): título ou anotação contém o texto da
+ * busca, sem distinção de caixa nem de acentos.
+ */
+fun taskMatchesQuery(task: TaskItem, query: String): Boolean {
+    val q = normalizePt(query.trim())
+    if (q.isEmpty()) return false
+    return normalizePt(task.title).contains(q) ||
+        normalizePt(task.note).contains(q)
+}
+
 /** Título de um grupo da visão Próximos: "Amanhã · 21 de out" / "Quinta · 22 de out". */
 fun upcomingGroupTitle(day: LocalDate, today: LocalDate): String {
     val name = if (day == today.plus(DatePeriod(days = 1))) {
