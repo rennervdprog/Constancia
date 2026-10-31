@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -69,7 +70,9 @@ import app.constancia.domain.overdueTasks
 import app.constancia.domain.repeatLabel
 import app.constancia.domain.savedViewTasks
 import app.constancia.domain.sortModeOf
+import app.constancia.domain.sortSmart
 import app.constancia.domain.taskCounts
+import app.constancia.domain.taskMatchesQuery
 import app.constancia.domain.todayTasks
 import app.constancia.domain.upcomingGroupTitle
 import app.constancia.domain.upcomingGroups
@@ -121,6 +124,15 @@ fun TasksScreen(
     var view by remember { mutableStateOf(TaskView.HOJE) }
     var expandedId by remember { mutableStateOf<String?>(null) }
     var quickText by remember { mutableStateOf("") }
+    // O2 (auditoria de tarefas): busca global por título/anotação.
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    val searching = searchOpen && searchQuery.isNotBlank()
+    val searchResults = if (searching) {
+        sortSmart(tasks.filter { taskMatchesQuery(it, searchQuery) }, todayDate)
+    } else {
+        emptyList()
+    }
     // Item 4: ordenação/agrupamento das listas.
     var sortMode by remember { mutableStateOf(TaskSortMode.SMART) }
     var groupBy by remember { mutableStateOf(TaskGroupBy.NONE) }
@@ -220,11 +232,15 @@ fun TasksScreen(
                     title = title,
                     project = parse.project ?: TaskProject.ENTRADA,
                     priority = parse.priority ?: 2,
-                    // Sessão = a da hora atual, como no formulário
-                    // (auditoria 2026-10-30: a captura caía sempre
-                    // na Tarde pelo padrão do modelo).
-                    session = app.constancia.domain.sessionForHour(
-                        kotlinx.datetime.Clock.System.now()
+                    // Sessão (T1/T5, auditoria de tarefas): o
+                    // horário reconhecido manda; sem horário, a
+                    // parte do dia do texto; sem nada, a hora atual.
+                    // (Antes era sempre a hora atual — "amanhã às
+                    // 15h" digitado de manhã caía na Manhã.)
+                    session = app.constancia.domain.resolveQuickSession(
+                        dueTime = parse.dueTime,
+                        daypart = parse.session,
+                        nowHour = kotlinx.datetime.Clock.System.now()
                             .toLocalDateTime(
                                 kotlinx.datetime.TimeZone.currentSystemDefault(),
                             ).hour,
@@ -441,10 +457,56 @@ fun TasksScreen(
                     label = "Modelos de lista",
                     onClick = { showTemplates = true },
                 )
+                OptionChip(
+                    label = if (searchOpen) "Fechar busca" else "Buscar",
+                    onClick = {
+                        searchOpen = !searchOpen
+                        if (!searchOpen) searchQuery = ""
+                    },
+                )
             }
         }
 
-        if (activeView != null) {
+        // O2: campo de busca (resultados substituem a visão atual
+        // enquanto houver texto — a busca é global, todas as listas).
+        if (searchOpen) {
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Buscar por título ou anotação…") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .testTag("task_search_field"),
+                    shape = RoundedCornerShape(16.dp),
+                )
+            }
+        }
+
+        if (searching) {
+            item {
+                GroupLabel(
+                    label = "Resultados da busca",
+                    count = searchResults.size,
+                )
+            }
+            if (searchResults.isEmpty()) {
+                item {
+                    EmptyNote("Nenhuma tarefa encontrada para a busca.")
+                }
+            } else {
+                item {
+                    RowsCard {
+                        searchResults.forEachIndexed { index, task ->
+                            if (index > 0) RowDivider()
+                            rowFor(task)
+                        }
+                    }
+                }
+            }
+        } else if (activeView != null) {
             val viewTasks = applySort(
                 savedViewTasks(tasks, activeView, todayDate), sortMode, todayDate,
             )
