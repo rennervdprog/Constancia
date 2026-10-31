@@ -61,6 +61,7 @@ import app.constancia.domain.encodeRepeatSpec
 import app.constancia.domain.normalizedTimeOrNull
 import app.constancia.domain.repeatLabel
 import app.constancia.domain.sessionForHour
+import app.constancia.domain.sessionForTimeText
 import app.constancia.model.NewTask
 import app.constancia.model.Session
 import app.constancia.model.Subtask
@@ -69,6 +70,7 @@ import app.constancia.model.TaskProject
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
 import app.constancia.model.todayYmd
+import app.constancia.ui.common.ConstanciaDatePickerDialog
 import app.constancia.ui.common.CtaButton
 import app.constancia.ui.common.SegmentedRow
 import app.constancia.ui.common.SheetSectionLabel
@@ -151,6 +153,9 @@ fun NewTaskSheet(
     }
     var timeText by remember { mutableStateOf(existing?.dueTime ?: "") }
     var showTimePicker by remember { mutableStateOf(false) }
+    // T2: seletores de data (calendário) do Quando e do Prazo final.
+    var showDuePicker by remember { mutableStateOf(false) }
+    var showDeadlinePicker by remember { mutableStateOf(false) }
     // Item 7: construtor de recorrência estruturada.
     var repeatOn by remember { mutableStateOf(existingRule != null) }
     var freq by remember {
@@ -332,7 +337,9 @@ fun NewTaskSheet(
             SheetSectionLabel("O que precisa ser feito?")
             OutlinedTextField(
                 value = name,
-                onValueChange = { if (it.length <= 60) name = it },
+                // T4: teto de 60 cortava títulos reais; a lista
+                // trunca na exibição, o campo não precisa apertar.
+                onValueChange = { if (it.length <= 200) name = it },
                 placeholder = { Text("Ex.: Ligar para o cliente") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("task_name_field"),
@@ -375,10 +382,14 @@ fun NewTaskSheet(
                 tagPrefix = "task_due",
             )
             if (dueChoice == 3 && customDue != null) {
-                // Edição de tarefa com data fora das opções rápidas:
-                // a data atual fica visível e vale até trocar acima.
+                // Data fora das opções rápidas (escolhida no
+                // calendário ou vinda da edição): o chip mostra a
+                // data e tocar nele reabre o seletor (T2 — antes o
+                // chip era só exibição e a data não tinha troca).
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    PickChip(dueDateLabel(customDue!!, todayDate), true) {}
+                    PickChip(dueDateLabel(customDue!!, todayDate), true) {
+                        showDuePicker = true
+                    }
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "data atual da tarefa",
@@ -386,13 +397,31 @@ fun NewTaskSheet(
                         color = scheme.onSurfaceVariant,
                     )
                 }
+            } else {
+                // T2: qualquer outra data pelo calendário.
+                Row {
+                    PickChip("Escolher data…", false) {
+                        showDuePicker = true
+                    }
+                }
             }
 
             SheetSectionLabel("Sessão e horário")
             SegmentedRow(
                 options = listOf("Manhã", "Tarde", "Noite"),
                 selectedIndex = session.ordinal,
-                onSelect = { session = Session.entries[it] },
+                onSelect = { idx ->
+                    val chosen = Session.entries[idx]
+                    session = chosen
+                    // T1: sessão escolhida à mão com um horário de
+                    // OUTRA faixa no campo — o horário sai. A troca
+                    // é visível (o campo esvazia), nunca uma
+                    // divergência silenciosa como a de antes.
+                    val timeSession = sessionForTimeText(timeText)
+                    if (timeSession != null && timeSession != chosen) {
+                        timeText = ""
+                    }
+                },
                 tagPrefix = "task_session",
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -406,7 +435,12 @@ fun NewTaskSheet(
                 }
                 TimeTextField(
                     value = timeText,
-                    onValueChange = { v -> timeText = v },
+                    onValueChange = { v ->
+                        timeText = v
+                        // T1: horário válido digitado move a sessão
+                        // junto (15:14 não fica na "Manhã").
+                        sessionForTimeText(v)?.let { session = it }
+                    },
                     modifier = Modifier.width(96.dp).testTag("task_time_field"),
                 )
                 IconButton(
@@ -426,7 +460,31 @@ fun NewTaskSheet(
                     onDismiss = { showTimePicker = false },
                     onConfirm = { picked ->
                         timeText = picked
+                        // T1: idem — o relógio também move a sessão.
+                        sessionForTimeText(picked)?.let { session = it }
                         showTimePicker = false
+                    },
+                )
+            }
+            if (showDuePicker) {
+                ConstanciaDatePickerDialog(
+                    initial = customDue ?: todayDate,
+                    onDismiss = { showDuePicker = false },
+                    onConfirm = { picked ->
+                        customDue = picked
+                        dueChoice = 3
+                        showDuePicker = false
+                    },
+                )
+            }
+            if (showDeadlinePicker) {
+                ConstanciaDatePickerDialog(
+                    initial = customDeadline ?: anchorDate,
+                    onDismiss = { showDeadlinePicker = false },
+                    onConfirm = { picked ->
+                        customDeadline = picked
+                        deadlineChoice = 5
+                        showDeadlinePicker = false
                     },
                 )
             }
@@ -634,14 +692,24 @@ fun NewTaskSheet(
                 allowWrap = true,
             )
             if (deadlineChoice == 5 && customDeadline != null) {
+                // T2: idem ao Quando — tocar no chip reabre o seletor.
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    PickChip(dueDateLabel(customDeadline!!, todayDate), true) {}
+                    PickChip(dueDateLabel(customDeadline!!, todayDate), true) {
+                        showDeadlinePicker = true
+                    }
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "prazo atual da tarefa",
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
+                }
+            } else {
+                // T2: prazo em qualquer data, pelo calendário.
+                Row {
+                    PickChip("Escolher data…", false) {
+                        showDeadlinePicker = true
+                    }
                 }
             }
 
@@ -790,9 +858,13 @@ fun NewTaskSheet(
             SheetSectionLabel("Anotação")
             OutlinedTextField(
                 value = note,
-                onValueChange = { if (it.length <= 90) note = it },
-                placeholder = { Text("Detalhe rápido (opcional)") },
-                singleLine = true,
+                // T3: 1 linha e 90 caracteres não cabiam uma
+                // descrição de verdade — multilinha, teto de 500.
+                onValueChange = { if (it.length <= 500) note = it },
+                placeholder = { Text("Detalhes, links, contexto… (opcional)") },
+                singleLine = false,
+                minLines = 2,
+                maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
             )
@@ -855,13 +927,18 @@ fun NewTaskSheet(
                         return@CtaButton
                     }
                     errorMsg = null
+                    // T1 (trava final): com horário válido, a sessão
+                    // salva é SEMPRE a derivada dele — mesmo que um
+                    // caminho de UI tenha deixado os dois fora de
+                    // sincronia, o banco nunca grava a divergência.
+                    val finalSession = sessionForTimeText(time) ?: session
                     val newTask = NewTask(
                         title = title,
                         note = note.trim(),
                         project = project,
                         priority = priority,
                         dueDate = dueDate,
-                        session = session,
+                        session = finalSession,
                         dueTime = time,
                         repeatRule = rule?.let { repeatLabel(it) } ?: "",
                         repeatSpec = rule?.let {
