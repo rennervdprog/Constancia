@@ -142,7 +142,7 @@ interface TaskRepository {
     /**
      * R8.1 (Fase B): opções de vista (agrupar/ordenar) persistidas da
      * visão [viewKey] ('view:HOJE', 'saved:<id>' etc.); sem registro,
-     * devolve os padrões (groupBy "none", sortMode "SMART").
+     * devolve os padrões (groupBy "session", sortMode "SMART").
      */
     fun viewOptionsFlow(viewKey: String): Flow<TaskViewOptions>
     /** R8.1 (Fase B): grava as opções de vista da visão [viewKey]. */
