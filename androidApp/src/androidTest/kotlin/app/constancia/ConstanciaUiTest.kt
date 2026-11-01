@@ -1139,6 +1139,41 @@ class ConstanciaUiTest {
         composeRule.waitForIdle()
         shot("41_fim_da_lista")
     }
+
+    @Test
+    fun roteiro29_quantidade_circuloCompletaEPlusNaoEstoura() {
+        // Regressão (relato do Renner, 2026-11-01): na Hoje, o
+        // círculo do hábito de quantidade usava o toggle binário —
+        // apagava o progresso parcial e, sem registro, criava um
+        // check-in de 1.0; e o + do stepper não tinha teto (passo
+        // 250 numa meta de 8 virava "250/8" e subindo).
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_habit").performClick()
+        composeRule.onNodeWithTag("habit_name_field").performTextInput("Água")
+        composeRule.onNodeWithText("Quantidade").performClick()
+        composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
+        awaitText("0/8 copos", "home_list")
+        composeRule.onNodeWithTag("qty_inc").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("1/8 copos") }
+        // Sobe a lista p/ o check sair da zona da barra flutuante
+        // (padrão do roteiro checkinNoCirculo) e toca no círculo:
+        // em quantidade, ele COMPLETA a meta (não apaga o parcial).
+        device.swipe(160, 470, 160, 360, 12)
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("habit_check")[0].performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("8/8 copos") }
+        shot("42_quantidade_completa")
+        // O + no teto não estoura a meta.
+        composeRule.onNodeWithTag("qty_inc").performClick()
+        composeRule.waitForIdle()
+        org.junit.Assert.assertTrue(nodesWith("8/8 copos"))
+        org.junit.Assert.assertFalse(nodesWith("9/8 copos"))
+        // Tocar no círculo de novo limpa o registro do dia.
+        composeRule.onAllNodesWithTag("habit_check")[0].performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("0/8 copos") }
+        shot("43_quantidade_limpa")
+    }
 }
 
 /**
