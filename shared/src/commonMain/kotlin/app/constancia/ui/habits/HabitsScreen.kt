@@ -5,7 +5,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,11 +30,18 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Loop
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -51,6 +62,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
@@ -65,6 +77,7 @@ import app.constancia.domain.cycleStreak
 import app.constancia.domain.doneDatesFor
 import app.constancia.domain.donePairs
 import app.constancia.domain.heatGrid
+import app.constancia.domain.heatGridStart
 import app.constancia.domain.isDueOn
 import app.constancia.domain.skippedDatesFor
 import app.constancia.model.Checkin
@@ -89,7 +102,9 @@ import app.constancia.ui.home.NewHabitSheet
 import app.constancia.ui.common.habitIcon
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 /** Rótulo da frequência a partir dos campos do hábito. */
 fun frequencyLabel(habit: Habit): String = when (habit.frequencyType) {
@@ -263,7 +278,8 @@ fun HabitsScreen(
                     maxLines = 1,
                 )
                 Text(
-                    text = activeCount.toString() + " ativos · mapa de 18 semanas",
+                    text = activeCount.toString() +
+                        if (activeCount == 1) " ativo" else " ativos",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -288,6 +304,7 @@ fun HabitsScreen(
                     status = status,
                     grid = heatGrid(habit, habitCheckins, todayDate),
                     todayRow = todayDate.isoDayNumberCompat() % 7,
+                    todayDate = todayDate,
                     dueToday = isDueOn(
                         habit,
                         todayDate,
@@ -540,6 +557,7 @@ private fun HabitCard(
     status: HabitStatus?,
     grid: List<List<HeatCell>>,
     todayRow: Int,
+    todayDate: LocalDate,
     dueToday: Boolean,
     habitCheckins: List<Checkin>,
     cycles: List<HabitCycle>,
@@ -570,6 +588,13 @@ private fun HabitCard(
     // existiam no repositorio sem nenhuma entrada na interface).
     var menuOpen by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    // Redesenho 2026-11-01: mapa e ações moram nos detalhes do cartão.
+    var expanded by remember(habit.id) { mutableStateOf(false) }
+    // R13.2 (Fase D): desde quando a sequência vem + o recorde —
+    // calculado aqui porque o rodapé do cartão o exibe.
+    val caption = status?.streakInfo?.let {
+        app.constancia.domain.streakCaption(it)
+    }
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -596,6 +621,8 @@ private fun HabitCard(
                 Text(
                     habit.name,
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = 15.5.sp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -603,18 +630,10 @@ private fun HabitCard(
                         restDaysSuffix(habit),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = "Editar",
-                style = MaterialTheme.typography.labelLarge,
-                color = scheme.primary,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onEdit)
-                    .testTag("habit_edit_" + habit.id)
-                    .padding(8.dp),
-            )
             if (!habit.paused && (dueToday || doneToday)) {
                 Box(
                     modifier = Modifier.size(38.dp)
@@ -671,6 +690,13 @@ private fun HabitCard(
                     expanded = menuOpen,
                     onDismissRequest = { menuOpen = false },
                 ) {
+                    // Redesenho 2026-11-01: Editar mora no menu (o
+                    // cabeçalho do cartão respirou).
+                    DropdownMenuItem(
+                        text = { Text("Editar") },
+                        modifier = Modifier.testTag("habit_edit_" + habit.id),
+                        onClick = { menuOpen = false; onEdit() },
+                    )
                     DropdownMenuItem(
                         text = {
                             Text(if (habit.paused) "Retomar" else "Pausar")
@@ -800,131 +826,92 @@ private fun HabitCard(
                         .background(habitColor, RoundedCornerShape(99.dp)),
                 )
             }
-            // R13.2 (Fase D): desde quando a sequência vem + o recorde.
-            val caption = status?.streakInfo?.let {
-                app.constancia.domain.streakCaption(it)
-            }
-            if (caption != null) {
-                Spacer(Modifier.height(7.dp))
-                Text(
-                    text = caption,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 11.5.sp,
-                    ),
-                    color = scheme.onSurfaceVariant,
+            // A legenda da sequência (desde/recorde) desceu para o
+            // rodapé do cartão no redesenho 2026-11-01.
+        }
+
+        // Redesenho 2026-11-01: na frente do cartão, a semana atual
+        // em bolinhas (a última coluna da grade) — leitura num olhar.
+        // O mapa completo desceu para os detalhes.
+        if (!habit.paused) {
+            grid.lastOrNull()?.let { currentWeek ->
+                Spacer(Modifier.height(13.dp))
+                WeekStrip(
+                    week = currentWeek,
+                    todayRow = todayRow,
+                    habitColor = habitColor,
                 )
             }
         }
 
-        // Mapa de calor: 18 colunas (semanas) × 7 linhas (dom..sáb),
-        // células flexíveis que preenchem a largura do cartão.
-        Spacer(Modifier.height(14.dp))
+        // Rodapé do cartão: legenda da sequência + abre/fecha detalhes.
         Row(
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            grid.forEachIndexed { colIdx, week ->
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    week.forEachIndexed { rowIdx, cell ->
-                        val color = when (cell) {
-                            // Cor do próprio hábito (semântica), não a da marca.
-                            // Parcial = progresso sem bater a meta (mais
-                            // claro); pulado = registro neutro bem claro.
-                            HeatCell.DONE -> habitColor
-                            HeatCell.PARTIAL -> habitColor.copy(alpha = 0.45f)
-                            HeatCell.SKIPPED -> habitColor.copy(alpha = 0.18f)
-                            HeatCell.MISSED -> extra.heatEmpty
-                            HeatCell.OFF -> extra.heatEmpty
-                            HeatCell.FUTURE -> Color.Transparent
-                        }
-                        val isTodayCell = colIdx == grid.lastIndex && rowIdx == todayRow
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(color)
-                                .then(
-                                    if (isTodayCell) {
-                                        Modifier.border(
-                                            2.dp, scheme.onSurface,
-                                            RoundedCornerShape(3.dp),
-                                        )
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
-                        )
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "há 18 semanas",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold,
+                text = caption ?: "",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = 11.5.sp,
                 ),
                 color = scheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
-            Text(
-                text = "hoje",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 10.5.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-                color = scheme.onSurfaceVariant,
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { expanded = !expanded }
+                    .testTag("habit_details_" + habit.id)
+                    .padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (expanded) "Recolher" else "Detalhes",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = scheme.primary,
+                )
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess
+                    else Icons.Filled.ExpandMore,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        if (expanded) {
+            Spacer(Modifier.height(10.dp))
+            HorizontalDivider(color = extra.lineSoft)
+            HeatmapBlock(
+                grid = grid,
+                todayRow = todayRow,
+                todayDate = todayDate,
+                habitColor = habitColor,
             )
         }
 
-        if (!habit.paused) {
-            // Item 4: pular hoje (registro que protege a sequência).
+        if (expanded && !habit.paused) {
+            // Item 4: pular hoje (registro que protege a sequência) —
+            // no redesenho, vira a primeira linha de ação dos detalhes.
             val skippedToday = status?.todayCheckin?.status == CheckinStatus.SKIPPED
             if (dueToday || doneToday || skippedToday) {
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (skippedToday) {
-                        Text(
-                            text = "Pulado hoje — sequência protegida",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                            ),
-                            color = scheme.primary,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = "Desfazer",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = scheme.primary,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable(onClick = onUnskip)
-                                .padding(4.dp),
-                        )
-                    } else if (!doneToday) {
-                        Text(
-                            text = "Não vai dar hoje?",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = scheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = "Pular hoje",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = scheme.primary,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable(onClick = onSkip)
-                                .padding(4.dp),
-                        )
-                    }
+                if (skippedToday) {
+                    DetailActionRow(
+                        icon = Icons.Filled.SkipNext,
+                        title = "Pulado hoje",
+                        value = "sequência protegida",
+                        actionText = "Desfazer",
+                        onAction = onUnskip,
+                    )
+                } else if (!doneToday) {
+                    DetailActionRow(
+                        icon = Icons.Filled.SkipNext,
+                        title = "Não vai dar hoje?",
+                        value = "pular protege a sequência",
+                        actionText = "Pular hoje",
+                        onAction = onSkip,
+                    )
                 }
             }
 
@@ -975,6 +962,340 @@ private fun HabitCard(
                 }
             },
         )
+    }
+}
+
+private val WEEK_LETTERS = listOf("D", "S", "T", "Q", "Q", "S", "S")
+
+private val MONTH_ABBR = listOf(
+    "jan", "fev", "mar", "abr", "mai", "jun",
+    "jul", "ago", "set", "out", "nov", "dez",
+)
+
+/**
+ * Redesenho 2026-11-01: a semana atual do hábito em 7 bolinhas com a
+ * letra do dia — feito = cor cheia com ✓, parcial/pulado = tons da
+ * cor, hoje = anel da marca por cima do estado do dia.
+ */
+@Composable
+private fun WeekStrip(
+    week: List<HeatCell>,
+    todayRow: Int,
+    habitColor: Color,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Row(modifier = Modifier.fillMaxWidth()) {
+        week.forEachIndexed { rowIdx, cell ->
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = WEEK_LETTERS.getOrElse(rowIdx) { "" },
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = scheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                val bg = when (cell) {
+                    HeatCell.DONE -> habitColor
+                    HeatCell.PARTIAL -> habitColor.copy(alpha = 0.45f)
+                    HeatCell.SKIPPED -> habitColor.copy(alpha = 0.18f)
+                    HeatCell.MISSED -> extra.heatEmpty
+                    HeatCell.OFF -> extra.heatEmpty.copy(alpha = 0.45f)
+                    HeatCell.FUTURE -> Color.Transparent
+                }
+                Box(
+                    modifier = Modifier.size(26.dp)
+                        .clip(CircleShape)
+                        .background(bg)
+                        .then(
+                            when {
+                                rowIdx == todayRow -> Modifier.border(
+                                    2.dp, scheme.primary, CircleShape,
+                                )
+                                cell == HeatCell.FUTURE -> Modifier.border(
+                                    1.5.dp, extra.lineSoft, CircleShape,
+                                )
+                                else -> Modifier
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (cell == HeatCell.DONE) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(14.dp),
+                        )
+                    } else if (cell == HeatCell.SKIPPED) {
+                        Text(
+                            text = "–",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = habitColor,
+                        )
+                    }
+                }
+            }
+        }
+    }
+    Row(modifier = Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Text(
+            text = "semana atual",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 10.5.sp,
+            ),
+            color = scheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "hoje · anel roxo",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 10.5.sp,
+            ),
+            color = scheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Redesenho 2026-11-01: o mapa de calor legível — meses no topo,
+ * letras dos dias na lateral, legenda dos tons embaixo e "hoje" com
+ * o anel da marca (a borda escura antiga parecia defeito).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun HeatmapBlock(
+    grid: List<List<HeatCell>>,
+    todayRow: Int,
+    todayDate: LocalDate,
+    habitColor: Color,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Spacer(Modifier.height(12.dp))
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "Seu histórico",
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = "últimas " + grid.size.toString() + " semanas",
+            style = MaterialTheme.typography.labelSmall,
+            color = scheme.onSurfaceVariant,
+        )
+    }
+    if (grid.isEmpty()) return
+    val cols = grid.size
+    val start = heatGridStart(todayDate, cols)
+    // Mês de cada coluna (pelo domingo da semana dela): o rótulo
+    // entra na primeira coluna de cada mês.
+    val monthCols = (0 until cols).map { col ->
+        start.plus(DatePeriod(days = col * 7)).monthNumber
+    }
+    val gap = 3.dp
+    val labelW = 14.dp
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    ) {
+        val cell = (maxWidth - labelW - gap - gap * (cols - 1)) / cols
+        Column {
+            Box(modifier = Modifier.fillMaxWidth().height(13.dp)) {
+                monthCols.forEachIndexed { col, month ->
+                    if (col == 0 || month != monthCols[col - 1]) {
+                        Text(
+                            text = MONTH_ABBR[month - 1],
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = scheme.onSurfaceVariant,
+                            modifier = Modifier.offset(
+                                x = labelW + gap + (cell + gap) * col,
+                            ),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(3.dp))
+            (0..6).forEach { rowIdx ->
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(top = if (rowIdx == 0) 0.dp else gap),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier.width(labelW).height(cell),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = WEEK_LETTERS[rowIdx],
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                            ),
+                            color = scheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(gap))
+                    grid.forEachIndexed { colIdx, week ->
+                        val cellState = week[rowIdx]
+                        val color = when (cellState) {
+                            // Cor do próprio hábito (semântica), não a
+                            // da marca. Parcial = progresso sem bater
+                            // a meta; pulado = tom bem claro.
+                            HeatCell.DONE -> habitColor
+                            HeatCell.PARTIAL -> habitColor.copy(alpha = 0.45f)
+                            HeatCell.SKIPPED -> habitColor.copy(alpha = 0.18f)
+                            HeatCell.MISSED -> extra.heatEmpty
+                            HeatCell.OFF -> extra.heatEmpty
+                            HeatCell.FUTURE -> Color.Transparent
+                        }
+                        val isTodayCell =
+                            colIdx == grid.lastIndex && rowIdx == todayRow
+                        Box(
+                            modifier = Modifier
+                                .padding(
+                                    start = if (colIdx == 0) 0.dp else gap,
+                                )
+                                .size(cell)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(color)
+                                .then(
+                                    if (isTodayCell) {
+                                        Modifier.border(
+                                            2.dp, scheme.primary,
+                                            RoundedCornerShape(3.dp),
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+    // Legenda: cada tom do mapa explicado.
+    FlowRow(
+        modifier = Modifier.fillMaxWidth().padding(top = 9.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        LegendItem(habitColor, "feito")
+        LegendItem(habitColor.copy(alpha = 0.45f), "parcial")
+        LegendItem(habitColor.copy(alpha = 0.18f), "pulado")
+        LegendItem(extra.heatEmpty, "não feito")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier.size(10.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .border(1.5.dp, scheme.primary, RoundedCornerShape(3.dp)),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "hoje",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 10.sp,
+                ),
+                color = scheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun LegendItem(color: Color, label: String) {
+    val scheme = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier.size(10.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(color),
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+            color = scheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * Redesenho 2026-11-01: linha de ação compacta dos detalhes do
+ * cartão — ícone em tile, título + valor curto e a ação à direita.
+ * Substitui os parágrafos de explicação das seções antigas.
+ */
+@Composable
+private fun DetailActionRow(
+    icon: ImageVector,
+    title: String,
+    value: String?,
+    actionText: String?,
+    onAction: (() -> Unit)?,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 13.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.size(30.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(scheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = scheme.primary,
+                modifier = Modifier.size(16.dp),
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+                color = scheme.onSurface,
+            )
+            if (value != null) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                    ),
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (actionText != null && onAction != null) {
+            Text(
+                text = actionText,
+                style = MaterialTheme.typography.labelLarge,
+                color = scheme.primary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onAction)
+                    .padding(4.dp),
+            )
+        }
     }
 }
 
@@ -1030,33 +1351,29 @@ private fun HabitCycleSection(
     val latest = sorted.lastOrNull()
     var showDialog by remember(habit.id) { mutableStateOf(false) }
 
-    Spacer(Modifier.height(14.dp))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Ciclo",
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-            ),
-            color = scheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        if (completedCount > 0) {
-            Text(
-                text = "🏆 " + completedCount.toString() +
-                    if (completedCount == 1) " ciclo concluído" else " ciclos concluídos",
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-                color = scheme.secondary,
-            )
-        }
-    }
-    Spacer(Modifier.height(7.dp))
+    // Redesenho 2026-11-01: cabeçalho compacto de linha de ação —
+    // o valor resume o estado e o "Iniciar ciclo" mora aqui quando
+    // não há ciclo nenhum.
+    val noCycle = active == null && latest == null
+    DetailActionRow(
+        icon = Icons.Filled.Loop,
+        title = "Ciclo",
+        value = when {
+            completedCount > 0 ->
+                "🏆 " + completedCount.toString() +
+                    if (completedCount == 1) {
+                        " ciclo concluído"
+                    } else {
+                        " ciclos concluídos"
+                    }
+            noCycle -> "sem ciclo ativo"
+            active != null -> "ciclo ativo"
+            else -> null
+        },
+        actionText = if (noCycle) "Iniciar ciclo" else null,
+        onAction = if (noCycle) ({ showDialog = true }) else null,
+    )
+    if (!noCycle) Spacer(Modifier.height(8.dp))
     when {
         active != null -> {
             val doneInCycle = cycleDoneDays(active, doneDates)
@@ -1170,25 +1487,9 @@ private fun HabitCycleSection(
                 )
             }
         }
-        else -> {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Trabalhe em temporadas curtas, com linha de chegada.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "Iniciar ciclo",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = scheme.primary,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { showDialog = true }
-                        .padding(4.dp),
-                )
-            }
-        }
+        // Sem ciclo nenhum: nada abaixo do cabeçalho — o "Iniciar
+        // ciclo" já mora nele (redesenho 2026-11-01).
+        else -> Unit
     }
 
     if (showDialog) {
@@ -1251,30 +1552,18 @@ private fun HabitLogSection(
     val recent = records.filter { it.date != todayYmdStr }.take(3)
     var showDialog by remember { mutableStateOf(false) }
 
-    Spacer(Modifier.height(14.dp))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Diário do hábito",
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-            ),
-            color = scheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = if (todayRecord != null) "Editar nota" else "Anotar hoje",
-            style = MaterialTheme.typography.labelLarge,
-            color = scheme.primary,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { showDialog = true }
-                .padding(4.dp),
-        )
-    }
+    // Redesenho 2026-11-01: cabeçalho compacto de linha de ação.
+    DetailActionRow(
+        icon = Icons.Filled.MenuBook,
+        title = "Diário do hábito",
+        value = if (todayRecord == null && recent.isEmpty()) {
+            "nenhuma nota hoje"
+        } else {
+            null
+        },
+        actionText = if (todayRecord != null) "Editar nota" else "Anotar hoje",
+        onAction = { showDialog = true },
+    )
     if (todayRecord != null &&
         (todayRecord.content.isNotBlank() || todayRecord.emoji != null)
     ) {
@@ -1290,14 +1579,9 @@ private fun HabitLogSection(
                 color = scheme.onSurface,
             )
         }
-    } else if (recent.isEmpty()) {
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Uma frase sobre o hábito hoje vira memória depois.",
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
-        )
     }
+    // Sem nota hoje e sem recentes: o cabeçalho já diz "nenhuma nota
+    // hoje" — o parágrafo antigo saiu no redesenho 2026-11-01.
     recent.forEach { record ->
         Spacer(Modifier.height(6.dp))
         val d = record.date.toLocalDate()
@@ -1392,39 +1676,18 @@ private fun HabitRemindersSection(
     var showDialog by remember { mutableStateOf(false) }
     val times = reminders.map { it.time }.sorted()
 
-    Spacer(Modifier.height(14.dp))
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Lembretes",
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontSize = 12.sp,
-                fontWeight = FontWeight.ExtraBold,
-            ),
-            color = scheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = if (times.isEmpty()) "Adicionar" else "Editar",
-            style = MaterialTheme.typography.labelLarge,
-            color = scheme.primary,
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { showDialog = true }
-                .padding(4.dp),
-        )
-    }
-    Spacer(Modifier.height(6.dp))
-    Text(
-        text = if (times.isEmpty()) {
-            "Sem lembrete. Adicione um horário e o app te chama todo dia."
+    // Redesenho 2026-11-01: cabeçalho compacto de linha de ação —
+    // os horários viram o valor curto da linha.
+    DetailActionRow(
+        icon = Icons.Filled.Notifications,
+        title = "Lembretes",
+        value = if (times.isEmpty()) {
+            "sem lembrete"
         } else {
-            "Te chama todo dia às " + times.joinToString(" e às ") + "."
+            "todo dia às " + times.joinToString(" e às ")
         },
-        style = MaterialTheme.typography.bodySmall,
-        color = scheme.onSurfaceVariant,
+        actionText = if (times.isEmpty()) "Adicionar" else "Editar",
+        onAction = { showDialog = true },
     )
 
     if (showDialog) {
