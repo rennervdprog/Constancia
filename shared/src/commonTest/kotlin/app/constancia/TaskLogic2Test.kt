@@ -5,6 +5,8 @@ import app.constancia.domain.REPEAT_MONTHLY
 import app.constancia.domain.REPEAT_YEARLY
 import app.constancia.domain.RescheduleTarget
 import app.constancia.domain.TaskGroupBy
+import app.constancia.domain.groupByOf
+import app.constancia.domain.groupByValue
 import app.constancia.domain.groupTasks
 import app.constancia.domain.nextRepeatDate
 import app.constancia.domain.rescheduleDate
@@ -15,6 +17,7 @@ import app.constancia.model.SavedView
 import app.constancia.model.Session
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
+import app.constancia.model.TaskViewOptions
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,6 +34,7 @@ class TaskLogic2Test {
         project: TaskProject = TaskProject.PESSOAL,
         priority: Int = 2,
         dueDate: String? = null,
+        session: Session = Session.TARDE,
     ) = TaskItem(
         id = id,
         title = id,
@@ -40,7 +44,7 @@ class TaskLogic2Test {
         project = project,
         priority = priority,
         dueDate = dueDate,
-        session = Session.TARDE,
+        session = session,
     )
 
     // Item 5 ------------------------------------------------------------
@@ -192,6 +196,29 @@ class TaskLogic2Test {
             listOf("P1 · Alta", "P2 · Média"),
             groupTasks(tasks, TaskGroupBy.PRIORITY, today).map { it.title },
         )
+    }
+
+    @Test
+    fun groupBySessionUsesDaypartOrderAndOmitsEmptySessions() {
+        val tasks = listOf(
+            task("noite", session = Session.NOITE),
+            task("manha", session = Session.MANHA),
+            task("tarde", session = Session.TARDE),
+            task("outraManha", session = Session.MANHA),
+        )
+        val groups = groupTasks(tasks, TaskGroupBy.SESSION, today)
+        assertEquals(listOf("Manhã", "Tarde", "Noite"), groups.map { it.title })
+        assertEquals(
+            listOf(listOf("manha", "outraManha"), listOf("tarde"), listOf("noite")),
+            groups.map { group -> group.tasks.map { it.id } },
+        )
+    }
+
+    @Test
+    fun groupBySessionPersistenceRoundTripAndDefault() {
+        assertEquals(TaskGroupBy.SESSION, groupByOf("session"))
+        assertEquals("session", groupByValue(TaskGroupBy.SESSION))
+        assertEquals("session", TaskViewOptions(viewKey = "view:HOJE").groupBy)
     }
 
     // Item 10 -----------------------------------------------------------
