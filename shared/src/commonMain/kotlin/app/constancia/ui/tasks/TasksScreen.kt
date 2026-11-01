@@ -21,19 +21,33 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,8 +61,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.constancia.AppDeps
@@ -79,6 +99,7 @@ import app.constancia.domain.upcomingGroups
 import app.constancia.domain.withOccurrenceHistory
 import app.constancia.model.CompletionReversal
 import app.constancia.model.SavedView
+import app.constancia.model.Session
 import app.constancia.model.TaskItem
 import app.constancia.model.TaskProject
 import app.constancia.model.isoDayNumberCompat
@@ -102,11 +123,12 @@ private fun todayGroupLabel(today: LocalDate): String =
         " de " + MONTHS[today.monthNumber - 1]
 
 /**
- * Aba Tarefas (protótipo "Roxo Profundo" aprovado): título com resumo
- * dinâmico, captura rápida em pílula, legenda de prioridades/projetos,
- * chips de visão (selecionado em ink) e as listas agrupadas em cartões
- * únicos por seção — Atrasadas em vermelho, Hoje, Feitas hoje, grupos de
- * Próximos e a Caixa de entrada.
+ * Aba Tarefas (redesenho aprovado): cabeçalho enxuto com busca e
+ * ajustes, resumo dinâmico, captura rápida fina e um controle
+ * segmentado para as visões. Ordenar, agrupar, modelos, nova vista e a
+ * legenda de cores vivem na folha "Ajustes da lista". A visão Hoje
+ * destaca as atrasadas numa faixa própria, agrupa as pendências (por
+ * sessão, no padrão) e recolhe as Feitas hoje no fim.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -133,9 +155,12 @@ fun TasksScreen(
     } else {
         emptyList()
     }
-    // Item 4: ordenação/agrupamento das listas.
+    // Item 4: ordenação/agrupamento das listas. Sem opção persistida,
+    // o padrão é agrupar por sessão (TaskViewOptions.groupBy).
     var sortMode by remember { mutableStateOf(TaskSortMode.SMART) }
-    var groupBy by remember { mutableStateOf(TaskGroupBy.NONE) }
+    var groupBy by remember { mutableStateOf(TaskGroupBy.SESSION) }
+    var showFilters by remember { mutableStateOf(false) }
+    var doneTodayExpanded by remember { mutableStateOf(false) }
     // Itens 10/11: vistas salvas e modelos.
     var savedViewId by remember { mutableStateOf<String?>(null) }
     var showNewView by remember { mutableStateOf(false) }
@@ -303,22 +328,69 @@ fun TasksScreen(
     ) {
         item {
             Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Tarefas",
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontSize = 24.sp,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    HeaderIconButton(
+                        icon = Icons.Filled.Search,
+                        contentDescription = if (searchOpen) {
+                            "Fechar busca"
+                        } else {
+                            "Buscar tarefas"
+                        },
+                        tag = "tasks_search_btn",
+                        active = searchOpen,
+                        onClick = {
+                            searchOpen = !searchOpen
+                            if (!searchOpen) searchQuery = ""
+                        },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    HeaderIconButton(
+                        icon = Icons.Filled.Tune,
+                        contentDescription = "Ajustes da lista",
+                        tag = "tasks_filters_btn",
+                        active = showFilters,
+                        onClick = { showFilters = true },
+                    )
+                }
+                Spacer(Modifier.height(3.dp))
                 Text(
-                    "Tarefas",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp),
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = buildString {
-                        append(overdue.size)
-                        append(if (overdue.size == 1) " atrasada · " else " atrasadas · ")
-                        append(dueTodayCount)
-                        append(" para hoje")
+                    text = buildAnnotatedString {
+                        append(dueTodayCount.toString())
+                        append(" para hoje · ")
+                        withStyle(
+                            SpanStyle(
+                                color = if (overdue.isNotEmpty()) {
+                                    MaterialTheme.constanciaExtra.red
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                fontWeight = if (overdue.isNotEmpty()) {
+                                    FontWeight.ExtraBold
+                                } else {
+                                    FontWeight.SemiBold
+                                },
+                            ),
+                        ) {
+                            append(overdue.size.toString())
+                            append(
+                                if (overdue.size == 1) " atrasada" else " atrasadas",
+                            )
+                        }
                     },
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.5.sp),
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(13.dp))
             }
         }
 
@@ -335,7 +407,7 @@ fun TasksScreen(
                         MaterialTheme.colorScheme.outline,
                         RoundedCornerShape(16.dp),
                     )
-                    .padding(start = 15.dp, top = 10.dp, end = 6.dp, bottom = 10.dp),
+                    .padding(start = 14.dp, top = 8.dp, end = 8.dp, bottom = 8.dp),
             ) {
                 QuickAddField(
                     text = quickText,
@@ -349,121 +421,76 @@ fun TasksScreen(
             }
         }
 
-        item { Legend() }
-
         item {
-            LazyRow(
+            // Uma linha de controle: as quatro visões num segmentado.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp, bottom = 4.dp)
+                    .padding(top = 13.dp)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(MaterialTheme.constanciaExtra.pageChip)
+                    .padding(4.dp)
                     .testTag("view_chips_row"),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                item {
-                    ViewChip(
-                        label = "Entrada",
-                        count = counts.entrada,
-                        selected = savedViewId == null && view == TaskView.ENTRADA,
-                        tag = "view_chip_ENTRADA",
-                        onClick = { savedViewId = null; view = TaskView.ENTRADA },
-                    )
-                }
-                item {
-                    ViewChip(
-                        label = "Hoje",
-                        count = counts.hoje,
-                        selected = savedViewId == null && view == TaskView.HOJE,
-                        tag = "view_chip_HOJE",
-                        onClick = { savedViewId = null; view = TaskView.HOJE },
-                    )
-                }
-                item {
-                    ViewChip(
-                        label = "Próximos",
-                        count = counts.proximos,
-                        selected = savedViewId == null && view == TaskView.PROXIMOS,
-                        tag = "view_chip_PROXIMOS",
-                        onClick = { savedViewId = null; view = TaskView.PROXIMOS },
-                    )
-                }
-                item {
-                    ViewChip(
-                        label = "Feitas",
-                        count = counts.feitas,
-                        selected = savedViewId == null && view == TaskView.FEITAS,
-                        tag = "view_chip_FEITAS",
-                        onClick = { savedViewId = null; view = TaskView.FEITAS },
-                    )
-                }
-                savedViews.forEach { saved ->
-                    item(key = "saved_chip_" + saved.id) {
-                        SavedViewChip(
-                            view = saved,
-                            selected = savedViewId == saved.id,
-                            onClick = { savedViewId = saved.id },
-                        )
-                    }
-                }
-                item {
-                    NewViewChip(onClick = { showNewView = true })
-                }
+                ViewSegment(
+                    label = "Hoje",
+                    count = counts.hoje,
+                    selected = savedViewId == null && view == TaskView.HOJE,
+                    tag = "view_chip_HOJE",
+                    onClick = { savedViewId = null; view = TaskView.HOJE },
+                    modifier = Modifier.weight(1f),
+                )
+                ViewSegment(
+                    label = "Próximos",
+                    count = counts.proximos,
+                    selected = savedViewId == null && view == TaskView.PROXIMOS,
+                    tag = "view_chip_PROXIMOS",
+                    onClick = { savedViewId = null; view = TaskView.PROXIMOS },
+                    modifier = Modifier.weight(1f),
+                )
+                ViewSegment(
+                    label = "Entrada",
+                    count = counts.entrada,
+                    selected = savedViewId == null && view == TaskView.ENTRADA,
+                    tag = "view_chip_ENTRADA",
+                    onClick = { savedViewId = null; view = TaskView.ENTRADA },
+                    modifier = Modifier.weight(1f),
+                )
+                ViewSegment(
+                    label = "Feitas",
+                    count = counts.feitas,
+                    selected = savedViewId == null && view == TaskView.FEITAS,
+                    tag = "view_chip_FEITAS",
+                    onClick = { savedViewId = null; view = TaskView.FEITAS },
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
 
-        // Barra de opções (item 4 + atalho dos modelos, item 11).
-        item {
-            FlowRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OptionChip(
-                    label = "Ordenar: " + when (sortMode) {
-                        TaskSortMode.SMART -> "Inteligente"
-                        TaskSortMode.PRIORITY -> "Prioridade"
-                        TaskSortMode.DUE -> "Prazo"
-                    },
-                    onClick = {
-                        val newMode = when (sortMode) {
-                            TaskSortMode.SMART -> TaskSortMode.PRIORITY
-                            TaskSortMode.PRIORITY -> TaskSortMode.DUE
-                            TaskSortMode.DUE -> TaskSortMode.SMART
+        // Vistas salvas só ocupam a tela de quem as criou; criar uma
+        // nova vive na folha de ajustes.
+        if (savedViews.isNotEmpty()) {
+            item {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    savedViews.forEach { saved ->
+                        item(key = "saved_chip_" + saved.id) {
+                            SavedViewChip(
+                                view = saved,
+                                selected = savedViewId == saved.id,
+                                onClick = { savedViewId = saved.id },
+                            )
                         }
-                        sortMode = newMode
-                        persistViewOptions(newSortMode = newMode)
-                    },
-                )
-                OptionChip(
-                    label = "Agrupar: " + when (groupBy) {
-                        TaskGroupBy.NONE -> "Nenhum"
-                        TaskGroupBy.PROJECT -> "Projeto"
-                        TaskGroupBy.PRIORITY -> "Prioridade"
-                        TaskGroupBy.DATE -> "Data"
-                    },
-                    onClick = {
-                        val newGroup = when (groupBy) {
-                            TaskGroupBy.NONE -> TaskGroupBy.PROJECT
-                            TaskGroupBy.PROJECT -> TaskGroupBy.PRIORITY
-                            TaskGroupBy.PRIORITY -> TaskGroupBy.DATE
-                            TaskGroupBy.DATE -> TaskGroupBy.NONE
-                        }
-                        groupBy = newGroup
-                        persistViewOptions(newGroupBy = newGroup)
-                    },
-                )
-                OptionChip(
-                    label = "Modelos de lista",
-                    onClick = { showTemplates = true },
-                )
-                OptionChip(
-                    label = if (searchOpen) "Fechar busca" else "Buscar",
-                    onClick = {
-                        searchOpen = !searchOpen
-                        if (!searchOpen) searchQuery = ""
-                    },
-                )
+                    }
+                    item {
+                        NewViewChip(onClick = { showNewView = true })
+                    }
+                }
             }
         }
 
@@ -621,67 +648,119 @@ fun TasksScreen(
                 val doneT = doneTodayTasks(tasks, todayDate)
                 val overdueSorted = applySort(overdue, sortMode, todayDate)
                 if (overdue.isNotEmpty()) {
+                    // Faixa própria: quantas são, quais são e a ação
+                    // de empurrar todas para hoje (item 1).
                     item {
-                        GroupLabel(
-                            label = "Atrasadas",
-                            count = overdue.size,
-                            danger = true,
-                        )
-                    }
-                    // Item 1: empurra todas as atrasadas para hoje.
-                    item {
-                        Box(
+                        val extra = MaterialTheme.constanciaExtra
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(bottom = 10.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(
-                                    MaterialTheme.colorScheme.primaryContainer,
+                                .padding(top = 14.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(extra.redSoft)
+                                .border(
+                                    1.dp,
+                                    extra.red.copy(alpha = 0.22f),
+                                    RoundedCornerShape(16.dp),
                                 )
-                                .testTag("reschedule_overdue")
-                                .clickable {
-                                    scope.launch {
-                                        deps.tasks.rescheduleAllOverdue(
-                                            today, today,
-                                        )
-                                    }
-                                }
-                                .padding(vertical = 11.dp),
-                            contentAlignment = Alignment.Center,
+                                .padding(horizontal = 12.dp, vertical = 11.dp),
+                            verticalAlignment = Alignment.Top,
                         ) {
-                            Text(
-                                text = "Reagendar " +
-                                    if (overdue.size == 1) {
-                                        "1 atrasada"
-                                    } else {
-                                        overdue.size.toString() + " atrasadas"
-                                    } + " para hoje",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme
-                                    .onPrimaryContainer,
+                            Icon(
+                                Icons.Filled.WarningAmber,
+                                contentDescription = null,
+                                tint = extra.red,
+                                modifier = Modifier
+                                    .padding(top = 1.dp)
+                                    .size(18.dp),
                             )
+                            Spacer(Modifier.width(9.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = overdue.size.toString() + if (
+                                        overdue.size == 1
+                                    ) {
+                                        " atrasada"
+                                    } else {
+                                        " atrasadas"
+                                    },
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                    ),
+                                    color = extra.red,
+                                )
+                                Text(
+                                    text = overdueSorted.joinToString(" · ") {
+                                        it.title
+                                    },
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 11.5.sp,
+                                    ),
+                                    color = extra.red.copy(alpha = 0.78f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(99.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(
+                                        1.dp,
+                                        extra.red.copy(alpha = 0.25f),
+                                        RoundedCornerShape(99.dp),
+                                    )
+                                    .testTag("reschedule_overdue")
+                                    .clickable {
+                                        scope.launch {
+                                            deps.tasks.rescheduleAllOverdue(
+                                                today, today,
+                                            )
+                                        }
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                            ) {
+                                Text(
+                                    text = "Reagendar",
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                    ),
+                                    color = extra.red,
+                                )
+                            }
                         }
                     }
                     item {
-                        RowsCard {
-                            overdueSorted.forEachIndexed { index, task ->
-                                if (index > 0) RowDivider()
-                                rowFor(task)
+                        Box(modifier = Modifier.padding(top = 8.dp)) {
+                            RowsCard {
+                                overdueSorted.forEachIndexed { index, task ->
+                                    if (index > 0) RowDivider()
+                                    rowFor(task)
+                                }
                             }
                         }
                     }
                 }
-                item {
-                    GroupLabel(
-                        label = todayGroupLabel(todayDate),
-                        count = tod.size,
-                    )
-                }
                 if (tod.isEmpty()) {
+                    item {
+                        GroupLabel(
+                            label = todayGroupLabel(todayDate),
+                            count = 0,
+                        )
+                    }
                     item {
                         EmptyNote("Nada para hoje. Aproveite o respiro — ou adiante algo de amanhã.")
                     }
-                } else {
+                } else if (groupBy == TaskGroupBy.NONE) {
+                    item {
+                        GroupLabel(
+                            label = todayGroupLabel(todayDate),
+                            count = tod.size,
+                        )
+                    }
                     item {
                         RowsCard {
                             tod.forEachIndexed { index, task ->
@@ -690,25 +769,130 @@ fun TasksScreen(
                             }
                         }
                     }
-                }
-                item {
-                    Text(
-                        text = "Toque numa tarefa para ver subtarefas, " +
-                            "prioridade e reagendamento.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 2.dp, top = 12.dp),
-                    )
+                } else {
+                    groupTasks(tod, groupBy, todayDate).forEach { group ->
+                        item(key = "today-head-" + group.title) {
+                            if (groupBy == TaskGroupBy.SESSION) {
+                                val session = group.tasks.firstOrNull()?.session
+                                val doneInSession = if (session == null) {
+                                    0
+                                } else {
+                                    tasks.count {
+                                        it.done && it.dueDate == today &&
+                                            it.session == session
+                                    }
+                                }
+                                SessionGroupHeader(
+                                    label = group.title,
+                                    session = session,
+                                    doneCount = doneInSession,
+                                    totalCount = doneInSession + group.tasks.size,
+                                )
+                            } else {
+                                GroupLabel(
+                                    label = group.title,
+                                    count = group.tasks.size,
+                                )
+                            }
+                        }
+                        item(key = "today-" + group.title + "-" + group.tasks.size) {
+                            RowsCard {
+                                group.tasks.forEachIndexed { index, task ->
+                                    if (index > 0) RowDivider()
+                                    rowFor(task)
+                                }
+                            }
+                        }
+                    }
                 }
                 if (doneT.isNotEmpty()) {
+                    // Feitas hoje recolhidas: a linha resume e expande
+                    // no toque (redesenho, item 5 do protótipo).
                     item {
-                        GroupLabel(label = "Feitas hoje", count = doneT.size)
-                    }
-                    item {
-                        RowsCard {
-                            doneT.forEachIndexed { index, task ->
-                                if (index > 0) RowDivider()
-                                rowFor(task)
+                        Column {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 15.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.constanciaExtra.lineSoft,
+                                        RoundedCornerShape(16.dp),
+                                    )
+                                    .testTag("done_today_toggle")
+                                    .clickable {
+                                        doneTodayExpanded = !doneTodayExpanded
+                                    }
+                                    .padding(horizontal = 13.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "Feitas hoje",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        fontSize = 13.5.sp,
+                                    ),
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(99.dp))
+                                        .background(
+                                            MaterialTheme.colorScheme.primaryContainer,
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = doneT.size.toString(),
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                        ),
+                                        color = MaterialTheme.colorScheme
+                                            .onPrimaryContainer,
+                                    )
+                                }
+                                if (!doneTodayExpanded) {
+                                    Spacer(Modifier.width(9.dp))
+                                    Text(
+                                        text = doneT.first().title,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp,
+                                        ),
+                                        color = MaterialTheme.colorScheme
+                                            .onSurfaceVariant,
+                                        textDecoration = TextDecoration.LineThrough,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                } else {
+                                    Box(modifier = Modifier.weight(1f))
+                                }
+                                Icon(
+                                    if (doneTodayExpanded) {
+                                        Icons.Filled.ExpandLess
+                                    } else {
+                                        Icons.Filled.ExpandMore
+                                    },
+                                    contentDescription = if (doneTodayExpanded) {
+                                        "Recolher feitas de hoje"
+                                    } else {
+                                        "Expandir feitas de hoje"
+                                    },
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(19.dp),
+                                )
+                            }
+                            if (doneTodayExpanded) {
+                                Spacer(Modifier.height(8.dp))
+                                RowsCard {
+                                    doneT.forEachIndexed { index, task ->
+                                        if (index > 0) RowDivider()
+                                        rowFor(task)
+                                    }
+                                }
                             }
                         }
                     }
@@ -854,17 +1038,414 @@ fun TasksScreen(
             },
         )
     }
+    if (showFilters) {
+        TasksFilterSheet(
+            sortMode = sortMode,
+            groupBy = groupBy,
+            onDismiss = { showFilters = false },
+            onSortModeChange = { mode ->
+                sortMode = mode
+                persistViewOptions(newSortMode = mode)
+                showFilters = false
+            },
+            onGroupByChange = { newGroup ->
+                groupBy = newGroup
+                persistViewOptions(newGroupBy = newGroup)
+                showFilters = false
+            },
+            onShowTemplates = {
+                showFilters = false
+                showTemplates = true
+            },
+            onNewView = {
+                showFilters = false
+                showNewView = true
+            },
+        )
+    }
 }
 
-/** Legenda do protótipo: pontinhos de prioridade e de projeto, numa
+/** Botão circular do cabeçalho (busca / ajustes da lista). */
+@Composable
+private fun HeaderIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    tag: String,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .background(if (active) scheme.primaryContainer else scheme.surface)
+            .border(1.dp, extra.lineSoft, CircleShape)
+            .testTag(tag)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = if (active) scheme.primary else extra.ink2,
+            modifier = Modifier.size(19.dp),
+        )
+    }
+}
+
+/** Segmento de visão: selecionado em roxo da marca, com o contador. */
+@Composable
+private fun ViewSegment(
+    label: String,
+    count: Int,
+    selected: Boolean,
+    tag: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(if (selected) scheme.primary else Color.Transparent)
+            .testTag(tag)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 5.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = if (selected) scheme.onPrimary else extra.ink2,
+            maxLines = 1,
+            softWrap = false,
+        )
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = if (selected) {
+                scheme.onPrimary.copy(alpha = 0.72f)
+            } else {
+                scheme.onSurfaceVariant
+            },
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+/** Cabeçalho de sessão da visão Hoje (mesmas cores/ícones da aba Hoje). */
+@Composable
+private fun SessionGroupHeader(
+    label: String,
+    session: Session?,
+    doneCount: Int,
+    totalCount: Int,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    val (tile, tint, icon) = when (session) {
+        Session.MANHA -> Triple(extra.tintAmber, extra.amberStrong, Icons.Filled.WbSunny)
+        Session.TARDE -> Triple(extra.tintFlame, scheme.secondary, Icons.Filled.WbSunny)
+        Session.NOITE -> Triple(extra.tintSun, scheme.primary, Icons.Filled.NightsStay)
+        null -> Triple(extra.pageChip, extra.ink3, Icons.Filled.Schedule)
+    }
+    val range = when (session) {
+        Session.MANHA -> "até 12h"
+        Session.TARDE -> "12h – 18h"
+        Session.NOITE -> "depois das 18h"
+        null -> ""
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 2.dp, top = 20.dp, end = 2.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(tile),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(15.dp),
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleLarge.copy(fontSize = 15.sp),
+        )
+        if (range.isNotBlank()) {
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = range,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
+        }
+        Box(modifier = Modifier.weight(1f))
+        Text(
+            text = doneCount.toString() + " de " + totalCount.toString(),
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 12.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = scheme.primary,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun TasksFilterSheet(
+    sortMode: TaskSortMode,
+    groupBy: TaskGroupBy,
+    onDismiss: () -> Unit,
+    onSortModeChange: (TaskSortMode) -> Unit,
+    onGroupByChange: (TaskGroupBy) -> Unit,
+    onShowTemplates: () -> Unit,
+    onNewView: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = scheme.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 30.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Ajustes da lista",
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 17.sp),
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(scheme.surfaceVariant)
+                        .testTag("filters_close")
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = "Fechar ajustes",
+                        tint = extra.ink2,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+            }
+
+            FilterSectionLabel("ORDENAR POR")
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FilterOptionChip(
+                    label = "Inteligente",
+                    selected = sortMode == TaskSortMode.SMART,
+                    tag = "sort_SMART",
+                    onClick = { onSortModeChange(TaskSortMode.SMART) },
+                )
+                FilterOptionChip(
+                    label = "Prioridade",
+                    selected = sortMode == TaskSortMode.PRIORITY,
+                    tag = "sort_PRIORITY",
+                    onClick = { onSortModeChange(TaskSortMode.PRIORITY) },
+                )
+                FilterOptionChip(
+                    label = "Prazo",
+                    selected = sortMode == TaskSortMode.DUE,
+                    tag = "sort_DUE",
+                    onClick = { onSortModeChange(TaskSortMode.DUE) },
+                )
+            }
+
+            FilterSectionLabel("AGRUPAR POR")
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FilterOptionChip(
+                    label = "Sessão",
+                    selected = groupBy == TaskGroupBy.SESSION,
+                    tag = "group_SESSION",
+                    onClick = { onGroupByChange(TaskGroupBy.SESSION) },
+                )
+                FilterOptionChip(
+                    label = "Projeto",
+                    selected = groupBy == TaskGroupBy.PROJECT,
+                    tag = "group_PROJECT",
+                    onClick = { onGroupByChange(TaskGroupBy.PROJECT) },
+                )
+                FilterOptionChip(
+                    label = "Prioridade",
+                    selected = groupBy == TaskGroupBy.PRIORITY,
+                    tag = "group_PRIORITY",
+                    onClick = { onGroupByChange(TaskGroupBy.PRIORITY) },
+                )
+                FilterOptionChip(
+                    label = "Data",
+                    selected = groupBy == TaskGroupBy.DATE,
+                    tag = "group_DATE",
+                    onClick = { onGroupByChange(TaskGroupBy.DATE) },
+                )
+                FilterOptionChip(
+                    label = "Nenhum",
+                    selected = groupBy == TaskGroupBy.NONE,
+                    tag = "group_NONE",
+                    onClick = { onGroupByChange(TaskGroupBy.NONE) },
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            FilterLinkRow(
+                text = "Modelos de lista",
+                tag = "filters_templates",
+                onClick = onShowTemplates,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(extra.lineSoft),
+            )
+            FilterLinkRow(
+                text = "Nova vista salva",
+                tag = "filters_new_view",
+                onClick = onNewView,
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(extra.lineSoft),
+            )
+
+            FilterSectionLabel("CORES")
+            Legend(includeTopPadding = false)
+        }
+    }
+}
+
+@Composable
+private fun FilterSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontSize = 11.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.8.sp,
+        ),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 18.dp, bottom = 8.dp),
+    )
+}
+
+@Composable
+private fun FilterOptionChip(
+    label: String,
+    selected: Boolean,
+    tag: String,
+    onClick: () -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(if (selected) scheme.primaryContainer else scheme.surface)
+            .border(
+                1.5.dp,
+                if (selected) scheme.primary else MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(99.dp),
+            )
+            .testTag(tag)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 13.dp, vertical = 7.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+            ),
+            color = if (selected) scheme.primary else extra.ink2,
+        )
+    }
+}
+
+@Composable
+private fun FilterLinkRow(text: String, tag: String, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(tag)
+            .clickable(onClick = onClick)
+            .padding(vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontWeight = FontWeight.SemiBold,
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = scheme.onSurfaceVariant,
+            modifier = Modifier.size(19.dp),
+        )
+    }
+}
+
+/** Legenda das cores: pontinhos de prioridade e de projeto, numa
  *  linha só (quebra se faltar espaço). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Legend() {
+private fun Legend(includeTopPadding: Boolean = true) {
     FlowRow(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 2.dp, top = 14.dp, end = 2.dp),
+            .padding(
+                start = 2.dp,
+                top = if (includeTopPadding) 14.dp else 0.dp,
+                end = 2.dp,
+            ),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
@@ -892,64 +1473,6 @@ private fun LegendDot(color: Color, label: String) {
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-/**
- * Chip de visão do protótipo: pílula surface com borda; selecionado vira
- * ink (fundo escuro, texto branco) e o contador vai num selo próprio.
- */
-@Composable
-private fun ViewChip(
-    label: String,
-    count: Int,
-    selected: Boolean,
-    tag: String,
-    onClick: () -> Unit,
-) {
-    val scheme = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(99.dp))
-            .background(if (selected) extra.chipInk else scheme.surface)
-            .border(
-                1.5.dp,
-                if (selected) extra.chipInk else scheme.outline,
-                RoundedCornerShape(99.dp),
-            )
-            .testTag(tag)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.ExtraBold,
-            ),
-            color = if (selected) extra.chipInkText else extra.ink2,
-        )
-        Spacer(Modifier.width(7.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(99.dp))
-                .background(
-                    if (selected) {
-                        extra.chipInkText.copy(alpha = 0.16f)
-                    } else {
-                        scheme.background
-                    },
-                )
-                .padding(horizontal = 7.dp, vertical = 1.dp),
-        ) {
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.5.sp),
-                color = if (selected) extra.chipInkText else scheme.onSurfaceVariant,
-            )
-        }
     }
 }
 
@@ -1099,26 +1622,6 @@ private fun NewViewChip(onClick: () -> Unit) {
             text = "+ Vista",
             style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
             color = scheme.onPrimaryContainer,
-        )
-    }
-}
-
-/** Chip pequeno da barra de opções (itens 4 e 11). */
-@Composable
-private fun OptionChip(label: String, onClick: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(99.dp))
-            .background(scheme.surface)
-            .border(1.5.dp, scheme.outline, RoundedCornerShape(99.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium.copy(fontSize = 12.5.sp),
-            color = scheme.onSurfaceVariant,
         )
     }
 }
