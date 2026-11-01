@@ -5,14 +5,19 @@ import app.constancia.model.ChallengeStatus
 // ---------------------------------------------------------------------------
 // Fase F (Comercial) — camada de entitlement e gating, LÓGICA PURA.
 //
-// Decisão comercial aprovada pelo Renner (2026-10-22), NÃO reabrir:
-// - Grátis GENEROSO: sem limites quantitativos de hábitos/tarefas/vistas.
-//   Nada do que o usuário já usa trava, congela ou some. (Substitui os
-//   "plan_limits" + freeze do plano original.)
-// - Pro = superfícies avançadas: padrões cruzados, raio-X de atrasos,
-//   insights avançados, desafios marcados Pro e a revista completa.
-// - Downgrade: as superfícies Pro voltam ao cartão de cadeado (teaser);
-//   nenhum dado é apagado nem escondido; re-assinar destrava na hora.
+// Histórico da decisão comercial (Renner):
+// - 2026-10-22: grátis SEM limites quantitativos; Pro = só superfícies.
+// - 2026-11-01 (REVISÃO aprovada pelo Renner, pré-lançamento — ainda sem
+//   usuários reais): entram limites GENEROSOS no grátis, no modelo dos
+//   grandes apps da categoria — até 5 hábitos ativos e 100 tarefas
+//   abertas; Pro = ilimitado + superfícies avançadas (padrões cruzados,
+//   raio-X, insights avançados, Ano em Revista completo, desafios 21/30d).
+// - Proteção mantida nas duas versões: NADA do que o usuário já criou
+//   trava, congela ou some. O limite barra só CRIAR além do teto estando
+//   no grátis (quem passa do teto como Pro e depois cancela continua
+//   usando tudo; só não cria item novo até voltar ao teto ou re-assinar).
+// - Downgrade: as superfícies Pro voltam ao cartão de cadeado (teaser
+//   com prévia de exemplo rotulada); re-assinar destrava na hora.
 // ---------------------------------------------------------------------------
 
 /** Identificadores do produto na Google Play — DEVEM ser idênticos aos
@@ -62,7 +67,34 @@ enum class ProFeature {
 
     /** ChallengesScreen: desafios com selo Pro (campo is_pro do pacote). */
     PRO_CHALLENGE,
+
+    /** ReportsScreen: conclusões cruzadas geradas dos padrões (sono ×
+     *  atrasos, hábito da manhã × conclusão, concentração de atrasos). */
+    ADVANCED_INSIGHTS,
 }
+
+/**
+ * Tetos do plano grátis (decisão de 2026-11-01). Generosos de propósito:
+ * iniciante (2–4 hábitos) nunca enxerga o teto; quem esbarra nele já
+ * está engajado — o convite ao paywall aparece no momento da CRIAÇÃO,
+ * nunca como erro seco e nunca sobre item existente.
+ */
+object FreeLimits {
+    /** Hábitos ativos = não arquivados (pausados contam: continuam
+     *  sendo compromissos do usuário e pausar não pode virar brecha). */
+    const val MAX_ACTIVE_HABITS = 5
+
+    /** Tarefas abertas = não concluídas (feitas acumulam sem custo). */
+    const val MAX_OPEN_TASKS = 100
+}
+
+/** Pode criar um hábito novo com [activeHabits] hábitos ativos? */
+fun canCreateHabit(activeHabits: Int, isPro: Boolean): Boolean =
+    isPro || activeHabits < FreeLimits.MAX_ACTIVE_HABITS
+
+/** Pode criar uma tarefa nova com [openTasks] tarefas abertas? */
+fun canCreateTask(openTasks: Int, isPro: Boolean): Boolean =
+    isPro || openTasks < FreeLimits.MAX_OPEN_TASKS
 
 /** Regra única de gating: toda tela pergunta aqui, nunca compara flag
  *  solta. Funções puras — a matriz inteira é testada em EntitlementTest. */
