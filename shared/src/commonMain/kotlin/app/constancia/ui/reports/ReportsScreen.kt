@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -90,6 +91,7 @@ import app.constancia.domain.SleepLagPattern
 import app.constancia.domain.WEEKDAYS_ISO_PT
 import app.constancia.domain.ProFeature
 import app.constancia.domain.ProGate
+import app.constancia.domain.advancedInsights
 import app.constancia.domain.buildExportCsv
 import app.constancia.domain.buildSummary
 import app.constancia.domain.computeReport
@@ -234,6 +236,11 @@ fun ReportsScreen(
         morningHabitPattern(diaryEntries, habits, wideCheckins, reportTasks, today)
     }
     val xray = remember(reportTasks) { overdueXray(reportTasks, today) }
+    // Insights avançados (Pro): conclusões cruzadas dos mesmos dados
+    // das seções Pro — gerados sempre; o gate decide só a exibição.
+    val advInsights = remember(sleepPattern, morningPattern, xray) {
+        advancedInsights(sleepPattern, morningPattern, xray)
+    }
     val yearHl = remember(habits, wideCheckins, reportTasks, diaryEntries, data) {
         val (yFrom, yTo) = yearWindow(today)
         periodHighlights(habits, wideCheckins, reportTasks, diaryEntries, yFrom, yTo, data)
@@ -273,9 +280,34 @@ fun ReportsScreen(
         if (checkins.isEmpty() && allTasks.isEmpty() && diaryEntries.isEmpty()) {
             EmptyState()
         } else {
+            // Organização em grupos (definição Pro de 2026-11-01):
+            // o essencial primeiro e grátis; as análises avançadas
+            // fecham a tela num grupo próprio, com selo Pro e prévias
+            // de exemplo rotuladas — nada de cadeado seco no meio.
             KpiGrid(summary = summary, data = data, period = period)
-            Spacer(Modifier.height(12.dp))
 
+            ReportGroupHeader("Visão geral")
+            EvolutionSection(
+                data = data,
+                mode = chartMode,
+                onModeChange = { chartMode = it },
+            )
+            Spacer(Modifier.height(12.dp))
+            ReviewSection(review = review, period = period)
+
+            ReportGroupHeader("Hábitos")
+            HabitPerformanceSection(data.habits)
+            Spacer(Modifier.height(12.dp))
+            HeatmapSection(data)
+            Spacer(Modifier.height(12.dp))
+            WeekdayPatternSection(data)
+
+            ReportGroupHeader("Diário")
+            MoodSection(data)
+            Spacer(Modifier.height(12.dp))
+            InsightsSection(data.insights)
+
+            ReportGroupHeader("Análises avançadas", pro = true)
             PatternsSection(
                 isPro = ProGate.isUnlocked(ProFeature.CROSS_PATTERNS, isPro),
                 morning = morningPattern,
@@ -283,39 +315,18 @@ fun ReportsScreen(
                 onOpenPaywall = onOpenPaywall,
             )
             Spacer(Modifier.height(12.dp))
-
-            ReviewSection(review = review, period = period)
-            Spacer(Modifier.height(12.dp))
-
-            EvolutionSection(
-                data = data,
-                mode = chartMode,
-                onModeChange = { chartMode = it },
-            )
-            Spacer(Modifier.height(12.dp))
-
-            HeatmapSection(data)
-            Spacer(Modifier.height(12.dp))
-
-            HabitPerformanceSection(data.habits)
-            Spacer(Modifier.height(12.dp))
-
-            WeekdayPatternSection(data)
-            Spacer(Modifier.height(12.dp))
-
-            MoodSection(data)
-            Spacer(Modifier.height(12.dp))
-
-            InsightsSection(data.insights)
-            Spacer(Modifier.height(12.dp))
-
             XraySection(
                 xray = xray,
                 isPro = ProGate.isUnlocked(ProFeature.OVERDUE_XRAY, isPro),
                 onOpenPaywall = onOpenPaywall,
             )
             Spacer(Modifier.height(12.dp))
-
+            AdvancedInsightsSection(
+                insights = advInsights,
+                isPro = ProGate.isUnlocked(ProFeature.ADVANCED_INSIGHTS, isPro),
+                onOpenPaywall = onOpenPaywall,
+            )
+            Spacer(Modifier.height(12.dp))
             YearReviewSection(
                 year = yearHl,
                 quarter = quarterHl,
@@ -1049,6 +1060,73 @@ private fun MoodBox(modifier: Modifier = Modifier, value: String, label: String)
     }
 }
 
+/**
+ * Insights AVANÇADOS (Pro, 2026-11-01): conclusões cruzadas geradas por
+ * `advancedInsights` (sono × atrasos, manhã × conclusão, concentração
+ * de atrasos). Trancado = teaser com prévia de exemplo; aberto sem
+ * conclusões = estado honesto (o efeito ainda não é material).
+ */
+@Composable
+private fun AdvancedInsightsSection(
+    insights: List<String>,
+    isPro: Boolean,
+    onOpenPaywall: () -> Unit,
+) {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    if (!isPro) {
+        ProLockCard(
+            title = "Insights avançados",
+            teaser = "Conclusões prontas cruzando sono, hábitos e " +
+                "tarefas — sem você precisar caçar nos gráficos.",
+            preview = "“Após noites curtas, 43% das suas tarefas " +
+                "atrasam — contra 16% após noites boas.”",
+            onOpenPaywall = onOpenPaywall,
+        )
+        return
+    }
+    CardBox(Modifier.fillMaxWidth()) {
+        CardTitle("Insights avançados", "Conclusões dos seus padrões")
+        Spacer(Modifier.height(4.dp))
+        if (insights.isEmpty()) {
+            Text(
+                "Ainda não há conclusões fortes nos seus dados — elas " +
+                    "aparecem quando um padrão se repete por alguns dias.",
+                fontSize = 13.sp,
+                color = extra.ink3,
+            )
+        } else {
+            insights.forEachIndexed { i, text ->
+                if (i > 0) Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.Top) {
+                    Box(
+                        Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(11.dp))
+                            .background(cs.primaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.AutoGraph,
+                            contentDescription = null,
+                            tint = cs.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(11.dp))
+                    Text(
+                        text,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = extra.ink2,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun InsightsSection(insights: List<String>) {
     val cs = MaterialTheme.colorScheme
@@ -1177,8 +1255,52 @@ private fun SecondaryReportButton(
 // trimestre são Pro.
 // ---------------------------------------------------------------------------
 
+/** Cabeçalho de grupo dos relatórios (definição de 2026-11-01). */
 @Composable
-private fun ProLockCard(title: String, teaser: String, onOpenPaywall: () -> Unit) {
+private fun ReportGroupHeader(title: String, pro: Boolean = false) {
+    val cs = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 22.dp, bottom = 10.dp, start = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            title.uppercase(),
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontSize = 11.5.sp,
+                letterSpacing = 1.2.sp,
+            ),
+            color = extra.ink3,
+            modifier = Modifier.weight(1f),
+        )
+        if (pro) {
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(cs.primary)
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+            ) {
+                Text(
+                    "PRO",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                    ),
+                    color = cs.onPrimary,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProLockCard(
+    title: String,
+    teaser: String,
+    onOpenPaywall: () -> Unit,
+    preview: String? = null,
+) {
     val cs = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
     CardBox(Modifier.fillMaxWidth()) {
@@ -1212,12 +1334,43 @@ private fun ProLockCard(title: String, teaser: String, onOpenPaywall: () -> Unit
                 )
             }
         }
+        if (preview != null) {
+            // Prévia de EXEMPLO, rotulada: mostra o formato da
+            // conclusão sem fingir que é dado do usuário.
+            Spacer(Modifier.height(12.dp))
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(cs.surfaceVariant)
+                    .border(1.dp, extra.lineSoft, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    "PRÉVIA · EXEMPLO",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                    ),
+                    color = cs.primary,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    preview,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 13.sp,
+                    ),
+                    color = extra.ink2,
+                )
+            }
+        }
         Spacer(Modifier.height(12.dp))
         PrimaryReportButton(
             onClick = onOpenPaywall,
             modifier = Modifier.fillMaxWidth(),
             icon = Icons.Filled.Lock,
-            text = "Disponível no Constância Pro",
+            text = "Desbloquear com o Pro",
         )
     }
 }
@@ -1254,9 +1407,10 @@ private fun PatternsSection(
     if (!isPro) {
         ProLockCard(
             title = "Padrões cruzados",
-            teaser = "Como sono, hábitos da manhã e carga de tarefas se associam ao " +
-                "seu humor, à sua energia e aos seus atrasos — com a amostra " +
-                "sempre visível. Só no Constância.",
+            teaser = "Sono, humor e hábitos lado a lado: descubra o que " +
+                "ajuda — e o que atrapalha — o seu dia seguinte.",
+            preview = "“Dormir menos de 6h derruba sua conclusão do dia " +
+                "seguinte de 84% para 57%.”",
             onOpenPaywall = onOpenPaywall,
         )
         return
@@ -1738,9 +1892,10 @@ private fun XraySection(xray: OverdueXray, isPro: Boolean, onOpenPaywall: () -> 
     if (!isPro) {
         ProLockCard(
             title = "Raio-X de atrasos",
-            teaser = "Onde seu planejamento fura: atrasos por projeto, " +
-                "prioridade e horário, com a idade de cada atraso e as " +
-                "recorrentes que sempre furam.",
+            teaser = "Onde seus atrasos nascem — turno, projeto e idade " +
+                "de cada um — para corrigir a causa, não o sintoma.",
+            preview = "“62% dos seus atrasos nascem à noite, em tarefas " +
+                "marcadas para depois das 18h.”",
             onOpenPaywall = onOpenPaywall,
         )
         return
