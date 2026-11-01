@@ -20,16 +20,11 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -69,26 +63,38 @@ import kotlinx.coroutines.launch
 
 private data class Benefit(val title: String, val description: String)
 
-// Fase F: os benefícios listados são EXATAMENTE as superfícies gateadas
-// no código (ProGate) — nada de prometer recurso que não existe (a
-// versão anterior anunciava "backup na nuvem", que não existe sem o
-// Supabase do Constância; saiu da copy, registrado em FASE-F-NOTES.md).
+// Regra da casa: os benefícios listados são EXATAMENTE o que o código
+// gateia (ProGate + FreeLimits) — nada de prometer recurso que não
+// existe (a versão original anunciava "backup na nuvem", que não existe
+// sem backend; saiu da copy, registrado em FASE-F-NOTES.md). Copy
+// reescrita na definição de 2026-11-01: benefício concreto primeiro.
 private val benefits = listOf(
     Benefit(
-        "Padrões cruzados com defasagem",
-        "Sono de ontem × seu dia de hoje, hábitos da manhã × humor e atrasos.",
+        "Hábitos e tarefas sem limite",
+        "Crie quanto a sua rotina pedir — os tetos do grátis somem.",
+    ),
+    Benefit(
+        "Padrões cruzados",
+        "Sono, humor e hábitos lado a lado: o que ajuda e o que " +
+            "atrapalha o seu dia seguinte.",
     ),
     Benefit(
         "Raio-X de atrasos",
-        "Onde o planejamento fura: projeto, prioridade e horário.",
+        "Onde seus atrasos nascem — turno, projeto e idade — para " +
+            "corrigir a causa, não o sintoma.",
+    ),
+    Benefit(
+        "Insights avançados",
+        "Conclusões prontas dos seus dados, cruzando sono, hábitos " +
+            "e tarefas.",
     ),
     Benefit(
         "Ano em Revista completo",
-        "O ano inteiro em revista + a revista do trimestre.",
+        "A retrospectiva do ano e do trimestre, com recordes e marcos.",
     ),
     Benefit(
-        "Desafios Pro exclusivos",
-        "Pacotes guiados marcados com o selo Pro, de 21 e 30 dias.",
+        "Desafios avançados",
+        "Pacotes de 21 e 30 dias para consolidar o hábito de verdade.",
     ),
 )
 
@@ -205,7 +211,7 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
         item {
             BackRow(
                 title = "Constância Pro",
-                subtitle = "para quem leva o dia a sério",
+                subtitle = "Entenda o seu ritmo. Corrija a rota.",
                 onBack = onClose,
                 modifier = Modifier.padding(bottom = 4.dp),
             )
@@ -228,9 +234,36 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
             }
         }
 
-        // R11.2: venda por recurso — demonstração visual de cada
-        // superfície Pro, em páginas deslizáveis.
-        item { FeatureShowcase() }
+        // Faixa do grátis (definição de 2026-11-01): o plano gratuito
+        // é declarado com orgulho ANTES dos benefícios do Pro — o
+        // usuário sabe exatamente onde o teto fica e o que nunca muda.
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(extra.tintGreen)
+                    .padding(horizontal = 14.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Icon(
+                    Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = scheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.size(9.dp))
+                Text(
+                    "Grátis para sempre: hábitos, tarefas e diário " +
+                        "completos — até 5 hábitos ativos e 100 tarefas " +
+                        "abertas, com os relatórios essenciais.",
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = scheme.onSurface,
+                )
+            }
+        }
 
         // Recursos do Pro (lista com checks, como no protótipo).
         item {
@@ -425,10 +458,11 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "No plano gratuito continua tudo: hábitos, " +
-                        "tarefas, diário e os relatórios básicos — sem " +
-                        "limite de itens, para sempre. O Pro destrava " +
-                        "as análises avançadas.",
+                    text = "No plano gratuito, para sempre: hábitos, " +
+                        "tarefas, diário e relatórios essenciais — até " +
+                        "5 hábitos ativos e 100 tarefas abertas. E se " +
+                        "um dia cancelar o Pro, nada do que você criou " +
+                        "trava ou some.",
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -462,217 +496,6 @@ fun PaywallScreen(deps: AppDeps, onClose: () -> Unit = {}) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// R11.2 — páginas de venda por recurso Pro (demonstração ilustrativa).
-// ---------------------------------------------------------------------------
-
-private data class FeaturePage(
-    val icon: ImageVector,
-    val title: String,
-    val description: String,
-)
-
-private val featurePages = listOf(
-    FeaturePage(
-        Icons.Filled.Bedtime,
-        "Padrões cruzados",
-        "Durma mal numa noite e o dia seguinte paga a conta? O " +
-            "Constância cruza sono, hábitos da manhã e carga de tarefas " +
-            "com o seu humor e os seus atrasos — com a amostra sempre " +
-            "visível, sem prometer causalidade.",
-    ),
-    FeaturePage(
-        Icons.Filled.Schedule,
-        "Raio-X de atrasos",
-        "Atrasos por projeto, prioridade e parte do dia, a idade de " +
-            "cada atraso e as recorrentes que sempre furam — para " +
-            "consertar o planejamento, não a força de vontade.",
-    ),
-    FeaturePage(
-        Icons.Filled.EmojiEvents,
-        "Desafios Pro + Ano em Revista",
-        "Pacotes guiados com selo Pro e a revista completa do ano e " +
-            "do trimestre: dias perfeitos, dia mais produtivo, " +
-            "check-ins, tarefas e sua maior sequência.",
-    ),
-)
-
-@Composable
-private fun FeatureShowcase() {
-    val scheme = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    val pagerState = rememberPagerState(pageCount = { featurePages.size })
-    Column(
-        modifier = Modifier.fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(scheme.surface)
-            .border(1.dp, extra.lineSoft, RoundedCornerShape(24.dp))
-            .padding(vertical = 16.dp),
-    ) {
-        Text(
-            text = "EXPLORE O PRO",
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontSize = 11.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.12.em,
-            ),
-            color = scheme.primary,
-            modifier = Modifier.padding(horizontal = 18.dp),
-        )
-        Spacer(Modifier.height(10.dp))
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth(),
-        ) { page ->
-            val feature = featurePages[page]
-            Column(modifier = Modifier.padding(horizontal = 18.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(scheme.primaryContainer),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            feature.icon,
-                            contentDescription = null,
-                            tint = scheme.primary,
-                            modifier = Modifier.size(21.dp),
-                        )
-                    }
-                    Spacer(Modifier.size(11.dp))
-                    Text(
-                        feature.title,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 16.sp,
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    feature.description,
-                    style = MaterialTheme.typography.bodySmall.copy(
-                        fontSize = 13.sp,
-                    ),
-                    color = scheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(12.dp))
-                DemoVisual(page = page)
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-        ) {
-            featurePages.indices.forEach { index ->
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .size(if (pagerState.currentPage == index) 8.dp else 6.dp)
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(
-                            if (pagerState.currentPage == index) {
-                                scheme.primary
-                            } else {
-                                extra.lineSoft
-                            },
-                        ),
-                )
-            }
-        }
-    }
-}
-
-/** Mini-visual de demonstração de cada recurso (ilustrativo, sem dados). */
-@Composable
-private fun DemoVisual(page: Int) {
-    val scheme = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    when (page) {
-        0 -> Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            DemoBar(label = "noites de 7h+", fraction = 0.82f, value = "82% dos dias em dia")
-            DemoBar(label = "noites curtas", fraction = 0.41f, value = "41% dos dias em dia")
-        }
-        1 -> Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            DemoBar(label = "noite", fraction = 0.54f, value = "54% dos atrasos")
-            DemoBar(label = "tarde", fraction = 0.31f, value = "31% dos atrasos")
-            DemoBar(label = "manhã", fraction = 0.15f, value = "15% dos atrasos")
-        }
-        else -> Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-            repeat(7) { index ->
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(
-                            if (index < 5) scheme.primary
-                            else extra.pageChip,
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (index < 5) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(12.dp),
-                        )
-                    }
-                }
-            }
-            Spacer(Modifier.size(6.dp))
-            Text(
-                text = "dia 5 de 30 — demonstração",
-                style = MaterialTheme.typography.bodySmall,
-                color = extra.ink3,
-                modifier = Modifier.align(Alignment.CenterVertically),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DemoBar(label: String, fraction: Float, value: String) {
-    val scheme = MaterialTheme.colorScheme
-    val extra = MaterialTheme.constanciaExtra
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.5.sp),
-            color = extra.ink3,
-            modifier = Modifier.size(width = 86.dp, height = 16.dp),
-        )
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(8.dp)
-                .clip(RoundedCornerShape(99.dp))
-                .background(extra.pageChip),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(fraction)
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(scheme.primary),
-            )
-        }
-        Spacer(Modifier.size(8.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall.copy(
-                fontSize = 11.5.sp,
-                fontWeight = FontWeight.SemiBold,
-            ),
-            color = scheme.onSurface,
-        )
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Cartão de planos: gradiente roxo do protótipo + seletor de planos com
 // preço REAL da loja. Sem produto, cai no cartão genérico (sem preço).
 // ---------------------------------------------------------------------------
