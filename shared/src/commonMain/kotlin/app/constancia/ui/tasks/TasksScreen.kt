@@ -79,6 +79,7 @@ import app.constancia.domain.TaskSortMode
 import app.constancia.domain.TaskView
 import app.constancia.domain.WEEKDAYS_ISO_PT
 import app.constancia.domain.applySort
+import app.constancia.domain.canCreateTask
 import app.constancia.domain.doneTodayTasks
 import app.constancia.domain.encodeRepeatSpec
 import app.constancia.domain.entradaTasks
@@ -135,6 +136,7 @@ private fun todayGroupLabel(today: LocalDate): String =
 fun TasksScreen(
     deps: AppDeps,
     modifier: Modifier = Modifier,
+    onOpenPaywall: () -> Unit = {},
 ) {
     val today = remember { todayYmd() }
     val todayDate = remember { today.toLocalDate() }
@@ -240,11 +242,22 @@ fun TasksScreen(
         !it.done && it.dueDate == today
     }
 
+    // Teto do grátis (2026-11-01): vale para captura rápida e modelos.
+    // No teto, o paywall abre como convite e o texto digitado FICA —
+    // nada se perde nem trava.
+    val isPro by deps.entitlement.isProFlow.collectAsState(initial = false)
+    fun taskCapReached(): Boolean =
+        !canCreateTask(tasks.count { !it.done }, isPro)
+
     /** Captura rápida com o parser de linguagem natural (item 6): o que o parser
      *  reconheceu vira campo da tarefa; o resto segue o padrão da visão. */
     fun quickAddParsed(parse: QuickAddParse) {
         val title = parse.title.trim()
         if (title.isEmpty()) return
+        if (taskCapReached()) {
+            onOpenPaywall()
+            return
+        }
         quickText = ""
         val defaultDue = when (view) {
             TaskView.ENTRADA -> null
@@ -1027,8 +1040,13 @@ fun TasksScreen(
             tasks = tasks,
             onDismiss = { showTemplates = false },
             onInstantiate = { templateId ->
-                scope.launch { deps.tasks.instantiateTemplate(templateId, today) }
-                showTemplates = false
+                if (taskCapReached()) {
+                    showTemplates = false
+                    onOpenPaywall()
+                } else {
+                    scope.launch { deps.tasks.instantiateTemplate(templateId, today) }
+                    showTemplates = false
+                }
             },
             onSaveFromProject = { name, items ->
                 scope.launch { deps.tasks.saveTemplate(name, items) }
