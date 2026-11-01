@@ -776,7 +776,7 @@ class ConstanciaUiTest {
         // (gesto no próprio LazyColumn) até ele ser composto.
         val listNode = composeRule.onNodeWithTag("mais_list")
         var tries = 0
-        while (!nodesWith("Padrões cruzados e raio-X de atrasos") && tries < 8) {
+        while (!nodesWith("Sem limites + análises avançadas") && tries < 8) {
             listNode.performTouchInput { swipeUp() }
             composeRule.waitForIdle()
             tries++
@@ -784,8 +784,8 @@ class ConstanciaUiTest {
         // Verifica que o cartão está visível (screenshot mostra o UI).
         // NOTA: o clique no cartão não abre o paywall no emulador de teste
         // (investigado); a navegação é coberta por teste manual.
-        composeRule.onNodeWithText("Padrões cruzados e raio-X de atrasos").assertExists()
-        composeRule.onNodeWithText("Padrões cruzados e raio-X de atrasos").performScrollTo()
+        composeRule.onNodeWithText("Sem limites + análises avançadas").assertExists()
+        composeRule.onNodeWithText("Sem limites + análises avançadas").performScrollTo()
         shot("10_mais_banner_pro")
     }
 
@@ -1252,6 +1252,70 @@ class ConstanciaUiTest {
         composeRule.onNodeWithText("Recolher").performScrollTo().performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { !nodesWith("Seu histórico") }
     }
+
+    @Test
+    fun roteiro32_relatorios_gruposETeasersPro() {
+        // Definição Pro de 2026-11-01: relatórios organizados em
+        // grupos (Visão geral / Hábitos / Diário / Análises avançadas
+        // com selo PRO) e os cartões Pro com PRÉVIA DE EXEMPLO
+        // rotulada — não mais um cadeado seco no meio da tela.
+        createHabit("Meditar")
+        // Um check-in para os relatórios saírem do estado vazio.
+        device.swipe(160, 470, 160, 360, 12)
+        composeRule.waitForIdle()
+        composeRule.onAllNodesWithTag("habit_check")[0].performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        openMaisItem("mais_progresso")
+        awaitText("tarefas × hábitos × diário, cruzados", "reports_list")
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("VISÃO GERAL") }
+        shot("49_relatorios_visao_geral")
+        // Desce até o grupo Pro: selo, teaser com prévia e CTA novo.
+        var tries = 0
+        while (!nodesWith("ANÁLISES AVANÇADAS") && tries < 10) {
+            swipeList("reports_list")
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Padrões cruzados") }
+        org.junit.Assert.assertTrue(nodesWith("PRÉVIA · EXEMPLO"))
+        org.junit.Assert.assertTrue(nodesWith("Desbloquear com o Pro"))
+        shot("50_relatorios_grupo_pro")
+        // Insights avançados mora no mesmo grupo, mais abaixo.
+        tries = 0
+        while (!nodesWith("Insights avançados") && tries < 6) {
+            swipeList("reports_list")
+            tries++
+        }
+        org.junit.Assert.assertTrue(nodesWith("Insights avançados"))
+        shot("51_relatorios_insights_avancados")
+    }
+
+    @Test
+    fun roteiro33_tetoDoGratis_sextoHabitoAbrePaywall() {
+        // Definição de 2026-11-01: grátis até 5 hábitos ativos; a
+        // tentativa do 6º abre o PAYWALL (convite com a faixa do
+        // grátis), nunca um erro — e os 5 existentes seguem intactos.
+        listOf("H1", "H2", "H3", "H4", "H5").forEach { createHabit(it) }
+        composeRule.onNodeWithTag("tab_HABITOS").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("H5") }
+        var tries = 0
+        while (!nodesWith("Criar novo hábito") && tries < 8) {
+            swipeList("habits_list")
+            tries++
+        }
+        composeRule.onNodeWithText("Criar novo hábito").performClick()
+        // Quem abre é o paywall — a folha de criação NÃO abre.
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("paywall_list") }
+        org.junit.Assert.assertFalse(nodesWithTag("habit_name_field"))
+        org.junit.Assert.assertTrue(nodesWith("Grátis para sempre", substring = true))
+        shot("52_teto_paywall")
+        // Volta e os 5 hábitos continuam lá, utilizáveis.
+        composeRule.onNodeWithContentDescription("Voltar").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("paywall_list") }
+        org.junit.Assert.assertTrue(nodesWith("H1"))
+        org.junit.Assert.assertTrue(nodesWith("H5"))
+        shot("53_teto_habitos_intactos")
+    }
 }
 
 /**
@@ -1397,10 +1461,16 @@ class PaywallUiTest {
         )
         // Restaurar compra existe (Android tem loja integrada).
         composeRule.onNodeWithTag("paywall_restore").assertExists()
-        // E o rodapé do grátis generoso está lá (sem "últimos 30 dias").
+        // Rodapé da definição de 2026-11-01: o grátis declara os
+        // tetos generosos (5 hábitos/100 tarefas) — a copy antiga
+        // ("sem limite de itens" no grátis) não pode mais aparecer.
+        org.junit.Assert.assertTrue(
+            composeRule.onAllNodesWithText("5 hábitos ativos", substring = true)
+                .fetchSemanticsNodes().isNotEmpty(),
+        )
         org.junit.Assert.assertTrue(
             composeRule.onAllNodesWithText("sem limite de itens", substring = true)
-                .fetchSemanticsNodes().isNotEmpty(),
+                .fetchSemanticsNodes().isEmpty(),
         )
         org.junit.Assert.assertTrue(
             composeRule.onAllNodesWithText("últimos 30 dias", substring = true)
