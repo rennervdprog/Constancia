@@ -328,12 +328,14 @@ data class CompletionReversal(
 
 /**
  * R8.1 (Fase B): opções de vista persistidas (agrupar/ordenar) de UMA
- * visão. groupBy no formato das vistas salvas (none|project|priority|
- * date); sortMode é o nome do enum TaskSortMode (SMART|PRIORITY|DUE).
+ * visão. groupBy no formato das vistas salvas (session|none|project|
+ * priority|date); sortMode é o nome do enum TaskSortMode
+ * (SMART|PRIORITY|DUE). Sem uma escolha persistida, a vista agrupa por
+ * sessão.
  */
 data class TaskViewOptions(
     val viewKey: String,
-    val groupBy: String = "none",
+    val groupBy: String = "session",
     val sortMode: String = "SMART",
 )
 
