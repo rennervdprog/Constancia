@@ -566,3 +566,70 @@ fun quarterWindow(today: LocalDate): Pair<LocalDate, LocalDate> {
     val end = start.plus(DatePeriod(months = 3)).minus(DatePeriod(days = 1))
     return start to minOf(today, end)
 }
+
+/**
+ * Insights AVANÇADOS (superfície Pro, definição de 2026-11-01):
+ * conclusões cruzadas prontas, geradas dos MESMOS dados que as seções
+ * Pro exibem (sono × dia seguinte, hábito da manhã × dia, raio-X).
+ * Cada frase só nasce quando o efeito é MATERIAL (limiares abaixo) e a
+ * amostra já passou nos mínimos das próprias funções de padrão — sem
+ * efeito, sem frase (nada de encher linguiça). Os insights básicos do
+ * período (computeReport) seguem grátis; estes cruzam domínios.
+ * No máximo 4 frases, na ordem sono → manhã → atrasos.
+ */
+fun advancedInsights(
+    sleep: SleepLagPattern?,
+    morning: MorningHabitPattern?,
+    xray: OverdueXray,
+): List<String> {
+    val out = mutableListOf<String>()
+    if (sleep != null) {
+        val gap = sleep.overdueRateAfterShort - sleep.overdueRateAfterEnough
+        if (gap >= 0.10) {
+            out += "Dormir pouco cobra no dia seguinte: após noites " +
+                "curtas, ${pct(sleep.overdueRateAfterShort)} das suas " +
+                "tarefas atrasam — contra " +
+                "${pct(sleep.overdueRateAfterEnough)} após noites boas."
+        }
+        val moodShort = sleep.moodAfterShort
+        val moodEnough = sleep.moodAfterEnough
+        if (moodShort != null && moodEnough != null &&
+            moodEnough - moodShort >= 0.4
+        ) {
+            out += "Seu humor sente o sono: ${fmt1(moodEnough)} nos dias " +
+                "após noite boa, contra ${fmt1(moodShort)} após noite curta."
+        }
+    }
+    if (morning != null) {
+        val delta = morning.taskRateDelta
+        val with = morning.taskRateWith
+        val without = morning.taskRateWithout
+        if (delta != null && with != null && without != null && delta >= 0.10) {
+            out += "Nos dias em que você faz “${morning.habit.name}” de " +
+                "manhã, conclui ${pct(with)} das tarefas — " +
+                "${pct(without)} nos outros dias."
+        } else if (morning.moodWith - morning.moodWithout >= 0.4) {
+            out += "“${morning.habit.name}” de manhã levanta seu humor: " +
+                "${fmt1(morning.moodWith)} nos dias com ele, " +
+                "${fmt1(morning.moodWithout)} sem."
+        }
+    }
+    if (xray.total >= 3) {
+        val top = xray.topDayPart
+        if (top != null && xray.topDayPartShare >= 0.4) {
+            out += "${pct(xray.topDayPartShare)} dos seus atrasos nascem " +
+                "na ${top.label.lowercase()} — é lá que o plano fura."
+        }
+        if (xray.recurringCount >= 2) {
+            out += "${xray.recurringCount} tarefas recorrentes estão " +
+                "entre as atrasadas — o ritmo delas pode estar " +
+                "apertado demais."
+        }
+        if (xray.avgAgeDays >= 3.0) {
+            out += "Suas tarefas atrasadas têm, em média, " +
+                "${xray.avgAgeDays.roundToInt()} dias — atraso antigo " +
+                "costuma virar desistência."
+        }
+    }
+    return out.take(4)
+}
