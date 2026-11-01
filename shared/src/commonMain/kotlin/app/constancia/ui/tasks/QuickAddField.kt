@@ -13,12 +13,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -158,19 +160,25 @@ fun QuickAddField(
             Spacer(Modifier.width(8.dp))
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(scheme.primary)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (parse.title.isNotBlank()) scheme.primary
+                        else scheme.surfaceVariant,
+                    )
                     .testTag(addTag)
-                    .clickable { if (parse.title.isNotBlank()) onAdd(parse) }
-                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                    .clickable { if (parse.title.isNotBlank()) onAdd(parse) },
+                contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    text = "Adicionar",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                    ),
-                    color = scheme.onPrimary,
+                Icon(
+                    Icons.Filled.ArrowUpward,
+                    contentDescription = "Adicionar tarefa",
+                    tint = if (parse.title.isNotBlank()) {
+                        scheme.onPrimary
+                    } else {
+                        scheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.size(19.dp),
                 )
             }
         }
