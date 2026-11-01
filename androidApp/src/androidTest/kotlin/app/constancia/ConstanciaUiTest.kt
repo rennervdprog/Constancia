@@ -1297,12 +1297,17 @@ class ConstanciaUiTest {
         // grátis), nunca um erro — e os 5 existentes seguem intactos.
         listOf("H1", "H2", "H3", "H4", "H5").forEach { createHabit(it) }
         composeRule.onNodeWithTag("tab_HABITOS").performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("H5") }
+        // A lista é preguiçosa: o 5º cartão e o botão final só são
+        // compostos ao rolar — desce conferindo o H5 no caminho.
+        var sawH5 = false
         var tries = 0
-        while (!nodesWith("Criar novo hábito") && tries < 8) {
+        while (!nodesWith("Criar novo hábito") && tries < 10) {
+            if (nodesWith("H5")) sawH5 = true
             swipeList("habits_list")
             tries++
         }
+        if (nodesWith("H5")) sawH5 = true
+        org.junit.Assert.assertTrue(sawH5)
         composeRule.onNodeWithText("Criar novo hábito").performClick()
         // Quem abre é o paywall — a folha de criação NÃO abre.
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("paywall_list") }
@@ -1313,11 +1318,16 @@ class ConstanciaUiTest {
                 .fetchSemanticsNodes().isNotEmpty(),
         )
         shot("52_teto_paywall")
-        // Volta e os 5 hábitos continuam lá, utilizáveis.
+        // Volta e os hábitos continuam lá, utilizáveis (a lista
+        // segue no fim: H5 composto; sobe de volta e confere o H1).
         composeRule.onNodeWithContentDescription("Voltar").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("paywall_list") }
-        org.junit.Assert.assertTrue(nodesWith("H1"))
         org.junit.Assert.assertTrue(nodesWith("H5"))
+        repeat(6) {
+            device.swipe(160, 300, 160, 520, 12)
+            composeRule.waitForIdle()
+        }
+        org.junit.Assert.assertTrue(nodesWith("H1"))
         shot("53_teto_habitos_intactos")
     }
 }
