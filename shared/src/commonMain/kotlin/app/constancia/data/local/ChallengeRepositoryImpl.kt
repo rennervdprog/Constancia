@@ -34,7 +34,11 @@ class ChallengeRepositoryImpl(private val db: ConstanciaDb) : ChallengeRepositor
         }
 
     // Idempotente: so insere os pacotes padrao quando a tabela esta vazia.
+    // A normalização Pro roda SEMPRE (barata e idempotente): bancos
+    // semeados antes da definição de 2026-11-01 ganham o selo certo nos
+    // pacotes de 21/30 dias sem perder status nem progresso.
     override suspend fun ensureSeed(): Unit = withContext(Dispatchers.Default) {
+        queries.markProChallenges()
         if (queries.selectChallenges().executeAsList().isEmpty()) {
             queries.insertChallenge(
                 "ch-meditar-7",
@@ -73,7 +77,7 @@ class ChallengeRepositoryImpl(private val db: ConstanciaDb) : ChallengeRepositor
                 "sleep",
                 null,
                 ChallengeStatus.AVAILABLE.name,
-                0,
+                1,
                 null,
                 null,
                 "",
