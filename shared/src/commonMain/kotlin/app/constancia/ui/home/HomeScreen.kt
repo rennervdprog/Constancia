@@ -9,6 +9,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,8 +74,13 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -96,6 +102,7 @@ import app.constancia.domain.greetingFor
 import app.constancia.domain.isDueOn
 import app.constancia.domain.prioName
 import app.constancia.domain.promptIndexFor
+import app.constancia.domain.sessionForHour
 import app.constancia.domain.sleepLagPattern
 import app.constancia.domain.subtaskProgress
 import app.constancia.domain.timeSortKey
@@ -114,6 +121,8 @@ import app.constancia.domain.isGoalMet
 import app.constancia.model.todayYmd
 import app.constancia.model.toLocalDate
 import app.constancia.model.isoDayNumberCompat
+import app.constancia.shared.generated.resources.Res
+import app.constancia.shared.generated.resources.mascote
 import app.constancia.theme.constanciaExtra
 import app.constancia.ui.common.habitColorOf
 import app.constancia.ui.common.habitIcon
@@ -313,6 +322,36 @@ fun HomeScreen(
                     selectedDate = selectedDate,
                     onSelectDate = { selectedDate = it },
                 )
+            }
+
+            // Cartão "Agora" (pacote Hoje 2026-11-01): só no dia de
+            // hoje e só quando já existe algo criado — quem está
+            // começando vê o EmptyHomeCard logo abaixo, sem duplicar
+            // convites. Some sozinho quando o dia fecha.
+            if (isToday && !(habits.isEmpty() && allTasks.isEmpty())) {
+                val agora = pickAgoraTarget(
+                    habits = visibleHabits,
+                    tasks = dayTasks,
+                    diaryDone = selEntry != null,
+                    current = sessionForHour(hour),
+                )
+                if (agora != null) {
+                    item(key = "agora") {
+                        AgoraCard(
+                            target = agora,
+                            onCheckHabit = { st ->
+                                scope.launch {
+                                    deps.checkins.toggle(st.habit.id, selYmd)
+                                }
+                            },
+                            onCheckTask = { t ->
+                                scope.launch { deps.tasks.setDone(t.id, true) }
+                            },
+                            onOpenDiary = { onOpenDiary(selYmd) },
+                            onOpenTimer = { st -> timerTarget = st },
+                        )
+                    }
+                }
             }
 
             // M12 (varredura 2026-10-30): quem ainda não tem NENHUM
@@ -738,7 +777,33 @@ private fun HeroPanel(
                         )
                     }
                 }
-                Spacer(Modifier.width(if (ringSize < 104.dp) 12.dp else 18.dp))
+                Spacer(Modifier.width(if (ringSize < 104.dp) 8.dp else 12.dp))
+                // Mascote viva (pacote Hoje 2026-11-01): a chama do
+                // ícone mora no herói e reage ao progresso do dia.
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    MascotMedallion(
+                        frac = frac,
+                        celebrated = celebrated,
+                        size = if (ringSize < 104.dp) 44.dp else 56.dp,
+                    )
+                    if (maxWidth >= 300.dp) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = when {
+                                celebrated -> "sequência protegida!"
+                                frac >= 0.5f -> "no ritmo!"
+                                frac > 0f -> "esquentando…"
+                                else -> "ainda acordando…"
+                            },
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = Color(0xFFD9C8F8),
+                        )
+                    }
+                }
+                Spacer(Modifier.width(if (ringSize < 104.dp) 8.dp else 12.dp))
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(9.dp),
@@ -794,6 +859,63 @@ private fun HeroPanel(
                 )
             }
         }
+    }
+}
+
+/**
+ * A mascote do Constância (a chama do ícone) no herói: medalhão
+ * circular com a arte oficial. Estados pelo progresso do dia: parada
+ * e dessaturada em 0%, viva no meio do caminho e pulsando com brilho
+ * âmbar quando o dia fecha (o brilho é o único uso de âmbar aqui —
+ * é a cor da chama da marca, como no chip de sequência).
+ */
+@OptIn(ExperimentalResourceApi::class)
+@Composable
+private fun MascotMedallion(frac: Float, celebrated: Boolean, size: androidx.compose.ui.unit.Dp) {
+    val pulse = if (celebrated) {
+        val transition = rememberInfiniteTransition(label = "mascot")
+        val s by transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 620),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "mascotScale",
+        )
+        s
+    } else {
+        1f
+    }
+    val glow = Color(0xFFE86A17).copy(alpha = if (celebrated) 0.8f else 0.3f)
+    Box(
+        modifier = Modifier
+            .size(size)
+            .scale(pulse)
+            .shadow(
+                elevation = if (celebrated) 14.dp else 6.dp,
+                shape = CircleShape,
+                spotColor = glow,
+                ambientColor = glow,
+            )
+            .clip(CircleShape)
+            .border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+            .testTag("hero_mascot"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(Res.drawable.mascote),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            colorFilter = if (!celebrated && frac <= 0f) {
+                ColorFilter.colorMatrix(
+                    ColorMatrix().apply { setToSaturation(0.6f) },
+                )
+            } else {
+                null
+            },
+        )
     }
 }
 
