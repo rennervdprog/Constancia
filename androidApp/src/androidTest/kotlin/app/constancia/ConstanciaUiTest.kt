@@ -1307,7 +1307,11 @@ class ConstanciaUiTest {
         // Quem abre é o paywall — a folha de criação NÃO abre.
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("paywall_list") }
         org.junit.Assert.assertFalse(nodesWithTag("habit_name_field"))
-        org.junit.Assert.assertTrue(nodesWith("Grátis para sempre", substring = true))
+        org.junit.Assert.assertTrue(nodesWith("Constância Pro"))
+        org.junit.Assert.assertTrue(
+            composeRule.onAllNodesWithText("Grátis para sempre", substring = true)
+                .fetchSemanticsNodes().isNotEmpty(),
+        )
         shot("52_teto_paywall")
         // Volta e os 5 hábitos continuam lá, utilizáveis.
         composeRule.onNodeWithContentDescription("Voltar").performClick()
