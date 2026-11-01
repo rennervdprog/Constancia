@@ -21,7 +21,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -71,12 +76,12 @@ fun priorityColor(priority: Int): Color = when (priority) {
 
 @OptIn(ExperimentalLayoutApi::class)
 /**
- * Linha de tarefa do protótipo (.trow), pensada para viver dentro do
- * cartão agrupado da seção: bolinha de 23dp com a cor/fundo da
- * prioridade, título 14.5/600, metadados discretos (data, projeto com
- * ponto, progresso de subtarefas, recorrência e o selo do hábito
- * vinculado) e, ao expandir, anotação, subtarefas marcáveis e as ações
- * em etiquetas (mover/adiar, prioridade, excluir).
+ * Linha de tarefa pensada para viver dentro do cartão agrupado da
+ * seção: check circular neutro, título 14.5/600 (com selo P1 quando a
+ * prioridade é alta) e metadados em chips (data/hora, projeto, prazo,
+ * duração, lembrete e recorrência). O progresso das subtarefas tem uma
+ * linha própria; ao expandir, aparecem anotação, subtarefas marcáveis
+ * e as ações em etiquetas (mover/adiar, prioridade, excluir).
  */
 @Composable
 fun TodoRow(
@@ -105,7 +110,6 @@ fun TodoRow(
     var newSubText by remember { mutableStateOf("") }
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
-    val prioColor = priorityColor(task.priority)
     val progress = subtaskProgress(task.subtasks)
     val dueText = dueLabel(task, today)
     val deadline = task.deadlineDate
@@ -113,6 +117,11 @@ fun TodoRow(
     val isOverdue = !task.done && task.dueDate != null &&
         task.dueDate < today.toString()
     val isDueToday = task.dueDate == today.toString()
+    val isDeadlineOverdue = !task.done && deadline != null &&
+        deadline < today.toString()
+    val isDeadlineToday = !task.done && deadline == today.toString()
+    val reminderSummary = app.constancia.domain.remindersSummary(task)
+        ?.lowercase()?.takeIf { it.isNotBlank() }
 
     Column(
         modifier = modifier
@@ -125,21 +134,21 @@ fun TodoRow(
                 .clickable(onClick = onToggleExpand),
             verticalAlignment = Alignment.Top,
         ) {
-            // Bolinha da prioridade (check roxo quando feita).
+            // Check neutro: a prioridade aparece no selo P1 do título,
+            // não na cor do círculo (check roxo quando feita).
             Box(
                 modifier = Modifier
                     .padding(top = 1.dp)
-                    .size(23.dp)
+                    .size(26.dp)
                     .clip(CircleShape)
                     .testTag("task_check")
                     .semantics { contentDescription = "Concluir tarefa" }
                     .background(
-                        if (task.done) scheme.primary
-                        else prioColor.copy(alpha = 0.12f),
+                        if (task.done) scheme.primary else Color.Transparent,
                     )
                     .then(
                         if (task.done) Modifier
-                        else Modifier.border(2.2.dp, prioColor, CircleShape),
+                        else Modifier.border(2.dp, extra.checkBorder, CircleShape),
                     )
                     .clickable(onClick = onToggleDone),
                 contentAlignment = Alignment.Center,
@@ -155,135 +164,180 @@ fun TodoRow(
             }
             Spacer(Modifier.width(11.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = task.title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontSize = 14.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    ),
-                    color = if (task.done) scheme.onSurfaceVariant else scheme.onSurface,
-                    textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                )
-                Spacer(Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        text = task.title,
+                        style = MaterialTheme.typography.bodyLarge.copy(
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                        color = if (task.done) {
+                            scheme.onSurfaceVariant
+                        } else {
+                            scheme.onSurface
+                        },
+                        textDecoration = if (task.done) {
+                            TextDecoration.LineThrough
+                        } else {
+                            null
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (task.priority == 1) {
+                        Spacer(Modifier.width(7.dp))
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 1.dp)
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(extra.red)
+                                .padding(horizontal = 6.dp, vertical = 2.5.dp),
+                        ) {
+                            Text(
+                                text = "P1",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 0.5.sp,
+                                ),
+                                color = Color.White,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    if (dueText != null) {
-                        Text(
-                            text = dueText.lowercase() +
-                                (task.dueTime?.let { " $it" } ?: ""),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.5.sp,
-                            ),
-                            color = when {
+                    if (dueText != null || task.dueTime != null) {
+                        MetaChip(
+                            text = listOfNotNull(
+                                dueText?.lowercase(), task.dueTime,
+                            ).joinToString(" "),
+                            background = when {
+                                isOverdue -> extra.redSoft
+                                isDueToday -> scheme.primaryContainer
+                                else -> extra.pageChip
+                            },
+                            contentColor = when {
                                 isOverdue -> extra.red
-                                isDueToday -> scheme.primary
-                                else -> scheme.onSurfaceVariant
+                                isDueToday -> scheme.onPrimaryContainer
+                                else -> extra.ink2
+                            },
+                            borderColor = when {
+                                isOverdue -> extra.redSoft
+                                isDueToday -> scheme.primaryContainer
+                                else -> extra.lineSoft
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Filled.Schedule,
+                                    contentDescription = null,
+                                    tint = when {
+                                        isOverdue -> extra.red
+                                        isDueToday -> scheme.primary
+                                        else -> extra.ink3
+                                    },
+                                    modifier = Modifier.size(12.dp),
+                                )
                             },
                         )
                     }
                     // Projeto: ponto colorido + nome.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color(task.project.colorHex)),
-                        )
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            text = task.project.label,
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.5.sp,
-                            ),
-                            color = scheme.onSurfaceVariant,
-                        )
-                    }
-                    if (progress != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                    MetaChip(
+                        text = task.project.label,
+                        background = extra.pageChip,
+                        contentColor = extra.ink2,
+                        borderColor = extra.lineSoft,
+                        icon = {
                             Box(
-                                modifier = Modifier
-                                    .width(38.dp)
-                                    .height(5.dp)
-                                    .clip(RoundedCornerShape(99.dp))
-                                    .background(scheme.outline),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth(progress.pct / 100f)
-                                        .height(5.dp)
-                                        .background(
-                                            scheme.primary,
-                                            RoundedCornerShape(99.dp),
-                                        ),
-                                )
-                            }
-                            Spacer(Modifier.width(5.dp))
-                            Text(
-                                text = progress.done.toString() + "/" +
-                                    progress.total.toString(),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.5.sp,
-                                ),
-                                color = scheme.onSurfaceVariant,
+                                modifier = Modifier.size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(task.project.colorHex)),
                             )
-                        }
-                    }
+                        },
+                    )
                     if (task.repeatRule.isNotBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Filled.Repeat,
-                                contentDescription = null,
-                                tint = scheme.onSurfaceVariant,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Spacer(Modifier.width(3.dp))
-                            Text(
-                                text = task.repeatRule,
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 11.5.sp,
-                                ),
-                                color = scheme.onSurfaceVariant,
-                            )
-                        }
+                        MetaChip(
+                            text = task.repeatRule,
+                            background = extra.pageChip,
+                            contentColor = extra.ink2,
+                            borderColor = extra.lineSoft,
+                            icon = {
+                                Icon(
+                                    Icons.Filled.Repeat,
+                                    contentDescription = null,
+                                    tint = extra.ink3,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                            },
+                        )
                     }
                     // Prazo final (item 8): separado da data agendada.
                     if (deadline != null) {
-                        Text(
-                            text = "prazo final: " + dueDateLabel(
+                        MetaChip(
+                            text = "prazo " + dueDateLabel(
                                 deadline.toLocalDate(), today,
                             ).lowercase(),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.5.sp,
-                            ),
-                            color = if (
-                                !task.done && deadline < today.toString()
-                            ) {
-                                extra.red
-                            } else {
-                                scheme.onSurfaceVariant
+                            background = when {
+                                isDeadlineOverdue -> extra.redSoft
+                                isDeadlineToday -> extra.amberSoft
+                                else -> extra.pageChip
+                            },
+                            contentColor = when {
+                                isDeadlineOverdue -> extra.red
+                                isDeadlineToday -> extra.amberStrong
+                                else -> extra.ink2
+                            },
+                            borderColor = when {
+                                isDeadlineOverdue -> extra.redSoft
+                                isDeadlineToday -> extra.amberSoft
+                                else -> extra.lineSoft
+                            },
+                            icon = {
+                                Icon(
+                                    Icons.Filled.Flag,
+                                    contentDescription = null,
+                                    tint = when {
+                                        isDeadlineOverdue -> extra.red
+                                        isDeadlineToday -> extra.amberStrong
+                                        else -> extra.ink3
+                                    },
+                                    modifier = Modifier.size(12.dp),
+                                )
                             },
                         )
                     }
                     if (duration != null) {
-                        Text(
+                        MetaChip(
                             text = "~" + durationLabel(duration),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.5.sp,
-                            ),
-                            color = scheme.onSurfaceVariant,
+                            background = extra.pageChip,
+                            contentColor = extra.ink2,
+                            borderColor = extra.lineSoft,
+                            icon = {
+                                Icon(
+                                    Icons.Filled.Timer,
+                                    contentDescription = null,
+                                    tint = extra.ink3,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                            },
                         )
                     }
-                    if (task.reminders.isNotEmpty()) {
-                        Text(
-                            text = "lembrete: " + (
-                                app.constancia.domain.remindersSummary(task)
-                                    ?: ""
-                                ).lowercase(),
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 11.5.sp,
-                            ),
-                            color = scheme.onSurfaceVariant,
+                    if (reminderSummary != null) {
+                        MetaChip(
+                            text = reminderSummary,
+                            background = extra.pageChip,
+                            contentColor = extra.ink2,
+                            borderColor = extra.lineSoft,
+                            icon = {
+                                Icon(
+                                    Icons.Filled.Notifications,
+                                    contentDescription = null,
+                                    tint = extra.ink3,
+                                    modifier = Modifier.size(12.dp),
+                                )
+                            },
                         )
                     }
                     if (habitName != null) {
@@ -310,6 +364,43 @@ fun TodoRow(
                                 color = scheme.onPrimaryContainer,
                             )
                         }
+                    }
+                }
+                if (progress != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(99.dp))
+                                .background(extra.lineSoft),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(progress.pct / 100f)
+                                    .height(5.dp)
+                                    .background(
+                                        scheme.primary,
+                                        RoundedCornerShape(99.dp),
+                                    ),
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = progress.done.toString() + "/" +
+                                progress.total.toString() + " subtarefas",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = scheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
@@ -384,25 +475,6 @@ fun TodoRow(
                                 } else {
                                     null
                                 },
-                            )
-                        }
-                    }
-                    if (progress != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier.fillMaxWidth()
-                                .height(5.dp)
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(scheme.outline),
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(progress.pct / 100f)
-                                    .height(5.dp)
-                                    .background(
-                                        scheme.primary,
-                                        RoundedCornerShape(99.dp),
-                                    ),
                             )
                         }
                     }
@@ -584,6 +656,40 @@ fun TodoRow(
                 }
             }
         }
+    }
+}
+
+/** Chip compacto de metadado da tarefa (data, projeto, prazo etc.). */
+@Composable
+private fun MetaChip(
+    text: String,
+    background: Color,
+    contentColor: Color,
+    borderColor: Color,
+    icon: @Composable (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(99.dp))
+            .background(background)
+            .border(1.dp, borderColor, RoundedCornerShape(99.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            icon()
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+            ),
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
