@@ -367,7 +367,10 @@ class ConstanciaUiTest {
         composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
         // O cartão fica no fim do fluxo do dia: rola até ele ser composto.
         awaitText("Beber água", "home_list")
-        composeRule.onNodeWithText("Beber água").assertExists()
+        // Desde o cartão Agora (2026-11-01) o nome aparece 2x na
+        // Hoje (cartão + linha da sessão) — onNodeWithText exigiria
+        // nó único; basta existir.
+        org.junit.Assert.assertTrue(nodesWith("Beber água"))
         shot("02_habito_criado")
     }
 
