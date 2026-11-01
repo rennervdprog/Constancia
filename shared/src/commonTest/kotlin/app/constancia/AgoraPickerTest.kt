@@ -138,6 +138,23 @@ class AgoraPickerTest {
     }
 
     @Test
+    fun habitoPendenteVenceDiarioMesmoDeSessaoAnterior() {
+        // Regressão (print 39, rodada 2 do roteiro 28): às 13h o
+        // cartão mostrava o diário (Noite) em vez do hábito da Manhã
+        // ainda pendente. O diário é o fechamento: só aparece
+        // quando não resta hábito nem tarefa.
+        val manha = status(habit("manha", Session.MANHA))
+        val picked = pickAgoraTarget(
+            habits = listOf(manha),
+            tasks = emptyList(),
+            diaryDone = false,
+            current = Session.TARDE,
+        )
+        assertTrue(picked is AgoraTarget.HabitTarget)
+        assertEquals("manha", (picked as AgoraTarget.HabitTarget).status.habit.id)
+    }
+
+    @Test
     fun diarioEUltimoRecursoDaNoiteENuloQuandoTudoFeito() {
         val picked = pickAgoraTarget(
             habits = emptyList(),
