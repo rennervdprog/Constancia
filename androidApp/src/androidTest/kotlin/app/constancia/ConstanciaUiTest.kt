@@ -709,20 +709,24 @@ class ConstanciaUiTest {
         createHabit("Meditar")
         composeRule.onNodeWithTag("tab_HABITOS").performClick()
         composeRule.onNodeWithText("hábitos ativos").assertIsDisplayed()
-        // O rodapé do cartão (com o mapa de calor) fica mais abaixo: rola
-        // até o rótulo das 18 semanas ser composto.
+        // Redesenho 2026-11-01: o mapa mora nos detalhes do cartão.
+        // Rola até o "Detalhes" ser composto, expande e confere o
+        // histórico com a legenda nova.
         var tries = 0
-        while (
-            composeRule.onAllNodesWithText("há 18 semanas", substring = true)
-                .fetchSemanticsNodes().isEmpty() && tries < 6
-        ) {
+        while (!nodesWith("Detalhes") && tries < 6) {
             swipeList("habits_list")
             tries++
         }
+        // Sobe um pouco p/ o rodapé do cartão sair da zona da barra
+        // flutuante antes do toque (padrão dos outros roteiros).
+        device.swipe(160, 470, 160, 360, 12)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Detalhes").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) {
-            composeRule.onAllNodesWithText("há 18 semanas", substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
+            nodesWith("Seu histórico")
         }
+        composeRule.onNodeWithText("não feito").assertExists()
+        composeRule.onNodeWithText("últimas 18 semanas").assertExists()
         shot("07_habitos_heatmap")
     }
 
@@ -790,9 +794,12 @@ class ConstanciaUiTest {
         createHabit("Beber água")
         composeRule.onNodeWithTag("tab_HABITOS").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Beber água") }
-        // Cartão com tile (ícone + cor do hábito, bug nº 2) e ação Editar.
+        // Cartão com tile (ícone + cor do hábito, bug nº 2). No
+        // redesenho 2026-11-01 o Editar mora no menu ⋮ do cartão.
         shot("11_habitos_cartao")
-        composeRule.onNodeWithText("Editar").performScrollTo().performClick()
+        composeRule.onNodeWithContentDescription("Ações de Beber água")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithText("Editar").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Editar hábito") }
         composeRule.onNodeWithText("Salvar alterações").assertExists()
         // A folha abre PREENCHIDA com o nome atual (o texto aparece no
@@ -1214,6 +1221,35 @@ class ConstanciaUiTest {
         }
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Ler 10 páginas") }
         shot("46_tarefas_projeto")
+    }
+
+    @Test
+    fun roteiro31_habitosRedesenhados_compactoEDetalhes() {
+        // Redesenho da aba Hábitos (aprovado 2026-11-01): o cartão
+        // nasce compacto com a semana atual em bolinhas; o mapa e as
+        // ações (ciclo, diário, lembretes) moram nos detalhes.
+        createHabit("Meditar")
+        composeRule.onNodeWithTag("tab_HABITOS").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("semana atual") }
+        shot("47_habitos_compacto")
+        // Expande e confere o histórico legível + as linhas de ação.
+        var tries = 0
+        while (!nodesWith("Detalhes") && tries < 6) {
+            swipeList("habits_list")
+            tries++
+        }
+        device.swipe(160, 470, 160, 360, 12)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText("Detalhes").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Seu histórico") }
+        composeRule.onNodeWithText("não feito").assertExists()
+        composeRule.onNodeWithText("Ciclo").assertExists()
+        composeRule.onNodeWithText("sem ciclo ativo").assertExists()
+        composeRule.onNodeWithText("Lembretes").assertExists()
+        shot("48_habitos_detalhes")
+        // Recolher esconde o histórico de novo.
+        composeRule.onNodeWithText("Recolher").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { !nodesWith("Seu histórico") }
     }
 }
 
