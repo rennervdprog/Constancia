@@ -192,6 +192,27 @@ fun NewHabitSheet(
                 selectedIndex = if (goalType == GoalType.BINARY) 0 else 1,
                 onSelect = { goalType = if (it == 0) GoalType.BINARY else GoalType.QUANTITY },
             )
+            // Coerência da quantidade: passo maior que a meta faz um
+            // toque passar do ponto (o caso real: meta 8 copos com
+            // passo 250 ml virou "250/8" na Hoje — relato do Renner
+            // em 2026-11-01). Erro visível + salvar bloqueado.
+            val qtyTarget = targetText.toDoubleOrNull()
+            val qtyStep = stepText.replace(',', '.').toDoubleOrNull()
+            val quantityError = if (goalType == GoalType.QUANTITY) {
+                when {
+                    qtyTarget != null && qtyTarget <= 0.0 ->
+                        "A meta precisa ser maior que zero."
+                    qtyStep != null && qtyStep <= 0.0 ->
+                        "O passo precisa ser maior que zero."
+                    qtyTarget != null && qtyStep != null && qtyStep > qtyTarget ->
+                        "O passo não pode ser maior que a meta — um " +
+                            "toque passaria do ponto. Ex.: meta 2000 ml " +
+                            "com passo 250 ml, ou meta 8 com passo 1."
+                    else -> null
+                }
+            } else {
+                null
+            }
             if (goalType == GoalType.QUANTITY) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -242,6 +263,15 @@ fun NewHabitSheet(
                         modifier = Modifier.weight(1f),
                     )
                 }
+            }
+
+            if (quantityError != null) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = quantityError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.error,
+                )
             }
 
             SheetSectionLabel("Ícone")
@@ -622,6 +652,7 @@ fun NewHabitSheet(
             // CTA: largura total, raio 18dp, padding vertical 16dp, fundo primary,
             // texto onPrimary Sora 16/700 (titleLarge).
             val ctaEnabled = name.isNotBlank() && !saving && remindersLoaded &&
+                quantityError == null &&
                 !(freqType == FrequencyType.DAYS_OF_WEEK && days.isEmpty())
             Box(
                 modifier = Modifier
