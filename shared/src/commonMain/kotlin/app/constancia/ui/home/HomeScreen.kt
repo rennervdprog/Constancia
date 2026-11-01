@@ -85,6 +85,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
@@ -341,7 +342,24 @@ fun HomeScreen(
                             target = agora,
                             onCheckHabit = { st ->
                                 scope.launch {
-                                    deps.checkins.toggle(st.habit.id, selYmd)
+                                    // Quantidade segue a regra do
+                                    // círculo (completa/limpa), não o
+                                    // toggle binário.
+                                    if (st.habit.goalType == GoalType.QUANTITY) {
+                                        if (st.isDoneToday) {
+                                            deps.checkins.remove(
+                                                st.habit.id, selYmd,
+                                            )
+                                        } else {
+                                            deps.checkins.setQuantity(
+                                                st.habit.id,
+                                                selYmd,
+                                                st.habit.targetQuantity,
+                                            )
+                                        }
+                                    } else {
+                                        deps.checkins.toggle(st.habit.id, selYmd)
+                                    }
                                 }
                             },
                             onCheckTask = { t ->
@@ -1366,7 +1384,27 @@ private fun HabitSessionRow(
             }
             CheckCircleButton(
                 done = status.isDoneToday,
-                onToggle = { scope.launch { deps.checkins.toggle(habit.id, dateYmd) } },
+                onToggle = {
+                    scope.launch {
+                        if (isQuantity) {
+                            // Quantidade (mesma regra da aba Hábitos,
+                            // M1): o círculo completa a meta ou limpa o
+                            // registro. O toggle binário apagava o
+                            // progresso parcial e, sem registro, criava
+                            // um check-in de 1.0 sem sentido — o "buga"
+                            // relatado pelo Renner em 2026-11-01.
+                            if (status.isDoneToday) {
+                                deps.checkins.remove(habit.id, dateYmd)
+                            } else {
+                                deps.checkins.setQuantity(
+                                    habit.id, dateYmd, habit.targetQuantity,
+                                )
+                            }
+                        } else {
+                            deps.checkins.toggle(habit.id, dateYmd)
+                        }
+                    }
+                },
                 enabled = !readOnly,
             )
         }
@@ -1384,7 +1422,13 @@ private fun HabitSessionRow(
                     onIncrease = {
                         scope.launch {
                             deps.checkins.setQuantity(
-                                habit.id, dateYmd, currentQty + habit.quantityStep,
+                                habit.id,
+                                dateYmd,
+                                // Teto na meta (a aba Hábitos já tinha;
+                                // a Hoje não — um passo de 250 numa
+                                // meta de 8 virava "250/8" e subindo).
+                                (currentQty + habit.quantityStep)
+                                    .coerceAtMost(habit.targetQuantity),
                             )
                         }
                     },
@@ -1866,9 +1910,10 @@ private fun QuantityStepper(
                 fontWeight = FontWeight.ExtraBold,
             ),
             modifier = Modifier
-                .widthIn(min = 46.dp)
+                .widthIn(min = 46.dp, max = 170.dp)
                 .padding(horizontal = 8.dp),
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
         StepperButton(text = "+", onClick = onIncrease, tag = "qty_inc")
     }
