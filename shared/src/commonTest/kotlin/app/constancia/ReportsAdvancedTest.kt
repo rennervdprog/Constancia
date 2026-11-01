@@ -1,6 +1,11 @@
 package app.constancia
 
+import app.constancia.domain.MorningHabitPattern
+import app.constancia.domain.OverdueSlice
+import app.constancia.domain.OverdueXray
 import app.constancia.domain.ReportPeriod
+import app.constancia.domain.SleepLagPattern
+import app.constancia.domain.advancedInsights
 import app.constancia.domain.computeReport
 import app.constancia.domain.fmtDeltaPp
 import app.constancia.domain.fmtDeltaPct
@@ -424,5 +429,100 @@ class ReportsAdvancedTest {
         assertEquals(2.0, hl.moodByMonth[0]!!, 0.001)
         assertNull(hl.moodByMonth[5])
         assertNotNull(hl.mostProductiveWeekday)
+    }
+
+    // -- Insights avançados (Pro, 2026-11-01): conclusões cruzadas ----
+
+    private fun emptyXray() = OverdueXray(
+        total = 0,
+        byDayPart = emptyList(),
+        topDayPart = null,
+        topDayPartShare = 0.0,
+        byProject = emptyList(),
+        byPriority = emptyList(),
+        avgAgeDays = 0.0,
+        oldestAgeDays = 0,
+        recurringCount = 0,
+    )
+
+    @Test
+    fun advancedInsights_sonoCurto_viraConclusoes() {
+        val sleep = SleepLagPattern(
+            shortNights = 4,
+            enoughNights = 5,
+            moodAfterShort = 2.8,
+            moodAfterEnough = 3.9,
+            energyAfterShort = null,
+            energyAfterEnough = null,
+            overdueRateAfterShort = 0.43,
+            overdueRateAfterEnough = 0.16,
+            overdueRatio = 2.7,
+            lastSleepHours = 5.5,
+            lastSleepDate = TODAY,
+        )
+        val out = advancedInsights(sleep, null, emptyXray())
+        assertEquals(2, out.size)
+        assertTrue(out[0].contains("43%"))
+        assertTrue(out[0].contains("16%"))
+        assertTrue(out[1].contains("humor"))
+    }
+
+    @Test
+    fun advancedInsights_semEfeitoMaterial_listaVazia() {
+        val sleep = SleepLagPattern(
+            shortNights = 4,
+            enoughNights = 5,
+            moodAfterShort = 3.0,
+            moodAfterEnough = 3.1,
+            energyAfterShort = null,
+            energyAfterEnough = null,
+            overdueRateAfterShort = 0.20,
+            overdueRateAfterEnough = 0.18,
+            overdueRatio = 1.1,
+            lastSleepHours = 7.0,
+            lastSleepDate = TODAY,
+        )
+        val smallXray = emptyXray().copy(total = 2)
+        assertTrue(advancedInsights(sleep, null, smallXray).isEmpty())
+    }
+
+    @Test
+    fun advancedInsights_manha_conclusaoMaior() {
+        val morning = MorningHabitPattern(
+            habit = habit2(name = "Meditar"),
+            daysWith = 5,
+            daysWithout = 5,
+            moodWith = 3.5,
+            moodWithout = 3.4,
+            energyWith = null,
+            energyWithout = null,
+            taskRateWith = 0.9,
+            taskRateWithout = 0.6,
+        )
+        val out = advancedInsights(null, morning, emptyXray())
+        assertEquals(1, out.size)
+        assertTrue(out[0].contains("Meditar"))
+        assertTrue(out[0].contains("90%"))
+    }
+
+    @Test
+    fun advancedInsights_raioX_concentracaoRecorrentesEIdade() {
+        val noite = OverdueSlice("Noite", 6)
+        val xray = OverdueXray(
+            total = 10,
+            byDayPart = listOf(noite, OverdueSlice("Tarde", 4)),
+            topDayPart = noite,
+            topDayPartShare = 0.6,
+            byProject = emptyList(),
+            byPriority = emptyList(),
+            avgAgeDays = 5.2,
+            oldestAgeDays = 9,
+            recurringCount = 3,
+        )
+        val out = advancedInsights(null, null, xray)
+        assertEquals(3, out.size)
+        assertTrue(out[0].contains("60%"))
+        assertTrue(out[0].contains("noite"))
+        assertTrue(out[1].contains("3 tarefas recorrentes"))
     }
 }
