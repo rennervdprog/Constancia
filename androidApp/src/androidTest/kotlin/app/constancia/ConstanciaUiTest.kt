@@ -1103,6 +1103,34 @@ class ConstanciaUiTest {
             .performTextReplacement("14:30")
         awaitDisplay("task_time_field", "14:30")
     }
+
+    @Test
+    fun roteiro28_agoraEMascote() {
+        // Pacote Hoje (2026-11-01, protótipo aprovado): a mascote mora
+        // no herói e o cartão Agora aponta o próximo item pendente
+        // com check direto.
+        createHabit("Beber agua")
+        // O cartão nasce logo abaixo da faixa da semana (topo da
+        // lista, longe da barra flutuante) e a mascote está no herói.
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("agora_card") }
+        composeRule.onNodeWithTag("hero_mascot").assertExists()
+        composeRule.onNodeWithTag("agora_card").assertIsDisplayed()
+        shot("39_agora_mascote")
+        // O check do cartão marca o hábito: o dia anda (contador
+        // "1 de 1") e o Agora passa a apontar o diário, o único
+        // item que resta.
+        composeRule.onNodeWithTag("agora_check").performClick()
+        awaitText("1 de 1", "home_list")
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Escrever no diário")
+        }
+        shot("40_agora_diario")
+        // Item 8 do pacote: rolando até o fim da lista, o último
+        // cartão fica inteiro acima da barra flutuante.
+        repeat(4) { swipeList("home_list") }
+        composeRule.waitForIdle()
+        shot("41_fim_da_lista")
+    }
 }
 
 /**
