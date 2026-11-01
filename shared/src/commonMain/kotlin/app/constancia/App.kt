@@ -44,6 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.constancia.data.DatabaseDriverFactory
+import app.constancia.domain.canCreateHabit
+import app.constancia.domain.canCreateTask
 import app.constancia.model.todayYmd
 import app.constancia.theme.ConstanciaTheme
 import app.constancia.theme.constanciaExtra
@@ -102,6 +104,26 @@ fun AppContent(deps: AppDeps) {
     val overdueCount = allTasks.count {
         !it.done && it.dueDate != null && it.dueDate < today
     }
+    // Tetos do grátis (definição de 2026-11-01): a CRIAÇÃO de hábito/
+    // tarefa passa pelo portão daqui — no teto, quem abre é o paywall
+    // (convite), nunca um erro. Itens existentes jamais são afetados.
+    val activeHabits by deps.habits.habitsFlow()
+        .collectAsState(initial = emptyList())
+    val isPro by deps.entitlement.isProFlow.collectAsState(initial = false)
+    val requestNewHabit: () -> Unit = {
+        if (canCreateHabit(activeHabits.size, isPro)) {
+            navigator.showNewHabit = true
+        } else {
+            navigator.showPaywall = true
+        }
+    }
+    val requestNewTask: () -> Unit = {
+        if (canCreateTask(allTasks.count { !it.done }, isPro)) {
+            navigator.showNewTask = true
+        } else {
+            navigator.showPaywall = true
+        }
+    }
 
     ConstanciaTheme(darkTheme = darkTheme) {
         Box(
@@ -130,11 +152,15 @@ fun AppContent(deps: AppDeps) {
                         navigator.openMaisSection(MaisSection.PROGRESSO)
                     },
                 )
-                AppTab.TAREFAS -> TasksScreen(deps, screenModifier)
+                AppTab.TAREFAS -> TasksScreen(
+                    deps,
+                    screenModifier,
+                    onOpenPaywall = { navigator.showPaywall = true },
+                )
                 AppTab.HABITOS -> HabitsScreen(
                     deps,
                     screenModifier,
-                    onCreateHabit = { navigator.showNewHabit = true },
+                    onCreateHabit = requestNewHabit,
                 )
                 AppTab.MAIS -> when (navigator.maisSection) {
                     MaisSection.DIARIO -> DiaryScreen(
@@ -178,11 +204,11 @@ fun AppContent(deps: AppDeps) {
             CreateSheet(
                 onCreateHabit = {
                     navigator.showCreate = false
-                    navigator.showNewHabit = true
+                    requestNewHabit()
                 },
                 onCreateTask = {
                     navigator.showCreate = false
-                    navigator.showNewTask = true
+                    requestNewTask()
                 },
                 onCreateDiary = {
                     navigator.showCreate = false
