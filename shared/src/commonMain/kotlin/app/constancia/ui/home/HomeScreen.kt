@@ -739,56 +739,65 @@ private fun HeroPanel(
                 val ringSize = if (maxWidth < 300.dp) 88.dp else 104.dp
                 val showMascotCaption = maxWidth >= 300.dp
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(ringSize),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Canvas(modifier = Modifier.size(ringSize)) {
-                        drawCircle(
-                            color = Color.White.copy(alpha = 0.18f),
-                            style = Stroke(width = 9.dp.toPx()),
-                        )
-                        if (animFrac > 0f) {
-                            drawArc(
-                                color = Color(0xFFD3BDFB),
-                                startAngle = -90f,
-                                sweepAngle = 360f * animFrac,
-                                useCenter = false,
-                                style = Stroke(
-                                    width = 9.dp.toPx(),
-                                    cap = StrokeCap.Round,
+                // Anel + mascote sobreposta no canto (pacote Hoje
+                // 2026-11-01): a chama "senta" no anel sem roubar
+                // largura do breakdown — numa 1ª versão ela dividia a
+                // linha e esmagava os rótulos em telas de 320dp
+                // (provado pelo print 39 do roteiro 28).
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(modifier = Modifier.size(ringSize)) {
+                        Canvas(modifier = Modifier.size(ringSize)) {
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.18f),
+                                style = Stroke(width = 9.dp.toPx()),
+                            )
+                            if (animFrac > 0f) {
+                                drawArc(
+                                    color = Color(0xFFD3BDFB),
+                                    startAngle = -90f,
+                                    sweepAngle = 360f * animFrac,
+                                    useCenter = false,
+                                    style = Stroke(
+                                        width = 9.dp.toPx(),
+                                        cap = StrokeCap.Round,
+                                    ),
+                                )
+                            }
+                        }
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text(
+                                text = (animFrac * 100).roundToInt().toString() + "%",
+                                style = MaterialTheme.typography.displaySmall,
+                                color = Color.White,
+                            )
+                            Text(
+                                text = "DO DIA",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 0.08.em,
                                 ),
+                                color = Color(0xFFD8C6FB),
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .offset(x = 5.dp, y = 5.dp),
+                        ) {
+                            MascotMedallion(
+                                frac = frac,
+                                celebrated = celebrated,
+                                size = if (ringSize < 104.dp) 36.dp else 42.dp,
                             )
                         }
                     }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = (animFrac * 100).roundToInt().toString() + "%",
-                            style = MaterialTheme.typography.displaySmall,
-                            color = Color.White,
-                        )
-                        Text(
-                            text = "DO DIA",
-                            style = MaterialTheme.typography.labelMedium.copy(
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 0.08.em,
-                            ),
-                            color = Color(0xFFD8C6FB),
-                        )
-                    }
-                }
-                Spacer(Modifier.width(if (ringSize < 104.dp) 8.dp else 12.dp))
-                // Mascote viva (pacote Hoje 2026-11-01): a chama do
-                // ícone mora no herói e reage ao progresso do dia.
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    MascotMedallion(
-                        frac = frac,
-                        celebrated = celebrated,
-                        size = if (ringSize < 104.dp) 44.dp else 56.dp,
-                    )
                     if (showMascotCaption) {
-                        Spacer(Modifier.height(4.dp))
+                        Spacer(Modifier.height(7.dp))
                         Text(
                             text = when {
                                 celebrated -> "sequência protegida!"
@@ -804,7 +813,7 @@ private fun HeroPanel(
                         )
                     }
                 }
-                Spacer(Modifier.width(if (ringSize < 104.dp) 8.dp else 12.dp))
+                Spacer(Modifier.width(if (ringSize < 104.dp) 12.dp else 18.dp))
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(9.dp),
