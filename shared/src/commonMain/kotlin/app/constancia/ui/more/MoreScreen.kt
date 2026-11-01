@@ -755,17 +755,17 @@ private fun ProCard(isPro: Boolean, priceText: String?, onClick: () -> Unit) {
                 text = if (isPro) {
                     "Você já é Pro"
                 } else {
-                    // Fase F (decisão aprovada): o grátis NÃO tem recorte
-                    // de período — a copy vende as superfícies Pro reais.
-                    "Padrões cruzados e raio-X de atrasos"
+                    // Definição de 2026-11-01: a copy vende o que o
+                    // código gateia — sem limite + análises avançadas.
+                    "Sem limites + análises avançadas"
                 },
                 style = MaterialTheme.typography.headlineSmall.copy(fontSize = 19.sp),
                 color = Color.White,
             )
             Spacer(Modifier.height(5.dp))
             Text(
-                text = "Insights avançados de tarefas × hábitos × diário " +
-                    "e a revista completa do seu ano — só no Pro.",
+                text = "Hábitos e tarefas ilimitados, padrões cruzados, " +
+                    "raio-X de atrasos e a revista completa do seu ano.",
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
                 color = Color(0xFFDCCFFB),
                 modifier = Modifier.widthIn(max = 270.dp),
