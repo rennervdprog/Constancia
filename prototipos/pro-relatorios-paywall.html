@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Constância — Definição do Pro + Relatórios + Paywall (protótipo)</title>
+<style>
+  :root{
+    --primary:#4B1D96; --primary-dark:#2A0A54; --deep:#1E0740;
+    --primary-container:#EDE7FA; --page:#FBF8F3; --card:#fff;
+    --line:#E7DEF3; --ink:#241536; --variant:#7A6E8F;
+    --green:#2F7D5C; --green-soft:#E3F0E9;
+    --flame:#E07B24; --flame-soft:#FCEFE3;
+    --lav:#C4A6F5;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;}
+  body{background:#EFE9E2;color:var(--ink);padding:28px 16px 48px;}
+  h1{font-size:22px;text-align:center;color:var(--primary-dark);}
+  .sub{text-align:center;color:var(--variant);font-size:13.5px;margin:6px auto 22px;max-width:660px;line-height:1.5;}
+  /* ---- painel da definição ---- */
+  .definition{max-width:820px;margin:0 auto 30px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:20px 22px;}
+  .definition h2{font-size:15px;color:var(--primary-dark);margin-bottom:12px;text-align:center;letter-spacing:.3px;}
+  .def-cols{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:640px){.def-cols{grid-template-columns:1fr;}}
+  .def-col{border-radius:16px;padding:14px 16px;}
+  .def-col.free{background:var(--green-soft);}
+  .def-col.pro{background:linear-gradient(150deg,#38106E,#1E0740);color:#fff;}
+  .def-col h3{font-size:12px;letter-spacing:1.2px;margin-bottom:9px;}
+  .def-col.free h3{color:var(--green);}
+  .def-col.pro h3{color:var(--lav);}
+  .def-col li{margin:0 0 6px 16px;font-size:13px;line-height:1.45;}
+  .def-col.pro li{color:#EFE9FB;}
+  .def-note{font-size:11.5px;color:var(--variant);text-align:center;margin-top:12px;line-height:1.5;}
+  /* ---- molduras ---- */
+  .frames{display:flex;gap:28px;justify-content:center;flex-wrap:wrap;align-items:flex-start;}
+  .frame-wrap{width:360px;}
+  .frame-cap{text-align:center;font-weight:700;font-size:13px;color:var(--primary);margin-bottom:10px;letter-spacing:.4px;}
+  .phone{background:var(--page);border-radius:36px;border:1px solid #D9CFEA;box-shadow:0 18px 40px rgba(56,16,110,.18);overflow:hidden;position:relative;}
+  .statusbar{display:flex;justify-content:space-between;padding:10px 22px 2px;font-size:11.5px;font-weight:600;}
+  .screen{padding:10px 20px 30px;}
+  .back{font-size:13px;color:var(--variant);font-weight:700;}
+  .scr-title{font-size:20px;font-weight:800;margin-top:2px;}
+  .scr-sub{font-size:12.5px;color:var(--variant);margin-top:2px;}
+  .seg{display:flex;background:var(--primary-container);border-radius:99px;padding:3px;margin-top:14px;}
+  .seg span{flex:1;text-align:center;font-size:12.5px;font-weight:700;padding:6px 0;border-radius:99px;color:var(--variant);}
+  .seg span.on{background:#fff;color:var(--primary);box-shadow:0 2px 6px rgba(56,16,110,.15);}
+  .range{font-size:11px;color:var(--variant);margin-top:7px;}
+  .kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px;}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px 12px;}
+  .kpi .v{font-size:19px;font-weight:800;}
+  .kpi .l{font-size:10.5px;color:var(--variant);margin-top:1px;line-height:1.3;}
+  .kpi .d{font-size:10.5px;font-weight:800;margin-top:3px;}
+  .up{color:var(--green);} .down{color:#C0392B;}
+  .group{font-size:11px;font-weight:800;letter-spacing:1.4px;color:var(--variant);margin:20px 2px 8px;display:flex;align-items:center;gap:7px;}
+  .group .pro-pill{background:linear-gradient(120deg,var(--primary),var(--primary-dark));color:#fff;font-size:9px;padding:2.5px 8px;border-radius:99px;letter-spacing:1px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 15px;margin-bottom:10px;}
+  .card h4{font-size:14px;font-weight:800;}
+  .card .hint{font-size:11px;color:var(--variant);margin-top:1px;}
+  .bars{display:flex;align-items:flex-end;gap:5px;height:64px;margin-top:12px;}
+  .bars i{flex:1;background:var(--primary-container);border-radius:5px 5px 2px 2px;display:block;}
+  .bars i.hot{background:var(--primary);}
+  .bars-x{display:flex;gap:5px;font-size:9px;color:var(--variant);margin-top:4px;}
+  .bars-x span{flex:1;text-align:center;}
+  .rev-line{display:flex;justify-content:space-between;font-size:12px;padding:7px 0;border-bottom:1px solid var(--line);}
+  .rev-line:last-child{border-bottom:none;}
+  .rev-line b{font-weight:800;}
+  .habit-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);}
+  .habit-row:last-child{border-bottom:none;}
+  .habit-row .tile{width:30px;height:30px;border-radius:10px;background:var(--green-soft);display:flex;align-items:center;justify-content:center;font-size:14px;flex:none;}
+  .habit-row .n{font-size:13px;font-weight:700;}
+  .habit-row .m{font-size:10.5px;color:var(--variant);}
+  .habit-row .r{margin-left:auto;font-size:13px;font-weight:800;color:var(--green);}
+  .mini-heat{display:grid;grid-template-columns:repeat(14,1fr);gap:3px;margin-top:10px;}
+  .mini-heat i{aspect-ratio:1;border-radius:3px;background:#EAE4F5;display:block;}
+  .mini-heat i.d{background:var(--green);} .mini-heat i.p{background:rgba(47,125,92,.45);}
+  /* teaser Pro */
+  .teaser{border:1.5px solid var(--primary);background:#fff;border-radius:20px;padding:14px 15px;margin-bottom:10px;position:relative;}
+  .teaser .t-row{display:flex;align-items:center;gap:9px;}
+  .teaser .ic{width:32px;height:32px;border-radius:11px;background:var(--primary-container);display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;}
+  .teaser h4{font-size:14px;font-weight:800;flex:1;}
+  .lock{font-size:13px;color:var(--primary);}
+  .preview{background:var(--page);border:1px dashed #CDBEF0;border-radius:13px;padding:10px 12px;margin-top:11px;}
+  .preview .tag{font-size:9px;font-weight:800;letter-spacing:1px;color:var(--variant);}
+  .preview .f{font-size:12.5px;line-height:1.5;margin-top:3px;}
+  .preview .f b{color:var(--primary-dark);}
+  .unlock{margin-top:11px;background:linear-gradient(120deg,var(--primary),var(--primary-dark));color:#fff;text-align:center;font-size:13px;font-weight:800;padding:11px;border-radius:13px;}
+  /* paywall */
+  .pw-hero{background:linear-gradient(155deg,#4B1D96,#38106E 45%,#1E0740);border-radius:26px;padding:20px 18px;color:#fff;position:relative;overflow:hidden;}
+  .pw-hero .brand{font-size:11px;font-weight:800;letter-spacing:1.6px;color:var(--lav);}
+  .pw-hero h3{font-size:21px;line-height:1.25;margin-top:7px;}
+  .pw-hero p{font-size:13px;color:#DCCFFB;line-height:1.55;margin-top:7px;}
+  .flame-badge{position:absolute;right:14px;top:12px;font-size:30px;opacity:.9;}
+  .benefits{background:#fff;border:1px solid var(--line);border-radius:20px;padding:6px 15px;margin-top:12px;}
+  .ben{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--line);}
+  .ben:last-child{border-bottom:none;}
+  .ben .ic{width:34px;height:34px;border-radius:11px;background:var(--primary-container);display:flex;align-items:center;justify-content:center;font-size:16px;flex:none;}
+  .ben .t{font-size:13.5px;font-weight:800;}
+  .ben .d{font-size:12px;color:var(--variant);line-height:1.45;margin-top:1px;}
+  .free-strip{background:var(--green-soft);border-radius:14px;padding:11px 13px;font-size:12px;line-height:1.5;color:#1E4D39;margin-top:12px;}
+  .free-strip b{color:var(--green);}
+  .plan{border:1.5px solid var(--line);background:#fff;border-radius:16px;padding:12px 14px;margin-top:9px;display:flex;align-items:center;gap:10px;position:relative;}
+  .plan.on{border-color:var(--primary);background:#FBF9FF;}
+  .plan .radio{width:19px;height:19px;border-radius:50%;border:2px solid #C9BCE6;flex:none;}
+  .plan.on .radio{border-color:var(--primary);background:var(--primary);box-shadow:inset 0 0 0 3px #fff;}
+  .plan .pn{font-size:13.5px;font-weight:800;}
+  .plan .pm{font-size:11px;color:var(--variant);}
+  .plan .pp{margin-left:auto;text-align:right;}
+  .plan .pp .v{font-size:15px;font-weight:800;}
+  .plan .pp .s{font-size:10.5px;color:var(--variant);}
+  .best{position:absolute;top:-9px;right:12px;background:var(--flame);color:#fff;font-size:9px;font-weight:800;letter-spacing:.6px;padding:2.5px 8px;border-radius:99px;}
+  .trial{position:absolute;top:-9px;left:12px;background:var(--green);color:#fff;font-size:9px;font-weight:800;letter-spacing:.6px;padding:2.5px 8px;border-radius:99px;}
+  .cta{background:linear-gradient(120deg,var(--primary),var(--primary-dark));color:#fff;text-align:center;font-size:14.5px;font-weight:800;padding:14px;border-radius:15px;margin-top:14px;}
+  .legal{font-size:10px;color:var(--variant);text-align:center;line-height:1.5;margin-top:9px;}
+  .restore{text-align:center;font-size:12px;font-weight:700;color:var(--primary);margin-top:8px;}
+  /* mudanças */
+  .changes{max-width:780px;margin:34px auto 0;background:#fff;border:1px solid var(--line);border-radius:20px;padding:22px 24px;}
+  .changes h2{font-size:16px;color:var(--primary-dark);margin-bottom:12px;}
+  .changes li{margin:0 0 10px 18px;font-size:13.5px;line-height:1.55;color:#3D2B57;}
+  .changes b{color:var(--primary);}
+</style>
+</head>
+<body>
+<h1>Constância Pro — definição + Relatórios + paywall</h1>
+<p class="sub">A definição aprovada, a tela de Relatórios reorganizada em grupos e o paywall
+com explicação de benefício de verdade. Números das telas são exemplos ilustrativos.</p>
+
+<div class="definition">
+  <h2>A DEFINIÇÃO (o que fica combinado)</h2>
+  <div class="def-cols">
+    <div class="def-col free">
+      <h3>GRÁTIS — PARA SEMPRE, COM TETOS GENEROSOS</h3>
+      <ul>
+        <li>Hábitos, tarefas e diário completos — até 5 hábitos ativos e 100 tarefas abertas</li>
+        <li>Hoje, sequências, ciclos, lembretes</li>
+        <li>Relatórios básicos: KPIs, evolução, revisão do período</li>
+        <li>Mapa de calor, desempenho por hábito, dia da semana, humor</li>
+        <li>Insights do período</li>
+        <li>Desafios de 7 dias</li>
+      </ul>
+    </div>
+    <div class="def-col pro">
+      <h3>CONSTÂNCIA PRO — SEM LIMITE + ANÁLISES AVANÇADAS</h3>
+      <ul>
+        <li><b>Hábitos e tarefas ilimitados</b> — crie quanto a rotina pedir</li>
+        <li><b>Padrões cruzados</b> — sono × dia seguinte, manhã × ritmo</li>
+        <li><b>Raio-X de atrasos</b> — onde os atrasos nascem</li>
+        <li><b>Insights avançados</b> — conclusões cruzadas prontas</li>
+        <li><b>Ano em Revista completo</b> + revista do trimestre</li>
+        <li><b>Desafios avançados</b> — temporadas de 21 e 30 dias</li>
+      </ul>
+    </div>
+  </div>
+  <p class="def-note">Regra de ouro (sua): nada do que a pessoa já criou trava, congela ou some — o teto barra só CRIAR além dele estando no grátis; quem passa do teto como Pro e cancela continua usando tudo.
+  Desafio Pro já começado continua até o fim mesmo se a assinatura acabar.</p>
+</div>
+
+<div class="frames">
+
+  <!-- ============ FRAME A: RELATÓRIOS (grupos livres) ============ -->
+  <div class="frame-wrap">
+    <div class="frame-cap">A — RELATÓRIOS REORGANIZADOS</div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>▂▄▆ ⚡</span></div>
+      <div class="screen">
+        <div class="back">‹ Mais</div>
+        <div class="scr-title">Relatórios</div>
+        <div class="scr-sub">tarefas × hábitos × diário, cruzados</div>
+        <div class="seg"><span>Semana</span><span class="on">Mês</span><span>Ano</span></div>
+        <div class="range">Últimos 30 dias · 2 de out a 1 de nov</div>
+        <div class="kpis">
+          <div class="kpi"><div class="v">82%</div><div class="l">conclusão do período</div><div class="d up">▲ 6 p.p. vs. mês anterior</div></div>
+          <div class="kpi"><div class="v">47</div><div class="l">check-ins de hábitos</div><div class="d up">▲ 9 vs. mês anterior</div></div>
+          <div class="kpi"><div class="v">31</div><div class="l">tarefas concluídas</div><div class="d down">▼ 2 vs. mês anterior</div></div>
+          <div class="kpi"><div class="v">4,1</div><div class="l">humor médio (de 5)</div><div class="d up">▲ 0,3 vs. mês anterior</div></div>
+        </div>
+
+        <div class="group">VISÃO GERAL</div>
+        <div class="card">
+          <h4>Evolução</h4><div class="hint">conclusão por semana</div>
+          <div class="bars"><i style="height:38%"></i><i style="height:52%"></i><i style="height:47%"></i><i style="height:66%"></i><i class="hot" style="height:82%"></i></div>
+          <div class="bars-x"><span>sem 1</span><span>sem 2</span><span>sem 3</span><span>sem 4</span><span>esta</span></div>
+        </div>
+        <div class="card">
+          <h4>Revisão do período</h4><div class="hint">pelo prazo × pela conclusão</div>
+          <div class="rev-line"><span>Tarefas no prazo</span><b>24 de 31</b></div>
+          <div class="rev-line"><span>Concluídas com atraso</span><b>5</b></div>
+          <div class="rev-line"><span>Dias perfeitos</span><b>6</b></div>
+        </div>
+
+        <div class="group">HÁBITOS</div>
+        <div class="card">
+          <h4>Desempenho por hábito</h4>
+          <div class="habit-row"><div class="tile">💧</div><div><div class="n">beber agua</div><div class="m">sequência de 12 dias</div></div><span class="r">93%</span></div>
+          <div class="habit-row"><div class="tile">📖</div><div><div class="n">ler</div><div class="m">sequência de 4 dias</div></div><span class="r">71%</span></div>
+          <div class="habit-row"><div class="tile">🚶</div><div><div class="n">caminhar</div><div class="m">meta semanal 2 de 3</div></div><span class="r">66%</span></div>
+        </div>
+        <div class="card">
+          <h4>Mapa de calor</h4><div class="hint">últimas 14 semanas · toque num dia para abrir</div>
+          <div class="mini-heat" id="miniHeat"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FRAME B: RELATÓRIOS (grupo Pro) ============ -->
+  <div class="frame-wrap">
+    <div class="frame-cap">B — ANÁLISES AVANÇADAS (TEASERS PRO)</div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>▂▄▆ ⚡</span></div>
+      <div class="screen">
+        <div class="group" style="margin-top:8px">DIÁRIO</div>
+        <div class="card">
+          <h4>Humor no período</h4><div class="hint">média 4,1 · melhor nos dias completos</div>
+          <div class="rev-line"><span>Dias com tudo feito</span><b>4,5</b></div>
+          <div class="rev-line"><span>Dias com pendências</span><b>3,6</b></div>
+        </div>
+        <div class="card">
+          <h4>Insights</h4><div class="hint">do período, automáticos</div>
+          <div class="rev-line"><span>🟢</span><span style="flex:1;margin-left:6px">Terça é o seu melhor dia (91% de conclusão).</span></div>
+          <div class="rev-line"><span>🟢</span><span style="flex:1;margin-left:6px">Maior sequência: beber agua (12 dias seguidos).</span></div>
+        </div>
+
+        <div class="group">ANÁLISES AVANÇADAS <span class="pro-pill">PRO</span></div>
+
+        <div class="teaser">
+          <div class="t-row"><div class="ic">🌙</div><h4>Padrões cruzados</h4><span class="lock">🔒</span></div>
+          <div class="preview"><span class="tag">PRÉVIA · EXEMPLO</span>
+            <div class="f">Dormir <b>menos de 6h</b> derruba sua conclusão do dia seguinte de 84% para <b>57%</b>.</div>
+          </div>
+          <div class="unlock">Desbloquear com o Pro</div>
+        </div>
+
+        <div class="teaser">
+          <div class="t-row"><div class="ic">⏰</div><h4>Raio-X de atrasos</h4><span class="lock">🔒</span></div>
+          <div class="preview"><span class="tag">PRÉVIA · EXEMPLO</span>
+            <div class="f"><b>62%</b> dos seus atrasos são de tarefas da <b>manhã</b> — e quase todos do projeto Trabalho.</div>
+          </div>
+          <div class="unlock">Desbloquear com o Pro</div>
+        </div>
+
+        <div class="teaser">
+          <div class="t-row"><div class="ic">🏆</div><h4>Ano em Revista completo</h4><span class="lock">🔒</span></div>
+          <div class="preview"><span class="tag">PRÉVIA · EXEMPLO</span>
+            <div class="f">Seu melhor mês foi <b>setembro</b>: 24 dias perfeitos e a maior sequência do ano.</div>
+          </div>
+          <div class="unlock">Desbloquear com o Pro</div>
+        </div>
+        <p style="font-size:11px;color:var(--variant);line-height:1.5;margin-top:2px">
+          A prévia mostra o TIPO de resposta que a análise dá (com dados de exemplo).
+          Ao desbloquear, ela roda com os seus dados de verdade.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ FRAME C: PAYWALL ============ -->
+  <div class="frame-wrap">
+    <div class="frame-cap">C — PAYWALL COM EXPLICAÇÃO NOVA</div>
+    <div class="phone">
+      <div class="statusbar"><span>9:41</span><span>▂▄▆ ⚡</span></div>
+      <div class="screen">
+        <div class="pw-hero">
+          <div class="flame-badge">🔥</div>
+          <div class="brand">CONSTÂNCIA PRO</div>
+          <h3>Entenda o seu ritmo.<br>Corrija a rota.</h3>
+          <p>As análises que cruzam hábitos, tarefas e diário — e mostram
+          o que está funcionando e o que está te atrasando.</p>
+        </div>
+
+        <div class="benefits">
+          <div class="ben"><div class="ic">♾️</div><div><div class="t">Hábitos e tarefas sem limite</div><div class="d">Crie quanto a sua rotina pedir — os tetos do grátis somem.</div></div></div>
+          <div class="ben"><div class="ic">🌙</div><div><div class="t">Padrões cruzados</div><div class="d">Descubra se dormir mal realmente derruba o seu dia seguinte — e quanto.</div></div></div>
+          <div class="ben"><div class="ic">⏰</div><div><div class="t">Raio-X de atrasos</div><div class="d">Veja onde os atrasos nascem: projeto, prioridade e parte do dia.</div></div></div>
+          <div class="ben"><div class="ic">💡</div><div><div class="t">Insights avançados</div><div class="d">Conclusões prontas cruzando os três lados do seu dia — sem montar conta nenhuma.</div></div></div>
+          <div class="ben"><div class="ic">🏆</div><div><div class="t">Ano em Revista completo</div><div class="d">Seu ano numa página: dias perfeitos, recordes e o seu melhor mês.</div></div></div>
+          <div class="ben"><div class="ic">🎯</div><div><div class="t">Desafios avançados</div><div class="d">Temporadas guiadas de 21 e 30 dias para fixar um hábito de vez.</div></div></div>
+        </div>
+
+        <div class="free-strip">✅ <b>O essencial continua grátis para sempre:</b>
+        hábitos, tarefas e diário completos — até 5 hábitos ativos e 100 tarefas abertas, com os relatórios essenciais.
+        O Pro é só a camada de análise — nada do que você já usa trava.</div>
+
+        <div class="plan"><div class="radio"></div><div><div class="pn">Mensal</div><div class="pm">para experimentar</div></div><div class="pp"><div class="v">R$ 19,90</div><div class="s">por mês</div></div></div>
+        <div class="plan"><div class="radio"></div><div><div class="pn">Trimestral</div><div class="pm">≈ R$ 14,97/mês · economize 25%</div></div><div class="pp"><div class="v">R$ 44,90</div><div class="s">a cada 3 meses</div></div></div>
+        <div class="plan on"><span class="trial">7 DIAS GRÁTIS</span><span class="best">MELHOR VALOR</span><div class="radio"></div><div><div class="pn">Anual</div><div class="pm">≈ R$ 9,99/mês · economize 50%</div></div><div class="pp"><div class="v">R$ 119,90</div><div class="s">por ano</div></div></div>
+
+        <div class="cta">Começar meus 7 dias grátis</div>
+        <div class="restore">Restaurar compra</div>
+        <p class="legal">Preços de referência — no app, o preço vem sempre da loja.
+        Assinatura de renovação automática; cancele quando quiser, sem multa.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="changes">
+  <h2>O que muda</h2>
+  <ol>
+    <li><b>Definição fechada e visível (revisada com os limites, 2026-11-01):</b> grátis completo com tetos generosos (5 hábitos ativos · 100 tarefas abertas) de um lado; Pro = ilimitado + 5 análises avançadas do outro. A trava mora só na CRIAÇÃO — quem cancela o Pro usa tudo o que já criou. É essa lista que o paywall vende e que os cadeados obedecem.</li>
+    <li><b>Relatórios em grupos:</b> Visão geral · Hábitos · Diário · Análises avançadas. Acaba a parede de 10 cartões soltos — cada grupo responde uma pergunta (“como foi o mês?”, “como estão meus hábitos?”).</li>
+    <li><b>Cadeado vira vitrine:</b> cada análise Pro mostra uma <b>prévia rotulada como exemplo</b> do tipo de resposta que ela entrega (“dormir &lt;6h derruba seu dia seguinte de 84% → 57%”). A pessoa entende o valor antes de pagar — sem dado falso: ao desbloquear, roda com os dados dela.</li>
+    <li><b>Insights em duas camadas:</b> os insights de estatísticas simples (melhor dia, maior sequência) continuam grátis; os <b>avançados</b> são as conclusões cruzadas (sono × conclusão, manhã × ritmo, humor × dia completo) — geração nova, com teste, a partir dos dados que os Padrões já calculam.</li>
+    <li><b>Desafios avançados de verdade:</b> as temporadas de 21 e 30 dias ganham o selo Pro no catálogo (a de 30 dias de leitura já está marcada no código — conferi; a de 21 entra junto). As de 7 dias seguem grátis, e desafio já começado nunca trava no meio.</li>
+    <li><b>Paywall que explica:</b> cada recurso com uma frase de benefício concreto (“veja onde os atrasos nascem”), a faixa verde declarando o grátis para sempre, e os planos com economia e o trial de 7 dias só no anual — como já é a regra de preço aprovada.</li>
+  </ol>
+</div>
+
+<script>
+  // mini mapa de calor do frame A (14 semanas × 7 dias, ilustrativo)
+  const heat = document.getElementById('miniHeat');
+  const pat = '....d.d..p.d.d.d.d..d.d.d..d.d.p.d.d.d.d..d.d.d.d..d..d.d.d.d.p.d.d.d.d.d..d.d.d.d.d.d..d.d.';
+  heat.innerHTML = pat.split('').map(c =>
+    '<i class="'+(c==='d'?'d':c==='p'?'p':'')+'"></i>').join('');
+</script>
+</body>
+</html>
