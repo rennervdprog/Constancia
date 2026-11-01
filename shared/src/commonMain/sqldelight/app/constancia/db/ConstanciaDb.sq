@@ -538,6 +538,12 @@ INSERT INTO challenge(id, title, description, duration_days, habit_name, habit_i
   start_date, status, is_pro, habit_id, goal_quantity, goal_unit)
 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
+-- Definição Pro de 2026-11-01: pacotes de 21 e 30 dias são Pro.
+-- Idempotente — roda a cada abertura (ensureSeed) para corrigir bancos
+-- semeados com a definição antiga, sem tocar em status/progresso.
+markProChallenges:
+UPDATE challenge SET is_pro = 1 WHERE id IN ('ch-acordar-21', 'ch-ler-30');
+
 updateChallengeStatus:
 UPDATE challenge SET status = ?, start_date = ? WHERE id = ?;
 
