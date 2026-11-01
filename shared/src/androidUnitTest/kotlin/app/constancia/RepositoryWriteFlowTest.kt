@@ -588,7 +588,9 @@ class RepositoryWriteFlowTest {
     fun viewOptionsPersistPerView() = runBlocking {
         val tasks = TaskRepositoryImpl(testDb())
         val defaults = tasks.viewOptionsFlow("view:HOJE").first()
-        assertEquals("none", defaults.groupBy)
+        // Redesenho 2026-11-01: sem escolha persistida, o padrão é
+        // agrupar por sessão (antes era "none").
+        assertEquals("session", defaults.groupBy)
         assertEquals("SMART", defaults.sortMode)
 
         tasks.setViewOptions("view:HOJE", "project", "DUE")
@@ -598,7 +600,7 @@ class RepositoryWriteFlowTest {
         assertEquals("project", stored.groupBy)
         assertEquals("DUE", stored.sortMode)
         val other = tasks.viewOptionsFlow("view:FEITAS").first()
-        assertEquals("none", other.groupBy)
+        assertEquals("session", other.groupBy)
         assertEquals("SMART", other.sortMode)
     }
 
