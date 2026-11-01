@@ -53,12 +53,6 @@ sealed interface AgoraTarget {
     data object DiaryTarget : AgoraTarget
 }
 
-private fun AgoraTarget.session(): Session = when (this) {
-    is AgoraTarget.HabitTarget -> status.habit.session
-    is AgoraTarget.TaskTarget -> task.session
-    AgoraTarget.DiaryTarget -> Session.NOITE
-}
-
 private fun AgoraTarget.sortKey(): String = when (this) {
     is AgoraTarget.HabitTarget -> timeSortKey(
         if (status.habit.reminderEnabled) status.habit.reminderTime else null,
@@ -85,10 +79,6 @@ fun pickAgoraTarget(
         bySession.getOrPut(it.session) { mutableListOf() }
             .add(AgoraTarget.TaskTarget(it))
     }
-    if (!diaryDone) {
-        bySession.getOrPut(Session.NOITE) { mutableListOf() }
-            .add(AgoraTarget.DiaryTarget)
-    }
     val order = Session.entries.let { all ->
         val start = all.indexOf(current)
         all.drop(start) + all.take(start)
@@ -98,7 +88,12 @@ fun pickAgoraTarget(
             .sortedBy { it.sortKey() }
         if (candidates.isNotEmpty()) return candidates.first()
     }
-    return null
+    // O diário é o fechamento do dia: só vira o "Agora" quando não
+    // resta hábito nem tarefa pendente em sessão nenhuma. (Na 1ª
+    // versão ele disputava pela sessão Noite e vencia um hábito da
+    // Manhã ainda pendente às 13h — provado pelo print 39 da
+    // rodada 2 do roteiro 28.)
+    return if (!diaryDone) AgoraTarget.DiaryTarget else null
 }
 
 private fun agoraSessionLabel(session: Session): String = when (session) {
