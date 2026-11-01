@@ -276,7 +276,7 @@ class ConstanciaUiTest {
         awaitText("SEU DIA", "home_list")
         composeRule.onNodeWithText("SEU DIA").assertExists()
         composeRule.onNodeWithTag("tab_TAREFAS").performClick()
-        composeRule.onNodeWithText("0 atrasadas · 0 para hoje")
+        composeRule.onNodeWithText("0 para hoje · 0 atrasadas")
             .assertIsDisplayed()
         shot("01_tarefas")
         composeRule.onNodeWithTag("tab_HABITOS").performClick()
@@ -482,7 +482,8 @@ class ConstanciaUiTest {
             nodesWith("Reunião com cliente")
         }
         // O2: a busca acha a tarefa criada; termo sem par mostra o aviso.
-        composeRule.onNodeWithText("Buscar").performScrollTo().performClick()
+        // Redesenho: a busca mora no ícone do cabeçalho da aba.
+        composeRule.onNodeWithTag("tasks_search_btn").performClick()
         composeRule.onNodeWithTag("task_search_field").performScrollTo()
             .performTextInput("Reunião")
         composeRule.waitUntil(timeoutMillis = 8000) {
@@ -1173,6 +1174,46 @@ class ConstanciaUiTest {
         composeRule.onAllNodesWithTag("habit_check")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("0/8 copos") }
         shot("43_quantidade_limpa")
+    }
+
+    @Test
+    fun roteiro30_tarefasRedesenhadas_segmentadoEAjustes() {
+        // Redesenho da aba Tarefas (aprovado 2026-11-01): segmentado
+        // de visões no lugar das três fileiras de chips, Hoje agrupado
+        // por sessão no padrão e a folha "Ajustes da lista" guardando
+        // ordenar/agrupar/modelos e a legenda de cores.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("tasks_quick_input")
+            .performTextInput("Ler 10 páginas")
+        composeRule.onNodeWithTag("tasks_quick_add").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Ler 10 páginas") }
+        runCatching { device.pressBack() } // fecha o teclado virtual
+        composeRule.waitForIdle()
+        // Agrupada por sessão: um dos três cabeçalhos de sessão aparece.
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Manhã") || nodesWith("Tarde") || nodesWith("Noite")
+        }
+        shot("44_tarefas_sessao")
+        // O segmentado troca de visão e volta.
+        composeRule.onNodeWithTag("view_chip_ENTRADA").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Caixa de entrada") }
+        composeRule.onNodeWithTag("view_chip_HOJE").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Ler 10 páginas") }
+        // Ajustes: a folha abre com ordenar, agrupar e a legenda.
+        composeRule.onNodeWithTag("tasks_filters_btn").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Ajustes da lista") }
+        composeRule.onNodeWithText("ORDENAR POR").assertExists()
+        composeRule.onNodeWithText("AGRUPAR POR").assertExists()
+        composeRule.onNodeWithText("P1 alta").assertExists()
+        shot("45_tarefas_ajustes")
+        // Agrupar por Projeto fecha a folha e a tarefa segue visível,
+        // agora sob o grupo do projeto dela.
+        composeRule.onNodeWithTag("group_PROJECT").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            !nodesWith("Ajustes da lista")
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Ler 10 páginas") }
+        shot("46_tarefas_projeto")
     }
 }
 
