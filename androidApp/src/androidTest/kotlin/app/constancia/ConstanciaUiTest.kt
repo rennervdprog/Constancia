@@ -1116,6 +1116,11 @@ class ConstanciaUiTest {
         composeRule.onNodeWithTag("hero_mascot").assertExists()
         composeRule.onNodeWithTag("agora_card").assertIsDisplayed()
         shot("39_agora_mascote")
+        // O cartão nasce colado na zona da barra flutuante (provado
+        // pelo print 39): sobe a lista pra tirar o check da zona
+        // antes de tocar — sem isso o toque cai na navegação.
+        swipeList("home_list")
+        composeRule.waitForIdle()
         // O check do cartão marca o hábito: o dia anda (contador
         // "1 de 1") e o Agora passa a apontar o diário, o único
         // item que resta.
