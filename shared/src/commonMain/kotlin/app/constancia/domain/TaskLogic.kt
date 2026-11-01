@@ -363,7 +363,7 @@ fun rescheduleLabel(target: RescheduleTarget): String = when (target) {
 
 enum class TaskSortMode { SMART, PRIORITY, DUE }
 
-enum class TaskGroupBy { NONE, PROJECT, PRIORITY, DATE }
+enum class TaskGroupBy { NONE, SESSION, PROJECT, PRIORITY, DATE }
 
 data class TaskGroup(val title: String, val tasks: List<TaskItem>)
 
@@ -421,7 +421,7 @@ fun applySort(
 }
 
 /**
- * Agrupa uma lista (já ordenada) por projeto, prioridade ou data.
+ * Agrupa uma lista (já ordenada) por sessão, projeto, prioridade ou data.
  * Grupos vazios são omitidos; a ordem dos grupos é a natural de cada eixo.
  */
 fun groupTasks(
@@ -431,6 +431,19 @@ fun groupTasks(
 ): List<TaskGroup> = when (groupBy) {
     TaskGroupBy.NONE -> if (tasks.isEmpty()) emptyList()
     else listOf(TaskGroup("", tasks))
+
+    TaskGroupBy.SESSION -> Session.entries.mapNotNull { session ->
+        val inGroup = tasks.filter { it.session == session }
+        if (inGroup.isEmpty()) null
+        else TaskGroup(
+            when (session) {
+                Session.MANHA -> "Manhã"
+                Session.TARDE -> "Tarde"
+                Session.NOITE -> "Noite"
+            },
+            inGroup,
+        )
+    }
 
     TaskGroupBy.PROJECT -> TaskProject.entries.mapNotNull { project ->
         val inGroup = tasks.filter { it.project == project }
@@ -502,6 +515,7 @@ fun savedViewTasks(
 
 /** Converte o groupBy salvo (string) no enum de agrupamento. */
 fun groupByOf(value: String): TaskGroupBy = when (value) {
+    "session" -> TaskGroupBy.SESSION
     "project" -> TaskGroupBy.PROJECT
     "priority" -> TaskGroupBy.PRIORITY
     "date" -> TaskGroupBy.DATE
@@ -510,6 +524,7 @@ fun groupByOf(value: String): TaskGroupBy = when (value) {
 
 /** Inverso de [groupByOf]: o valor persistido de cada agrupamento. */
 fun groupByValue(groupBy: TaskGroupBy): String = when (groupBy) {
+    TaskGroupBy.SESSION -> "session"
     TaskGroupBy.PROJECT -> "project"
     TaskGroupBy.PRIORITY -> "priority"
     TaskGroupBy.DATE -> "date"
