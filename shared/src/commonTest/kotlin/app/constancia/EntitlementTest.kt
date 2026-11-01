@@ -15,6 +15,8 @@ import app.constancia.domain.StoreOffer
 import app.constancia.domain.StorePlan
 import app.constancia.domain.StoreProduct
 import app.constancia.domain.StorePurchase
+import app.constancia.domain.canCreateHabit
+import app.constancia.domain.canCreateTask
 import app.constancia.domain.grantsPro
 import app.constancia.domain.monthlyEquivalentMicros
 import app.constancia.domain.monthsOfBillingPeriod
@@ -32,7 +34,8 @@ import kotlin.test.assertTrue
 
 /**
  * Fase F (Comercial) — a decisão aprovada em forma de teste:
- * grátis generoso (nenhum gate quantitativo), Pro = superfícies
+ * grátis generoso; desde 2026-11-01 com tetos altos (5 hábitos
+ * ativos / 100 tarefas abertas) e Pro = ilimitado + superfícies
  * avançadas; downgrade devolve o cadeado sem apagar nada; upgrade
  * destrava na hora. Gates, redutor da tela de compra e o manager de
  * entitlement (com loja falsa) — tudo lógica pura.
@@ -47,6 +50,28 @@ class EntitlementTest {
             assertFalse(ProGate.isUnlocked(feature, isPro = false), "$feature")
             assertTrue(ProGate.isUnlocked(feature, isPro = true), "$feature")
         }
+    }
+
+    // -- FreeLimits (2026-11-01): tetos generosos do grátis ------------
+
+    @Test
+    fun freeLimits_habitos_cincoLivres_proIlimitado() {
+        assertTrue(canCreateHabit(0, isPro = false))
+        assertTrue(canCreateHabit(4, isPro = false))
+        assertFalse(canCreateHabit(5, isPro = false))
+        assertFalse(canCreateHabit(9, isPro = false))
+        // Acima do teto como Pro: continua criando (e, se cancelar,
+        // usa tudo — só não cria até voltar ao teto).
+        assertTrue(canCreateHabit(5, isPro = true))
+        assertTrue(canCreateHabit(50, isPro = true))
+    }
+
+    @Test
+    fun freeLimits_tarefas_cemLivres_proIlimitado() {
+        assertTrue(canCreateTask(0, isPro = false))
+        assertTrue(canCreateTask(99, isPro = false))
+        assertFalse(canCreateTask(100, isPro = false))
+        assertTrue(canCreateTask(100, isPro = true))
     }
 
     // -- ProGate: desafios ----------------------------------------------
