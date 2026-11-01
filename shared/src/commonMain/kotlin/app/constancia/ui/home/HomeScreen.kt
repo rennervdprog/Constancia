@@ -737,6 +737,7 @@ private fun HeroPanel(
             // os rótulos ("Hábitos" não pode quebrar no meio da palavra).
             BoxWithConstraints {
                 val ringSize = if (maxWidth < 300.dp) 88.dp else 104.dp
+                val showMascotCaption = maxWidth >= 300.dp
                 Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier.size(ringSize),
@@ -786,7 +787,7 @@ private fun HeroPanel(
                         celebrated = celebrated,
                         size = if (ringSize < 104.dp) 44.dp else 56.dp,
                     )
-                    if (maxWidth >= 300.dp) {
+                    if (showMascotCaption) {
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text = when {
