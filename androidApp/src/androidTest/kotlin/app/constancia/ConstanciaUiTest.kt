@@ -1330,6 +1330,39 @@ class ConstanciaUiTest {
         org.junit.Assert.assertTrue(nodesWith("H1"))
         shot("53_teto_habitos_intactos")
     }
+
+    @Test
+    fun roteiro34_tarefaDeHojeQuePassouDoHorario_mostraAtrasadaEConclui() {
+        // "Passou do horário" (2026-11-02, relato do Renner): tarefa de
+        // hoje às 00:01 — em qualquer horário de execução o momento
+        // dela já passou, então a linha mostra "atrasada" em vez de um
+        // "a fazer" comum; e concluir atrasada continua valendo.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_task").performClick()
+        composeRule.onNodeWithTag("task_name_field")
+            .performTextInput("Ligar para o banco")
+        composeRule.onNodeWithTag("task_time_field").performScrollTo()
+            .performTextInput("0001")
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            displayTextOf("task_time_field") == "00:01"
+        }
+        composeRule.onNodeWithTag("task_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Ligar para o banco")
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("atrasada", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        shot("54_tarefa_atrasada_hoje")
+        // Concluir atrasada funciona: a linha sai das pendências.
+        composeRule.onAllNodesWithTag("task_check")[0].performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            !nodesWith("Ligar para o banco")
+        }
+        shot("55_tarefa_atrasada_concluida")
+    }
 }
 
 /**
