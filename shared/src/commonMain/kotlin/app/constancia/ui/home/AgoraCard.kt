@@ -33,7 +33,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import app.constancia.domain.habitMomentPast
+import app.constancia.domain.taskMomentPast
 import app.constancia.domain.timeSortKey
+import app.constancia.theme.constanciaExtra
 import app.constancia.model.CheckinStatus
 import app.constancia.model.HabitStatus
 import app.constancia.model.Session
@@ -105,6 +108,7 @@ private fun agoraSessionLabel(session: Session): String = when (session) {
 @Composable
 fun AgoraCard(
     target: AgoraTarget,
+    nowMinutes: Int,
     onCheckHabit: (HabitStatus) -> Unit,
     onCheckTask: (TaskItem) -> Unit,
     onOpenDiary: () -> Unit,
@@ -112,6 +116,17 @@ fun AgoraCard(
     modifier: Modifier = Modifier,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
+    // "Passou do horário" (2026-11-02): quando só resta item cujo
+    // momento já passou, o cartão não finge que ele é "agora" — o selo
+    // vira FICOU PRA TRÁS. O item continua marcável em 1 toque.
+    val targetPast = when (target) {
+        is AgoraTarget.HabitTarget ->
+            habitMomentPast(target.status.habit.session, nowMinutes)
+        is AgoraTarget.TaskTarget ->
+            taskMomentPast(target.task.session, target.task.dueTime, nowMinutes)
+        AgoraTarget.DiaryTarget -> false
+    }
     Box(modifier = modifier.fillMaxWidth().padding(top = 12.dp)) {
         Box(modifier = Modifier.padding(top = 9.dp)) {
             Row(
@@ -299,11 +314,11 @@ fun AgoraCard(
             modifier = Modifier
                 .padding(start = 14.dp)
                 .clip(RoundedCornerShape(99.dp))
-                .background(scheme.primary)
+                .background(if (targetPast) extra.red else scheme.primary)
                 .padding(horizontal = 9.dp, vertical = 3.dp),
         ) {
             Text(
-                text = "AGORA",
+                text = if (targetPast) "FICOU PRA TRÁS" else "AGORA",
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontSize = 9.5.sp,
                     fontWeight = FontWeight.ExtraBold,
