@@ -100,11 +100,14 @@ import app.constancia.domain.diaryStreak
 import app.constancia.domain.dueLabel
 import app.constancia.domain.fmt1
 import app.constancia.domain.greetingFor
+import app.constancia.domain.habitMomentPast
 import app.constancia.domain.isDueOn
 import app.constancia.domain.prioName
 import app.constancia.domain.promptIndexFor
 import app.constancia.domain.sessionForHour
 import app.constancia.domain.sleepLagPattern
+import app.constancia.domain.taskEffDate
+import app.constancia.domain.taskMomentPast
 import app.constancia.domain.subtaskProgress
 import app.constancia.domain.timeSortKey
 import app.constancia.domain.weekFractions
@@ -222,7 +225,12 @@ fun HomeScreen(
     val goalIgnoreWeekdays by deps.prefs.goalIgnoreWeekdaysFlow()
         .collectAsState(initial = emptySet())
 
-    val hour = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).hour
+    val nowLocal = Clock.System.now()
+        .toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = nowLocal.hour
+    // Minutos do dia para a régua "passou do horário" (hábito da manhã
+    // às 22h não é mais "a fazer": é "não feito" — relato 2026-11-02).
+    val nowMinutes = nowLocal.hour * 60 + nowLocal.minute
     val greeting = greetingFor(hour)
 
     val active = statuses.filter { !it.habit.paused }
@@ -340,6 +348,7 @@ fun HomeScreen(
                     item(key = "agora") {
                         AgoraCard(
                             target = agora,
+                            nowMinutes = nowMinutes,
                             onCheckHabit = { st ->
                                 scope.launch {
                                     // Quantidade segue a regra do
@@ -412,6 +421,7 @@ fun HomeScreen(
                                     is FlowItem.HabitItem -> HabitSessionRow(
                                         status = flowItem.status,
                                         dateYmd = selYmd,
+                                        nowMinutes = nowMinutes,
                                         deps = deps,
                                         scope = scope,
                                         onOpenTimer = { timerTarget = flowItem.status },
@@ -419,6 +429,8 @@ fun HomeScreen(
                                     is FlowItem.TaskFlowItem -> TaskSessionRow(
                                         task = flowItem.task,
                                         today = selectedDate,
+                                        realToday = todayDate,
+                                        nowMinutes = nowMinutes,
                                         habitName = flowItem.task.habitId
                                             ?.let { habitNames[it] },
                                         expanded = expandedTaskId == flowItem.task.id,
@@ -1274,11 +1286,13 @@ private fun CheckCircleButton(
 private fun HabitSessionRow(
     status: HabitStatus,
     dateYmd: String,
+    nowMinutes: Int,
     deps: AppDeps,
     scope: CoroutineScope,
     onOpenTimer: () -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
+    val extra = MaterialTheme.constanciaExtra
     val habit = status.habit
     val habitColor = habitColorOf(habit.color)
     val isQuantity = habit.goalType == GoalType.QUANTITY
@@ -1286,6 +1300,21 @@ private fun HabitSessionRow(
     // A2 (varredura 2026-10-30): dia futuro é prévia somente-leitura —
     // sem check, sem stepper e sem pular (o repositório também barra).
     val readOnly = dateYmd > todayYmd()
+    // "Passou do horário" (2026-11-02): hábito pendente cujo momento já
+    // passou não é mais exibido como um "a fazer" comum — ganha o selo
+    // "Não feito"/"Não concluído" (parcial de quantidade). Dia passado
+    // aberto pelas pílulas já é histórico; hoje, a régua é o fim da
+    // sessão. Pulado tem estado próprio. Marcar atrasado segue valendo.
+    val skippedDay = status.todayCheckin?.status == CheckinStatus.SKIPPED
+    val todayStr = todayYmd()
+    val missedLabel: String? = when {
+        readOnly || status.isDoneToday || skippedDay -> null
+        dateYmd < todayStr ->
+            if (status.todayCheckin != null) "Não concluído" else "Não feito"
+        dateYmd == todayStr && habitMomentPast(habit.session, nowMinutes) ->
+            if (status.todayCheckin != null) "Não concluído" else "Não feito"
+        else -> null
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1363,6 +1392,16 @@ private fun HabitSessionRow(
                             color = scheme.onSurfaceVariant,
                         )
                     }
+                    if (missedLabel != null) {
+                        Text(
+                            text = " · " + missedLabel,
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                            ),
+                            color = extra.red,
+                        )
+                    }
                 }
             }
             Box(
@@ -1437,7 +1476,6 @@ private fun HabitSessionRow(
         }
         // Item 4: pular o dia é um registro — não quebra a
         // sequência. Some quando o dia já está feito.
-        val skippedDay = status.todayCheckin?.status == CheckinStatus.SKIPPED
         if (!readOnly && (skippedDay || !status.isDoneToday)) {
             HabitSkipRow(
                 skipped = skippedDay,
@@ -1577,6 +1615,8 @@ private fun projectIcon(project: TaskProject) = when (project) {
 private fun TaskSessionRow(
     task: TaskItem,
     today: LocalDate,
+    realToday: LocalDate,
+    nowMinutes: Int,
     habitName: String?,
     expanded: Boolean,
     onToggleExpand: () -> Unit,
@@ -1586,7 +1626,15 @@ private fun TaskSessionRow(
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
     val projectColor = Color(task.project.colorHex)
-    val isOverdue = !task.done && task.dueDate != null && task.dueDate < today.toString()
+    // Atraso de DATA (vencimento antes do dia exibido) OU atraso de
+    // HORÁRIO no dia de hoje (2026-11-02): tarefa de hoje cujo momento
+    // já passou — pelo horário marcado ou pelo fim da sessão — entra
+    // no mesmo tratamento "Atrasada" em vez de parecer um "a fazer"
+    // comum às 22h. (today aqui é o dia EXIBIDO; o real vem à parte.)
+    val isOverdue = !task.done &&
+        ((task.dueDate != null && task.dueDate < today.toString()) ||
+            (taskEffDate(task) == realToday.toString() &&
+                taskMomentPast(task.session, task.dueTime, nowMinutes)))
     val progress = subtaskProgress(task.subtasks)
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -1629,8 +1677,11 @@ private fun TaskSessionRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (isOverdue) {
                         Text(
-                            text = "Atrasada · " +
-                                (dueLabel(task, today)?.lowercase() ?: ""),
+                            text = listOfNotNull(
+                                "Atrasada",
+                                dueLabel(task, today)?.lowercase()
+                                    ?.takeIf { it.isNotBlank() },
+                            ).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold,
