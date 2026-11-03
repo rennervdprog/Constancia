@@ -1356,10 +1356,16 @@ class ConstanciaUiTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         shot("54_tarefa_atrasada_hoje")
-        // Concluir atrasada funciona: a linha sai das pendências.
+        // Concluir atrasada funciona: o cartão "Feitas hoje" aparece e
+        // o selo "atrasada" some (o título segue visível só como
+        // prévia riscada do cartão recolhido — comportamento da tela).
         composeRule.onAllNodesWithTag("task_check")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 8000) {
-            !nodesWith("Ligar para o banco")
+            nodesWith("Feitas hoje")
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("atrasada", substring = true)
+                .fetchSemanticsNodes().isEmpty()
         }
         shot("55_tarefa_atrasada_concluida")
     }
