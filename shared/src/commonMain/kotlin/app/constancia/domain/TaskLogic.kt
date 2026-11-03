@@ -199,6 +199,55 @@ fun sessionForHour(hour: Int): app.constancia.model.Session = when {
     else -> app.constancia.model.Session.NOITE
 }
 
+/** Fim da faixa de uma sessão (hora cheia, exclusiva): a Manhã acaba
+ *  às 12h, a Tarde às 18h e a Noite no fim do dia. */
+fun sessionEndHour(session: app.constancia.model.Session): Int = when (session) {
+    app.constancia.model.Session.MANHA -> 12
+    app.constancia.model.Session.TARDE -> 18
+    app.constancia.model.Session.NOITE -> 24
+}
+
+/** Minutos desde a meia-noite de um horário "HH:MM" válido; null se o
+ *  texto não for um horário completo. */
+fun minutesOfTimeText(timeText: String?): Int? {
+    val t = normalizedTimeOrNull(timeText) ?: return null
+    val h = t.substring(0, 2).toIntOrNull() ?: return null
+    val m = t.substring(3, 5).toIntOrNull() ?: return null
+    return h * 60 + m
+}
+
+/**
+ * O momento esperado de um HÁBITO de hoje já passou? (relato do Renner,
+ * 2026-11-02: às 22h um hábito da manhã ainda aparecia como "a fazer",
+ * sem sinal de que o horário dele passou.) A janela do hábito é a
+ * SESSÃO — o horário do lembrete é só um aviso, não o prazo: manhã não
+ * feita às 12h já está atrasada. [nowMinutes] = minutos desde a
+ * meia-noite de hoje. O estado é só EXIBIÇÃO: marcar atrasado continua
+ * valendo normalmente (nada pune nem bloqueia).
+ */
+fun habitMomentPast(
+    session: app.constancia.model.Session,
+    nowMinutes: Int,
+): Boolean = nowMinutes >= sessionEndHour(session) * 60
+
+/**
+ * O momento esperado de uma TAREFA de hoje já passou? Com horário, o
+ * horário manda (passou dele = atrasada); sem horário, vale o fim da
+ * sessão — a mesma régua dos hábitos.
+ */
+fun taskMomentPast(
+    session: app.constancia.model.Session,
+    dueTime: String?,
+    nowMinutes: Int,
+): Boolean {
+    val due = minutesOfTimeText(dueTime)
+    return if (due != null) {
+        nowMinutes > due
+    } else {
+        habitMomentPast(session, nowMinutes)
+    }
+}
+
 /**
  * T1 (auditoria de tarefas 2026-10-30): a sessão derivada de um
  * horário — se o texto é um horário completo e válido, a sessão é
