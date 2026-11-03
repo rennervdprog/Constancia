@@ -68,8 +68,8 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import kotlinx.datetime.Clock
 import kotlinx.datetime.toLocalDateTime
-import kotlin.time.Clock
 
 /** Cor da prioridade (código semântico do protótipo): P1 vermelha, P2 âmbar/chama, P3 azul. */
 @Composable
