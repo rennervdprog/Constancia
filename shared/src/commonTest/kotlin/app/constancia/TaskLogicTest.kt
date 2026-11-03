@@ -13,7 +13,11 @@ import app.constancia.domain.prioCode
 import app.constancia.domain.projectPendingCount
 import app.constancia.domain.projectTasks
 import app.constancia.domain.resolveQuickSession
+import app.constancia.domain.habitMomentPast
+import app.constancia.domain.minutesOfTimeText
+import app.constancia.domain.sessionEndHour
 import app.constancia.domain.sessionForTimeText
+import app.constancia.domain.taskMomentPast
 import app.constancia.domain.sortByPrio
 import app.constancia.domain.subtaskProgress
 import app.constancia.domain.taskCounts
@@ -287,5 +291,43 @@ class TaskLogicTest {
         assertFalse(taskMatchesQuery(t, "dentista"))
         assertFalse(taskMatchesQuery(t, ""))
         assertFalse(taskMatchesQuery(t, "   "))
+    }
+
+    // "Passou do horário" (2026-11-02): a régua que marca hábito/tarefa
+    // de hoje como atrasado na exibição.
+
+    @Test
+    fun momentoDoHabitoSegueOFimDaSessao() {
+        assertEquals(12, sessionEndHour(Session.MANHA))
+        assertEquals(18, sessionEndHour(Session.TARDE))
+        assertEquals(24, sessionEndHour(Session.NOITE))
+        // Manhã às 22h (1320 min): passou — o caso relatado.
+        assertTrue(habitMomentPast(Session.MANHA, 22 * 60))
+        // Manhã às 11h59: ainda dentro da janela.
+        assertFalse(habitMomentPast(Session.MANHA, 11 * 60 + 59))
+        // Manhã às 12h00: a faixa virou.
+        assertTrue(habitMomentPast(Session.MANHA, 12 * 60))
+        // Tarde às 17h59 ok; às 18h passou. Noite nunca passa no dia.
+        assertFalse(habitMomentPast(Session.TARDE, 17 * 60 + 59))
+        assertTrue(habitMomentPast(Session.TARDE, 18 * 60))
+        assertFalse(habitMomentPast(Session.NOITE, 23 * 60 + 59))
+    }
+
+    @Test
+    fun momentoDaTarefaComHorarioSegueOHorario() {
+        assertEquals(9 * 60 + 30, minutesOfTimeText("09:30"))
+        assertEquals(null, minutesOfTimeText("9h"))
+        assertEquals(null, minutesOfTimeText(null))
+        // Tarefa das 09:00: às 09:00 ainda é a hora dela; às 09:01 passou.
+        assertFalse(taskMomentPast(Session.MANHA, "09:00", 9 * 60))
+        assertTrue(taskMomentPast(Session.MANHA, "09:00", 9 * 60 + 1))
+        // Às 22h, tarefa da manhã com ou sem horário: passou.
+        assertTrue(taskMomentPast(Session.MANHA, "09:00", 22 * 60))
+        // Sem horário, vale o fim da sessão (mesma régua do hábito).
+        assertFalse(taskMomentPast(Session.TARDE, null, 15 * 60))
+        assertTrue(taskMomentPast(Session.TARDE, null, 19 * 60))
+        // Horário manda sobre a sessão: tarefa da Noite às 23:30,
+        // vista às 22h, ainda NÃO passou.
+        assertFalse(taskMomentPast(Session.NOITE, "23:30", 22 * 60))
     }
 }
