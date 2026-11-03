@@ -1351,8 +1351,10 @@ class ConstanciaUiTest {
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Ligar para o banco")
         }
+        // O alvo é o CHIP da linha ("atrasada hoje 00:01") — buscar
+        // só "atrasada" casaria também o subtítulo "0 atrasadas".
         composeRule.waitUntil(timeoutMillis = 8000) {
-            composeRule.onAllNodesWithText("atrasada", substring = true)
+            composeRule.onAllNodesWithText("atrasada hoje", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
         shot("54_tarefa_atrasada_hoje")
@@ -1364,7 +1366,7 @@ class ConstanciaUiTest {
             nodesWith("Feitas hoje")
         }
         composeRule.waitUntil(timeoutMillis = 8000) {
-            composeRule.onAllNodesWithText("atrasada", substring = true)
+            composeRule.onAllNodesWithText("atrasada hoje", substring = true)
                 .fetchSemanticsNodes().isEmpty()
         }
         shot("55_tarefa_atrasada_concluida")
