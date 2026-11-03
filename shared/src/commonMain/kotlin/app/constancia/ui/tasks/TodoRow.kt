@@ -58,13 +58,18 @@ import app.constancia.domain.rescheduleDate
 import app.constancia.domain.rescheduleDateFrom
 import app.constancia.domain.rescheduleLabel
 import app.constancia.domain.subtaskProgress
+import app.constancia.domain.taskEffDate
+import app.constancia.domain.taskMomentPast
 import app.constancia.model.TaskItem
 import app.constancia.model.toLocalDate
 import app.constancia.theme.constanciaExtra
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
 
 /** Cor da prioridade (código semântico do protótipo): P1 vermelha, P2 âmbar/chama, P3 azul. */
 @Composable
@@ -116,6 +121,18 @@ fun TodoRow(
     val duration = task.durationMinutes
     val isOverdue = !task.done && task.dueDate != null &&
         task.dueDate < today.toString()
+    // "Passou do horário" (2026-11-02): tarefa DE HOJE cujo momento já
+    // passou (horário marcado ou fim da sessão) recebe o mesmo
+    // tratamento visual de atrasada — às 22h ela não é um "a fazer"
+    // comum. Concluir atrasada continua valendo normalmente.
+    val nowLocalRow = Clock.System.now()
+        .toLocalDateTime(TimeZone.currentSystemDefault())
+    val isLateToday = !task.done && taskEffDate(task) == today.toString() &&
+        taskMomentPast(
+            task.session, task.dueTime,
+            nowLocalRow.hour * 60 + nowLocalRow.minute,
+        )
+    val isOverdueVisual = isOverdue || isLateToday
     val isDueToday = task.dueDate == today.toString()
     val isDeadlineOverdue = !task.done && deadline != null &&
         deadline < today.toString()
@@ -209,23 +226,28 @@ fun TodoRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    if (dueText != null || task.dueTime != null) {
+                    if (dueText != null || task.dueTime != null || isLateToday) {
                         MetaChip(
                             text = listOfNotNull(
+                                if (isLateToday && !isOverdue) {
+                                    "atrasada"
+                                } else {
+                                    null
+                                },
                                 dueText?.lowercase(), task.dueTime,
                             ).joinToString(" "),
                             background = when {
-                                isOverdue -> extra.redSoft
+                                isOverdueVisual -> extra.redSoft
                                 isDueToday -> scheme.primaryContainer
                                 else -> extra.pageChip
                             },
                             contentColor = when {
-                                isOverdue -> extra.red
+                                isOverdueVisual -> extra.red
                                 isDueToday -> scheme.onPrimaryContainer
                                 else -> extra.ink2
                             },
                             borderColor = when {
-                                isOverdue -> extra.redSoft
+                                isOverdueVisual -> extra.redSoft
                                 isDueToday -> scheme.primaryContainer
                                 else -> extra.lineSoft
                             },
@@ -234,7 +256,7 @@ fun TodoRow(
                                     Icons.Filled.Schedule,
                                     contentDescription = null,
                                     tint = when {
-                                        isOverdue -> extra.red
+                                        isOverdueVisual -> extra.red
                                         isDueToday -> scheme.primary
                                         else -> extra.ink3
                                     },
