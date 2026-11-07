@@ -142,7 +142,8 @@ fun ReminderListEditor(
                         absTimeText = value
                         absError = false
                     },
-                    modifier = Modifier.width(96.dp),
+                    modifier = Modifier.width(96.dp)
+                        .testTag("reminder_abs_time_field"),
                 )
                 IconButton(
                     onClick = { showAbsPicker = true },
