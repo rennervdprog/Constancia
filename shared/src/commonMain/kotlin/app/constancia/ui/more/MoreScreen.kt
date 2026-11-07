@@ -25,11 +25,14 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ChevronRight
@@ -70,6 +73,11 @@ import app.constancia.domain.buildExportCsv
 import app.constancia.domain.goalForgivenDates
 import app.constancia.domain.parseTimeOrNull
 import app.constancia.notify.NotificationScheduler
+import app.constancia.notify.exactAlarmsGranted
+import app.constancia.notify.notificationsGranted
+import app.constancia.notify.openExactAlarmSettings
+import app.constancia.notify.openNotificationSettings
+import app.constancia.notify.postTestNotification
 import app.constancia.domain.buildExportJson
 import app.constancia.export.shareTextFile
 import app.constancia.model.todayYmd
@@ -486,6 +494,115 @@ fun MoreScreen(
                                 }
                             },
                         )
+                    }
+                }
+            }
+            item {
+                // Saúde dos alertas (2026-11-07): o usuário VÊ se o
+                // aparelho deixa os lembretes passarem, testa na hora e
+                // é levado à configuração certa — antes, permissão
+                // negada = lembrete morto em silêncio.
+                var notifTick by remember { mutableStateOf(0) }
+                var testSent by remember { mutableStateOf(false) }
+                val notifGranted = remember(notifTick) {
+                    notificationsGranted()
+                }
+                val exactGranted = remember(notifTick) {
+                    exactAlarmsGranted()
+                }
+                StackCard(modifier = Modifier.testTag("notif_status_card")) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconTile(
+                            icon = Icons.Filled.Notifications,
+                            tint = extra.tintSun,
+                            iconColor = extra.sunColor,
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Notificações do aparelho",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                if (notifGranted) {
+                                    "Ativadas — seus lembretes de hábito, " +
+                                        "de tarefa e a revisão do dia " +
+                                        "aparecem neste aparelho."
+                                } else {
+                                    "Desativadas no sistema — NENHUM " +
+                                        "lembrete aparece até você " +
+                                        "ativar. É a causa mais comum de " +
+                                        "\"o app não avisou\"."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (notifGranted) {
+                                    scheme.onSurfaceVariant
+                                } else {
+                                    extra.red
+                                },
+                                fontWeight = if (notifGranted) {
+                                    null
+                                } else {
+                                    FontWeight.Bold
+                                },
+                            )
+                        }
+                        TextButton(
+                            onClick = { notifTick++ },
+                            modifier = Modifier.testTag("notif_refresh_btn"),
+                        ) {
+                            Text("Atualizar")
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (notifGranted) {
+                            Button(
+                                onClick = {
+                                    postTestNotification()
+                                    testSent = true
+                                },
+                                modifier = Modifier.testTag("notif_test_btn"),
+                            ) {
+                                Text("Enviar teste")
+                            }
+                        } else {
+                            Button(
+                                onClick = { openNotificationSettings() },
+                                modifier = Modifier
+                                    .testTag("notif_settings_btn"),
+                            ) {
+                                Text("Ativar nas configurações")
+                            }
+                        }
+                    }
+                    if (testSent && notifGranted) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "Teste enviado — desça a barra de " +
+                                "notificações do aparelho pra ver.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                        )
+                    }
+                    if (notifGranted && !exactGranted) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Horário exato não liberado: lembretes de " +
+                                "tarefa podem chegar alguns minutos " +
+                                "depois do horário marcado.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        OutlinedButton(
+                            onClick = { openExactAlarmSettings() },
+                            modifier = Modifier.testTag("notif_exact_btn"),
+                        ) {
+                            Text("Liberar horário exato")
+                        }
                     }
                 }
             }
