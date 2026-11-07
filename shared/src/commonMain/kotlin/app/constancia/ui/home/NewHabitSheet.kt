@@ -602,11 +602,13 @@ fun NewHabitSheet(
                         reminderTimeText = value
                         reminderTimeError = null
                     },
-                    modifier = Modifier.width(110.dp),
+                    modifier = Modifier.width(110.dp)
+                        .testTag("habit_reminder_time_field"),
                 )
                 Spacer(Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
+                        .testTag("habit_reminder_add")
                         .clip(RoundedCornerShape(99.dp))
                         .background(scheme.surfaceVariant)
                         .border(
