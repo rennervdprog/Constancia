@@ -29,6 +29,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiSelector
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import app.constancia.billing.StoreBilling
 import app.constancia.data.LocalSyncRepository
@@ -88,14 +89,25 @@ class ConstanciaUiTest {
         val driver = AndroidSqliteDriver(ConstanciaDb.Schema, appContext, "constancia.db")
         val db = ConstanciaDb(driver)
         val checkins = CheckinRepositoryImpl(db)
+        val prefs = PrefsRepositoryImpl()
         deps = AppDeps(
-            habits = HabitRepositoryImpl(db, checkins),
+            // Ambiente REAL (2026-11-07): com o agendador de
+            // notificações ligado, igual à produção — sem contexto de
+            // notificação (MainActivity não roda no teste) as chamadas
+            // são ignoradas em silêncio; os roteiros 35/36 ligam o
+            // contexto para provar os alarmes de verdade.
+            habits = HabitRepositoryImpl(
+                db, checkins, app.constancia.notify.NotificationScheduler(),
+            ),
             checkins = checkins,
-            tasks = TaskRepositoryImpl(db),
+            tasks = TaskRepositoryImpl(
+                db, checkins, app.constancia.notify.NotificationScheduler(),
+                prefs,
+            ),
             diary = DiaryRepositoryImpl(db),
             challenges = ChallengeRepositoryImpl(db),
             sync = LocalSyncRepository(),
-            prefs = PrefsRepositoryImpl(),
+            prefs = prefs,
         )
         runBlocking { deps.challenges.ensureSeed() }
         // Telas iniciais: os testes existentes partem do app já
@@ -1370,6 +1382,143 @@ class ConstanciaUiTest {
                 .fetchSemanticsNodes().isEmpty()
         }
         shot("55_tarefa_atrasada_concluida")
+    }
+
+    @Test
+    fun roteiro35_notificacaoDeTesteApareceNaBandeja() {
+        // Rodada "funcional de verdade" (2026-11-07): o cartão
+        // "Notificações do aparelho" (Mais → Ajustes) mostra o estado
+        // real e o botão de teste posta uma notificação que APARECE
+        // na bandeja do sistema — prova de ponta a ponta (agendador →
+        // NotificationManager → bandeja), não só leitura de código.
+        // No teste a MainActivity não roda: o contexto de notificação
+        // é ligado aqui, como ela faz no aparelho.
+        app.constancia.notify.initNotificationContext(targetContext)
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        var tries = 0
+        while (!nodesWithTag("notif_status_card") && tries < 8) {
+            swipeList("mais_list")
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWithTag("notif_status_card")
+        }
+        // Emulador API 30: notificações liberadas por padrão — o
+        // cartão tem que dizer "Ativadas" e oferecer o teste.
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("Ativadas", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("notif_test_btn").performClick()
+        composeRule.waitForIdle()
+        device.openNotification()
+        var found = false
+        var shadeTries = 0
+        while (!found && shadeTries < 15) {
+            found = device.findObject(
+                UiSelector().textContains("Teste do Constância"),
+            ).exists()
+            if (!found) {
+                Thread.sleep(1000)
+                shadeTries++
+            }
+        }
+        org.junit.Assert.assertTrue(found)
+        shot("56_teste_notificacao_bandeja")
+        device.pressBack()
+        composeRule.waitForIdle()
+    }
+
+    @Test
+    fun roteiro36_alarmesDeLembreteDisparamDeVerdade() {
+        // A prova máxima da rodada "funcional de verdade": um lembrete
+        // de HÁBITO e um de TAREFA marcados para daqui a ~4 minutos
+        // DISPARAM e aparecem na bandeja do sistema com o app em
+        // segundo plano — o comportamento que o usuário real cobra.
+        app.constancia.notify.initNotificationContext(targetContext)
+        // O emulador pode segurar alarme inexato em repouso; a
+        // whitelist de bateria é o equivalente ao "sem restrições"
+        // que o usuário marca no aparelho (ambiente de teste).
+        device.executeShellCommand(
+            "dumpsys deviceidle whitelist +app.constancia",
+        )
+        // Alvo: agora + 4 min (a digitação dos formulários leva ~1).
+        val nowText = (device.executeShellCommand("date +%H:%M") ?: "")
+            .trim()
+        val parts = nowText.split(":")
+        val nowMin = (parts.getOrNull(0)?.toIntOrNull() ?: 0) * 60 +
+            (parts.getOrNull(1)?.toIntOrNull() ?: 0)
+        val target = (nowMin + 4) % (24 * 60)
+        val targetText = "%02d:%02d".format(target / 60, target % 60)
+        val targetDigits = "%02d%02d".format(target / 60, target % 60)
+        // Hábito com lembrete diário no horário-alvo (1º disparo hoje).
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_habit").performClick()
+        composeRule.onNodeWithTag("habit_name_field")
+            .performTextInput("Beber água")
+        composeRule.onNodeWithTag("habit_reminder_time_field")
+            .performScrollTo().performTextInput(targetDigits)
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            displayTextOf("habit_reminder_time_field") == targetText
+        }
+        composeRule.onNodeWithTag("habit_reminder_add").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("habit_save").performScrollTo()
+            .performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            !nodesWithTag("habit_name_field")
+        }
+        // Tarefa com lembrete ABSOLUTO no mesmo horário-alvo.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_task").performClick()
+        composeRule.onNodeWithTag("task_name_field")
+            .performTextInput("Tarefa alarme")
+        composeRule.onNodeWithTag("reminder_abs_time_field")
+            .performScrollTo().performTextInput(targetDigits)
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            displayTextOf("reminder_abs_time_field") == targetText
+        }
+        composeRule.onNodeWithText("Adicionar horário fixo").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("task_save").performScrollTo()
+            .performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Tarefa alarme")
+        }
+        runCatching { device.pressBack() } // fecha o teclado virtual
+        composeRule.waitForIdle()
+        // Registro no sistema: há alarmes do nosso pacote.
+        val dump = device.executeShellCommand("dumpsys alarm") ?: ""
+        org.junit.Assert.assertTrue(dump.contains("app.constancia"))
+        // Espera os dois disparos na bandeja (até ~5 min).
+        var habitFired = false
+        var taskFired = false
+        var rounds = 0
+        while ((!habitFired || !taskFired) && rounds < 15) {
+            device.openNotification()
+            Thread.sleep(2000)
+            if (!habitFired) {
+                habitFired = device.findObject(
+                    UiSelector().textContains("Hora do hábito"),
+                ).exists()
+            }
+            if (!taskFired) {
+                taskFired = device.findObject(
+                    UiSelector().textContains("Lembrete de tarefa"),
+                ).exists()
+            }
+            if (!habitFired || !taskFired) {
+                device.pressBack()
+                Thread.sleep(18000)
+            }
+            rounds++
+        }
+        org.junit.Assert.assertTrue(habitFired)
+        org.junit.Assert.assertTrue(taskFired)
+        shot("57_alarmes_dispararam")
+        device.pressBack()
+        composeRule.waitForIdle()
     }
 }
 
