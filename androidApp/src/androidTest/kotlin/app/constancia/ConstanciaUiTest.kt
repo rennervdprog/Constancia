@@ -1395,9 +1395,13 @@ class ConstanciaUiTest {
         // é ligado aqui, como ela faz no aparelho.
         app.constancia.notify.initNotificationContext(targetContext)
         composeRule.onNodeWithTag("tab_MAIS").performClick()
+        // A lista da Mais não compõe itens fora da tela com o gesto
+        // do Compose — a caça é com gestos REAIS do aparelho, como no
+        // openMaisItem (lição dos roteiros da Mais).
         var tries = 0
-        while (!nodesWithTag("notif_status_card") && tries < 8) {
-            swipeList("mais_list")
+        while (!nodesWithTag("notif_status_card") && tries < 14) {
+            device.swipe(160, 470, 160, 300, 12)
+            composeRule.waitForIdle()
             tries++
         }
         composeRule.waitUntil(timeoutMillis = 8000) {
