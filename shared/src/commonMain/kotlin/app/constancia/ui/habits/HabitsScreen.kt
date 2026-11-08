@@ -194,7 +194,10 @@ fun HabitsScreen(
         .collectAsState(initial = emptyList())
 
     val statusByHabit = statuses.associateBy { it.habit.id }
+    // B3: "dias com check-in" conta só dias com conclusão — dia só
+    // de pulo não entra (mesma regra dos relatórios).
     val checkinDays30 = checkins
+        .filter { it.status == CheckinStatus.DONE }
         .map { it.date }
         .filter { it >= todayDate.minus(DatePeriod(days = 29)).toString() }
         .distinct()
