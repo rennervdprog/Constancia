@@ -70,6 +70,19 @@ private val DAY_LETTERS = listOf("D", "S", "T", "Q", "Q", "S", "S")
 private val ISO_DAY_LETTERS = listOf("S", "T", "Q", "Q", "S", "S", "D")
 
 /** Quantidade como texto de formulário: inteiro sem o ".0" ("2", "0,5"→"0.5"). */
+/** Entrada decimal amigável: dígitos + no máximo um separador (',' ou '.'). */
+private fun decimalInput(raw: String): String {
+    val cleaned = raw.filter { it.isDigit() || it == ',' || it == '.' }
+    val sep = cleaned.indexOfFirst { it == ',' || it == '.' }
+    val out = if (sep < 0) {
+        cleaned
+    } else {
+        cleaned.substring(0, sep + 1) +
+            cleaned.substring(sep + 1).filter { it.isDigit() }
+    }
+    return out.take(7)
+}
+
 private fun fmtQty(v: Double): String =
     if (v == v.toLong().toDouble()) v.toLong().toString() else v.toString()
 
@@ -196,11 +209,15 @@ fun NewHabitSheet(
             // toque passar do ponto (o caso real: meta 8 copos com
             // passo 250 ml virou "250/8" na Hoje — relato do Renner
             // em 2026-11-01). Erro visível + salvar bloqueado.
-            val qtyTarget = targetText.toDoubleOrNull()
+            val qtyTarget = targetText.replace(',', '.').toDoubleOrNull()
             val qtyStep = stepText.replace(',', '.').toDoubleOrNull()
             val quantityError = if (goalType == GoalType.QUANTITY) {
                 when {
-                    qtyTarget != null && qtyTarget <= 0.0 ->
+                    // B11: campo vazio/inválido mostra o erro em vez de
+                    // salvar 1,0 em silêncio.
+                    qtyTarget == null ->
+                        "Informe a meta — pode ser decimal, ex.: 8 ou 2,5."
+                    qtyTarget <= 0.0 ->
                         "A meta precisa ser maior que zero."
                     qtyStep != null && qtyStep <= 0.0 ->
                         "O passo precisa ser maior que zero."
@@ -220,11 +237,16 @@ fun NewHabitSheet(
                 ) {
                     OutlinedTextField(
                         value = targetText,
-                        onValueChange = { targetText = it.filter { c -> c.isDigit() }.take(4) },
+                        // B11: a meta aceita decimal (2,5 km) — o
+                        // domínio sempre foi Double; quem travava era
+                        // o filtro de digitação.
+                        onValueChange = { targetText = decimalInput(it) },
                         label = { Text("Meta") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                        ),
+                        modifier = Modifier.weight(1f).testTag("habit_target_field"),
                         shape = RoundedCornerShape(16.dp),
                     )
                     OutlinedTextField(
@@ -672,7 +694,8 @@ fun NewHabitSheet(
                                     icon = iconKey,
                                     color = colorValue,
                                     goalType = goalType,
-                                    targetQuantity = targetText.toDoubleOrNull() ?: 1.0,
+                                    targetQuantity = targetText.replace(',', '.')
+                                        .toDoubleOrNull() ?: 1.0,
                                     quantityUnit = unit.trim().ifEmpty { "vezes" },
                                     quantityStep = stepText.replace(',', '.')
                                         .toDoubleOrNull()
