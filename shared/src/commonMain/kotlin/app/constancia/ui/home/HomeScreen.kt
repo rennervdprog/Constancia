@@ -159,6 +159,17 @@ private fun sessionRange(session: Session): String = when (session) {
     Session.NOITE -> "depois das 18h"
 }
 
+/**
+ * B13: na virada do dia com o app aberto, a seleção acompanha o novo
+ * "hoje" só se estava parada no hoje anterior; um dia escolhido à
+ * mão nas pílulas fica onde está.
+ */
+internal fun resolveRollover(
+    selected: LocalDate,
+    oldToday: LocalDate,
+    newToday: LocalDate,
+): LocalDate = if (selected == oldToday) newToday else selected
+
 // Formata quantidade sem casas decimais quando for inteira.
 private fun fmtQty(value: Double): String {
     val asLong = value.toLong()
@@ -193,10 +204,25 @@ fun HomeScreen(
     onCreate: () -> Unit = {},
     onOpenDiary: (String) -> Unit = {},
     onOpenReports: () -> Unit = {},
+    isPro: Boolean = false,
+    onOpenPaywall: () -> Unit = {},
 ) {
-    val today = remember { todayYmd() }
-    val todayDate = remember { today.toLocalDate() }
+    var todayDate by remember { mutableStateOf(todayYmd().toLocalDate()) }
+    val today = todayDate.toString()
     var selectedDate by remember { mutableStateOf(todayDate) }
+    // B13: o "hoje" não congela na abertura — um pulso detecta a
+    // virada da meia-noite com o app aberto e promove o novo dia
+    // (fluxos, metas e lembretes passam a valer pelo dia novo).
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            val now = todayYmd().toLocalDate()
+            if (now != todayDate) {
+                selectedDate = resolveRollover(selectedDate, todayDate, now)
+                todayDate = now
+            }
+        }
+    }
     val selYmd = selectedDate.toString()
     val isToday = selectedDate == todayDate
     val scope = rememberCoroutineScope()
@@ -214,7 +240,7 @@ fun HomeScreen(
     // de ocorrências (conclusões preservadas sem a linha viva).
     val taskHistory by deps.tasks.occurrenceHistoryFlow()
         .collectAsState(initial = emptyList())
-    val rangeFrom = remember { todayDate.minus(DatePeriod(days = 35)).toString() }
+    val rangeFrom = remember(todayDate) { todayDate.minus(DatePeriod(days = 35)).toString() }
     val checkins by deps.checkins.checkinsInRangeFlow(rangeFrom, today)
         .collectAsState(initial = emptyList())
     val selEntry by remember(selectedDate) { deps.diary.entryForDateFlow(selYmd) }
@@ -507,6 +533,8 @@ fun HomeScreen(
                     InsightCard(
                         pattern = sleepPattern,
                         onOpenReports = onOpenReports,
+                        isPro = isPro,
+                        onOpenPaywall = onOpenPaywall,
                     )
                 }
             }
@@ -2393,7 +2421,17 @@ private fun FocusTimerDialog(
  * roxo escuro — selo "SONO × DIA SEGUINTE", título e o texto do padrão.
  */
 @Composable
-private fun InsightCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
+private fun InsightCard(
+    pattern: SleepLagPattern,
+    onOpenReports: () -> Unit,
+    isPro: Boolean = false,
+    onOpenPaywall: () -> Unit = {},
+) {
+    // A2 (decisão do Renner, 2026-11-08): para quem é grátis, este
+    // cartão é a AMOSTRA rotulada de Padrões cruzados — a conclusão
+    // aparece como vitrine, mas o destino do toque é o paywall; o
+    // relatório completo (todos os padrões) segue sendo do Pro.
+    val onOpen = if (isPro) onOpenReports else onOpenPaywall
     val goodDay = (pattern.overdueRatio ?: 1.0) >= 1.3 ||
         (pattern.moodAfterShort != null && pattern.moodAfterEnough != null &&
             (pattern.moodAfterEnough ?: 0.0) - (pattern.moodAfterShort ?: 0.0) > 0.3)
@@ -2422,12 +2460,12 @@ private fun InsightCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
                 modifier = Modifier.weight(1f),
             )
             Text(
-                text = "Ver relatórios",
+                text = if (isPro) "Ver relatórios" else "Ver no Pro",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onOpenReports)
+                    .clickable(onClick = onOpen)
                     .padding(4.dp),
             )
         }
@@ -2442,7 +2480,7 @@ private fun InsightCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
                         end = Offset(380f, 420f),
                     ),
                 )
-                .clickable(onClick = onOpenReports)
+                .clickable(onClick = onOpen)
                 .padding(18.dp),
         ) {
             Column {
@@ -2486,6 +2524,32 @@ private fun InsightCard(pattern: SleepLagPattern, onOpenReports: () -> Unit) {
                     ),
                     color = Color(0xFFDCCFFB),
                 )
+                if (!isPro) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color.White.copy(alpha = 0.16f))
+                                .padding(horizontal = 8.dp, vertical = 3.dp),
+                        ) {
+                            Text(
+                                text = "AMOSTRA DO PRO",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 0.08.em,
+                                ),
+                                color = Color(0xFFE7DBFC),
+                            )
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "No Pro, todos os padrões cruzados",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFFDCCFFB),
+                        )
+                    }
+                }
             }
         }
     }
