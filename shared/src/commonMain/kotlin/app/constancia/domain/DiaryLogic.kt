@@ -193,6 +193,45 @@ fun weekFractions(
     }
 }
 
+/**
+ * Dias PASSADOS da semana atual com pendência não concluída — a base
+ * do traço nas pílulas da Hoje (pedido do Renner, 2026-11-07): dia
+ * devido de hábito (não feito, não pulado, não perdoado por pausa) ou
+ * tarefa com prazo naquele dia ainda aberta. Hábito de meta semanal
+ * (WEEKLY_X) nunca marca a semana corrente: a meta dele ainda pode
+ * ser batida nos dias seguintes. Hoje e dias futuros nunca entram.
+ */
+fun weekMissedDays(
+    habits: List<Habit>,
+    checkins: List<Checkin>,
+    tasks: List<TaskItem>,
+    today: LocalDate,
+    forgivenByHabit: Map<String, Set<String>> = emptyMap(),
+): Set<LocalDate> {
+    val monday = weekStartOf(today)
+    val checkinsByHabit = checkins.groupBy { it.habitId }
+    return (0..6).map { monday.plus(DatePeriod(days = it)) }
+        .filter { it < today }
+        .filter { day ->
+            val ymd = day.toYmd()
+            val habitMiss = habits.any { h ->
+                if (h.frequencyType == FrequencyType.WEEKLY_X) {
+                    false
+                } else {
+                    val hcs = checkinsByHabit[h.id].orEmpty()
+                    isDueOn(h, day, habitActiveFrom(h.createdAt)) &&
+                        !satisfiedDates(
+                            h, doneDatesFor(h, donePairs(hcs)),
+                        ).contains(ymd) &&
+                        !skippedDatesFor(hcs).contains(ymd) &&
+                        !forgivenByHabit[h.id].orEmpty().contains(ymd)
+                }
+            }
+            val taskMiss = tasks.any { t -> !t.done && taskEffDate(t) == ymd }
+            habitMiss || taskMiss
+        }.toSet()
+}
+
 enum class HeatCell { FUTURE, OFF, DONE, PARTIAL, SKIPPED, MISSED }
 
 /** Domingo (início da semana na grade do mapa de calor) da semana de [date]. */
