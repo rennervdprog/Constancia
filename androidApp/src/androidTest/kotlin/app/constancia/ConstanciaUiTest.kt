@@ -1404,6 +1404,18 @@ class ConstanciaUiTest {
         ) as android.app.NotificationManager
         nm.cancelAll()
         composeRule.onNodeWithTag("tab_MAIS").performClick()
+        // Primeiro a caça traz o cartão para a COMPOSIÇÃO (a lista da
+        // Mais só compõe perto da viewport; sem rolar, nem o texto
+        // "Ativadas" existe na árvore).
+        var tries = 0
+        while (!nodesWithTag("notif_status_card") && tries < 14) {
+            device.swipe(160, 470, 160, 300, 12)
+            composeRule.waitForIdle()
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWithTag("notif_status_card")
+        }
         // Emulador API 30: notificações liberadas por padrão — o
         // cartão tem que dizer "Ativadas" e oferecer o teste.
         composeRule.waitUntil(timeoutMillis = 8000) {
