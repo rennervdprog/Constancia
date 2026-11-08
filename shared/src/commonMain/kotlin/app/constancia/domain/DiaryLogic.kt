@@ -3,7 +3,9 @@ package app.constancia.domain
 import app.constancia.model.Checkin
 import app.constancia.model.CheckinStatus
 import app.constancia.model.DiaryEntry
+import app.constancia.model.FrequencyType
 import app.constancia.model.Habit
+import app.constancia.model.TaskItem
 import app.constancia.model.habitActiveFrom
 import app.constancia.model.isoDayNumberCompat
 import app.constancia.model.toLocalDate
