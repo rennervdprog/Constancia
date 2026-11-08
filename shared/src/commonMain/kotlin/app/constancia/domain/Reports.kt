@@ -1,6 +1,7 @@
 package app.constancia.domain
 
 import app.constancia.model.Checkin
+import app.constancia.model.CheckinStatus
 import app.constancia.model.DiaryEntry
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
