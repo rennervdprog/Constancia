@@ -1394,6 +1394,15 @@ class ConstanciaUiTest {
         // No teste a MainActivity não roda: o contexto de notificação
         // é ligado aqui, como ela faz no aparelho.
         app.constancia.notify.initNotificationContext(targetContext)
+        // Bandeja limpa antes de começar: notificações de roteiros
+        // anteriores (os alarmes do 36) se AGRUPAM com a do teste na
+        // bandeja e o grupo colapsado esconde o título da busca —
+        // foi o que derrubou este roteiro duas vezes seguidas quando
+        // a ordem dos testes mudou (2026-11-08).
+        val nm = targetContext.getSystemService(
+            android.content.Context.NOTIFICATION_SERVICE,
+        ) as android.app.NotificationManager
+        nm.cancelAll()
         composeRule.onNodeWithTag("tab_MAIS").performClick()
         // A lista da Mais não compõe itens fora da tela com o gesto
         // do Compose — a caça é com gestos REAIS do aparelho, como no
