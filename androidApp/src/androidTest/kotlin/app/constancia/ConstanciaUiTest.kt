@@ -45,6 +45,7 @@ import app.constancia.domain.PlanPeriod
 import app.constancia.domain.StorePlan
 import app.constancia.domain.StoreProduct
 import app.constancia.domain.StorePurchase
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Rule
@@ -1654,6 +1655,103 @@ class ConstanciaUiTest {
         )
         shot("60_relatorio_dias_nao_feitos")
         composeRule.waitForIdle()
+    }
+
+    @Test
+    fun roteiro38_coerencia_semRodapeFalsoEPadraoAmostra() {
+        // Fase 1 de coerência (2026-11-08): (A1) o rodapé das Feitas
+        // prometia "histórico completo de 90 dias no Pro" — não
+        // existe janela nem portão no código; o texto saiu. (A2) o
+        // cartão "Padrão detectado" da Hoje vira AMOSTRA DO PRO para
+        // quem é grátis (decisão do Renner): a conclusão aparece
+        // rotulada e o toque abre o paywall, não os relatórios.
+        val todayJ = java.time.LocalDate.now()
+        runBlocking {
+            // 7 dias de diário com sono: 4 noites curtas (humor 2) e
+            // 3 boas (humor 5) — a matéria-prima do padrão sono×dia.
+            for (back in 6 downTo 3) {
+                deps.diary.save(
+                    todayJ.minusDays(back.toLong()).toString(),
+                    2, "", 3, 5.0,
+                )
+            }
+            for (back in 2 downTo 0) {
+                deps.diary.save(
+                    todayJ.minusDays(back.toLong()).toString(),
+                    5, "", 4, 8.5,
+                )
+            }
+        }
+        // (A2) O cartão aparece no fim da Hoje, com o selo da amostra.
+        var tries = 0
+        while (!nodesWith("AMOSTRA DO PRO") && tries < 14) {
+            swipeList("home_list")
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("AMOSTRA DO PRO") }
+        shot("61_padrao_amostra_pro")
+        // O link do cartão abre o paywall (não os relatórios).
+        composeRule.onNodeWithText("Ver no Pro").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("Começar 7 dias grátis", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        shot("62_amostra_abre_paywall")
+        composeRule.onNodeWithContentDescription("Voltar").performClick()
+        composeRule.waitForIdle()
+        // (A1) Nas Feitas, nenhum rastro do rodapé falso.
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("tasks_quick_input")
+            .performTextInput("Conferir extrato")
+        composeRule.onNodeWithTag("tasks_quick_add").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Conferir extrato") }
+        runCatching { device.pressBack() }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("task_check").performClick()
+        composeRule.onNodeWithTag("view_chips_row")
+            .performTouchInput { swipeLeft() }
+        composeRule.onNodeWithTag("view_chip_FEITAS").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Conferir extrato") }
+        org.junit.Assert.assertTrue(
+            composeRule.onAllNodesWithText("90 dias", substring = true)
+                .fetchSemanticsNodes().isEmpty(),
+        )
+        shot("63_feitas_sem_rodape_falso")
+    }
+
+    @Test
+    fun roteiro39_metaDecimalEDesafioSemDuplicar() {
+        // Fase 1 (2026-11-08): (B11) a meta de quantidade aceita
+        // decimal — "2,5" salva 2.5 de verdade (o domínio sempre foi
+        // Double; quem travava era o filtro de digitação). (B14) o
+        // toque duplo em "Começar" um desafio cria UM hábito só (a
+        // trava `starting` já existia — este roteiro é a prova dela).
+        composeRule.onNodeWithTag("fab_create").performClick()
+        composeRule.onNodeWithTag("create_habit").performClick()
+        composeRule.onNodeWithTag("habit_name_field").performTextInput("Corrida")
+        composeRule.onNodeWithText("Quantidade").performClick()
+        composeRule.onNodeWithTag("habit_target_field")
+            .performTextReplacement("2,5")
+        composeRule.onNodeWithTag("habit_save").performScrollTo().performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) { !nodesWithTag("habit_name_field") }
+        awaitText("0/2.5 copos", "home_list")
+        shot("64_meta_decimal")
+        // (B14) Dois toques rápidos no mesmo "Começar".
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        openMaisItem("mais_desafios")
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("Começar") }
+        val center = composeRule.onAllNodesWithText("Começar").onFirst()
+            .fetchSemanticsNode().boundsInRoot.center
+        device.click(center.x.toInt(), center.y.toInt())
+        device.click(center.x.toInt(), center.y.toInt())
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            composeRule.onAllNodesWithText("0 de 7 dias feitos", substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        val totalHabits = runBlocking { deps.habits.habitsFlow().first().size }
+        // Corrida + exatamente UM hábito criado pelo desafio.
+        org.junit.Assert.assertEquals(2, totalHabits)
+        shot("65_desafio_toque_duplo_um_habito")
     }
 }
 
