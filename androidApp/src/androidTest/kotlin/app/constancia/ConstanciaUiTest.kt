@@ -1422,18 +1422,35 @@ class ConstanciaUiTest {
             composeRule.onAllNodesWithText("Ativadas", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        // Levanta o cartão para a zona segura antes do toque: ele
+        // mora no fim da lista da Mais e o botão pode nascer sob a
+        // barra flutuante, que engole o clique (armadilha conhecida).
+        device.swipe(160, 470, 160, 380, 12)
+        composeRule.waitForIdle()
+        shot("56a_cartao_notificacoes")
         composeRule.onNodeWithTag("notif_test_btn").performClick()
         composeRule.waitForIdle()
-        device.openNotification()
         var found = false
-        var shadeTries = 0
-        while (!found && shadeTries < 15) {
-            found = device.findObject(
-                UiSelector().textContains("Teste do Constância"),
-            ).exists()
+        var attempt = 0
+        while (!found && attempt < 2) {
+            device.openNotification()
+            var shadeTries = 0
+            while (!found && shadeTries < 10) {
+                found = device.findObject(
+                    UiSelector().textContains("Teste do Constância"),
+                ).exists()
+                if (!found) {
+                    Thread.sleep(1000)
+                    shadeTries++
+                }
+            }
             if (!found) {
-                Thread.sleep(1000)
-                shadeTries++
+                // Um toque pode ter sido engolido: volta e tenta de novo.
+                device.pressBack()
+                composeRule.waitForIdle()
+                composeRule.onNodeWithTag("notif_test_btn").performClick()
+                composeRule.waitForIdle()
+                attempt++
             }
         }
         org.junit.Assert.assertTrue(found)
