@@ -56,7 +56,9 @@ import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -82,7 +84,10 @@ import androidx.compose.ui.layout.ContentScale
 import org.jetbrains.compose.resources.ExperimentalResourceApi
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -247,6 +252,32 @@ fun HomeScreen(
     val tasksDone = dayTasks.count { it.done }
 
     val fractions = weekFractions(habits, checkins, todayDate)
+    // Traço das pílulas + confirmação de registro retroativo
+    // (2026-11-07): dias passados com pendência não concluída ganham
+    // identidade visual, e marcar feito num dia passado vira um gesto
+    // confirmado — corrigir ontem continua possível, só não é mais
+    // invisível. Pausas dos hábitos viram dias perdoados.
+    var forgivenByHabit by remember { mutableStateOf(emptyMap<String, Set<String>>()) }
+    LaunchedEffect(habits) {
+        forgivenByHabit = if (habits.isEmpty()) {
+            emptyMap()
+        } else {
+            deps.habits.allPauseIntervals().mapValues { (_, ivs) ->
+                app.constancia.domain.forgivenDates(ivs, today)
+            }
+        }
+    }
+    val missedDays = remember(habits, checkins, allTasks, forgivenByHabit) {
+        app.constancia.domain.weekMissedDays(
+            habits, checkins, allTasks, todayDate, forgivenByHabit,
+        )
+    }
+    var pastConfirm by remember {
+        mutableStateOf<Pair<String, () -> Unit>?>(null)
+    }
+    val requestPastRegister: (String, () -> Unit) -> Unit = { label, action ->
+        pastConfirm = label to action
+    }
     val sleepPattern = sleepLagPattern(diaryEntries, allTasks, todayDate)
     val diaryPrompt = DIARY_PROMPTS[
         promptIndexFor(selectedDate) % DIARY_PROMPTS.size
@@ -327,6 +358,7 @@ fun HomeScreen(
             item {
                 WeekPills(
                     fractions = fractions,
+                    missedDays = missedDays,
                     todayDate = todayDate,
                     selectedDate = selectedDate,
                     onSelectDate = { selectedDate = it },
@@ -425,6 +457,7 @@ fun HomeScreen(
                                         deps = deps,
                                         scope = scope,
                                         onOpenTimer = { timerTarget = flowItem.status },
+                                        onRegisterPast = requestPastRegister,
                                     )
                                     is FlowItem.TaskFlowItem -> TaskSessionRow(
                                         task = flowItem.task,
@@ -444,6 +477,7 @@ fun HomeScreen(
                                         },
                                         deps = deps,
                                         scope = scope,
+                                        onRegisterPast = requestPastRegister,
                                     )
                                 }
                             }
@@ -483,6 +517,45 @@ fun HomeScreen(
                 status = target,
                 deps = deps,
                 onDismiss = { timerTarget = null },
+            )
+        }
+
+        // Confirmação do registro retroativo (2026-11-07): marcar
+        // feito num dia passado que estava pendente pede um gesto
+        // consciente — sem travar a correção de ontem.
+        pastConfirm?.let { (label, action) ->
+            AlertDialog(
+                onDismissRequest = { pastConfirm = null },
+                title = { Text("Registrar como feito?") },
+                text = {
+                    val whenText = if (
+                        selectedDate == todayDate.minus(DatePeriod(days = 1))
+                    ) {
+                        "ontem"
+                    } else {
+                        "em " + app.constancia.domain.dueDateLabel(
+                            selectedDate, todayDate,
+                        ).lowercase()
+                    }
+                    Text(
+                        "“" + label + "” ficou sem concluir " + whenText +
+                            ". Marcar como feito naquele dia?",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pastConfirm = null
+                            action()
+                        },
+                        modifier = Modifier.testTag("past_confirm_btn"),
+                    ) { Text("Registrar") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pastConfirm = null }) {
+                        Text("Cancelar")
+                    }
+                },
             )
         }
     }
@@ -1007,6 +1080,7 @@ private fun HeroStat(
 @Composable
 private fun WeekPills(
     fractions: List<Double>,
+    missedDays: Set<LocalDate>,
     todayDate: LocalDate,
     selectedDate: LocalDate,
     onSelectDate: (LocalDate) -> Unit,
@@ -1053,6 +1127,7 @@ private fun WeekPills(
                         },
                     )
                     .clickable { onSelectDate(dayDate) }
+                    .testTag("week_pill_" + dayDate.toString())
                     .padding(top = 9.dp, bottom = 8.dp),
             ) {
                 Text(
@@ -1072,6 +1147,13 @@ private fun WeekPills(
                     text = dayDate.dayOfMonth.toString(),
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = FontWeight.ExtraBold,
+                        // Dia passado com pendência não concluída:
+                        // o número riscado (pedido do Renner).
+                        textDecoration = if (dayDate in missedDays) {
+                            TextDecoration.LineThrough
+                        } else {
+                            null
+                        },
                     ),
                     color = if (isSelected) Color.White else scheme.onSurface,
                 )
@@ -1290,6 +1372,7 @@ private fun HabitSessionRow(
     deps: AppDeps,
     scope: CoroutineScope,
     onOpenTimer: () -> Unit,
+    onRegisterPast: (String, () -> Unit) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
@@ -1424,24 +1507,31 @@ private fun HabitSessionRow(
             CheckCircleButton(
                 done = status.isDoneToday,
                 onToggle = {
-                    scope.launch {
-                        if (isQuantity) {
-                            // Quantidade (mesma regra da aba Hábitos,
-                            // M1): o círculo completa a meta ou limpa o
-                            // registro. O toggle binário apagava o
-                            // progresso parcial e, sem registro, criava
-                            // um check-in de 1.0 sem sentido — o "buga"
-                            // relatado pelo Renner em 2026-11-01.
-                            if (status.isDoneToday) {
-                                deps.checkins.remove(habit.id, dateYmd)
+                    val act: () -> Unit = {
+                        scope.launch {
+                            if (isQuantity) {
+                                // Quantidade (mesma regra da aba
+                                // Hábitos, M1): o círculo completa a
+                                // meta ou limpa o registro.
+                                if (status.isDoneToday) {
+                                    deps.checkins.remove(habit.id, dateYmd)
+                                } else {
+                                    deps.checkins.setQuantity(
+                                        habit.id, dateYmd,
+                                        habit.targetQuantity,
+                                    )
+                                }
                             } else {
-                                deps.checkins.setQuantity(
-                                    habit.id, dateYmd, habit.targetQuantity,
-                                )
+                                deps.checkins.toggle(habit.id, dateYmd)
                             }
-                        } else {
-                            deps.checkins.toggle(habit.id, dateYmd)
                         }
+                    }
+                    // Marcar feito em dia PASSADO pede confirmação
+                    // (2026-11-07); desmarcar é correção livre.
+                    if (!status.isDoneToday && dateYmd < todayStr) {
+                        onRegisterPast(habit.name, act)
+                    } else {
+                        act()
                     }
                 },
                 enabled = !readOnly,
@@ -1459,16 +1549,25 @@ private fun HabitSessionRow(
                         scope.launch { deps.checkins.setQuantity(habit.id, dateYmd, next) }
                     },
                     onIncrease = {
-                        scope.launch {
-                            deps.checkins.setQuantity(
-                                habit.id,
-                                dateYmd,
-                                // Teto na meta (a aba Hábitos já tinha;
-                                // a Hoje não — um passo de 250 numa
-                                // meta de 8 virava "250/8" e subindo).
-                                (currentQty + habit.quantityStep)
-                                    .coerceAtMost(habit.targetQuantity),
-                            )
+                        // Teto na meta (a aba Hábitos já tinha; a Hoje
+                        // não — um passo de 250 numa meta de 8 virava
+                        // "250/8" e subindo).
+                        val next = (currentQty + habit.quantityStep)
+                            .coerceAtMost(habit.targetQuantity)
+                        val act: () -> Unit = {
+                            scope.launch {
+                                deps.checkins.setQuantity(habit.id, dateYmd, next)
+                            }
+                        }
+                        // O toque que COMPLETA a meta em dia passado
+                        // também passa pela confirmação (2026-11-07).
+                        if (dateYmd < todayStr &&
+                            currentQty < habit.targetQuantity &&
+                            next >= habit.targetQuantity
+                        ) {
+                            onRegisterPast(habit.name, act)
+                        } else {
+                            act()
                         }
                     },
                 )
@@ -1622,6 +1721,7 @@ private fun TaskSessionRow(
     onToggleExpand: () -> Unit,
     deps: AppDeps,
     scope: CoroutineScope,
+    onRegisterPast: (String, () -> Unit) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
     val extra = MaterialTheme.constanciaExtra
@@ -1674,40 +1774,46 @@ private fun TaskSessionRow(
                     },
                 )
                 Spacer(Modifier.height(2.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isOverdue) {
-                        Text(
-                            text = listOfNotNull(
-                                "Atrasada",
-                                dueLabel(task, today)?.lowercase()
-                                    ?.takeIf { it.isNotBlank() },
-                            ).joinToString(" · "),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                            ),
-                            color = extra.red,
-                        )
-                        Text(
-                            text = " · " + task.project.label +
-                                if (task.priority == 1) " · P1" else "",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 12.sp,
-                            ),
-                            color = scheme.onSurfaceVariant,
-                        )
-                    } else {
-                        Text(
-                            text = task.project.label +
-                                (if (task.priority == 1) " · P1" else "") +
-                                (habitName?.let { " · hábito $it" } ?: ""),
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontSize = 12.sp,
-                            ),
-                            color = scheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                // Texto ÚNICO com o trecho de atraso embutido: eram
+                // dois Texts lado a lado e o segundo (" · Saúde")
+                // ficava sem largura e quebrava letra por letra no
+                // aparelho (print do Renner, 2026-11-07).
+                Text(
+                    text = buildAnnotatedString {
+                        if (isOverdue) {
+                            withStyle(
+                                SpanStyle(
+                                    color = extra.red,
+                                    fontWeight = FontWeight.ExtraBold,
+                                ),
+                            ) {
+                                append(
+                                    listOfNotNull(
+                                        "Atrasada",
+                                        dueLabel(task, today)?.lowercase()
+                                            ?.takeIf { it.isNotBlank() },
+                                    ).joinToString(" · "),
+                                )
+                            }
+                            append(
+                                " · " + task.project.label +
+                                    if (task.priority == 1) " · P1" else "",
+                            )
+                        } else {
+                            append(
+                                task.project.label +
+                                    (if (task.priority == 1) " · P1" else "") +
+                                    (habitName?.let { " · hábito $it" } ?: ""),
+                            )
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 12.sp,
+                    ),
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             if (task.dueTime != null) {
                 TimeChip(task.dueTime!!)
@@ -1715,7 +1821,16 @@ private fun TaskSessionRow(
             CheckCircleButton(
                 done = task.done,
                 onToggle = {
-                    scope.launch { deps.tasks.setDone(task.id, !task.done) }
+                    val act: () -> Unit = {
+                        scope.launch { deps.tasks.setDone(task.id, !task.done) }
+                    }
+                    // Concluir num dia passado pede confirmação
+                    // (2026-11-07); desmarcar é correção livre.
+                    if (!task.done && today < realToday) {
+                        onRegisterPast(task.title, act)
+                    } else {
+                        act()
+                    }
                 },
                 tag = "task_check",
             )
