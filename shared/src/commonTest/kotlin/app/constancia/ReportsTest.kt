@@ -92,6 +92,40 @@ class ReportsTest {
     }
 
     @Test
+    fun computeReport_missedDatesListsPastPendingDays() {
+        val h = habit()
+        // Dias 12..18 (hoje = 18): feitos 12, 13, 14, 16, 18.
+        // Perdas = 15 e 17 (hoje nunca conta como perda).
+        val checkins = listOf("2026-10-12", "2026-10-13", "2026-10-14", "2026-10-16", "2026-10-18")
+            .map { checkin("h1", it) }
+        val data = computeReport(listOf(h), checkins, emptyList(), ReportPeriod.SEMANA, TZ, todayOverride = "2026-10-18".toLocalDate())
+        assertEquals(
+            listOf("2026-10-15".toLocalDate(), "2026-10-17".toLocalDate()),
+            data.habits[0].missedDates,
+        )
+        assertTrue(data.habits[0].missedWeeks.isEmpty())
+    }
+
+    @Test
+    fun computeReport_missedWeeksForWeeklyHabit() {
+        val h = habit(frequencyType = FrequencyType.WEEKLY_X, weeklyTarget = 3)
+        // Mês até 18/10: semana de 28/09 com só 1 check-in (perdida);
+        // semana de 05/10 com 3 (batida); semana atual não conta.
+        val checkins = listOf(
+            checkin("h1", "2026-10-01"),
+            checkin("h1", "2026-10-05"),
+            checkin("h1", "2026-10-07"),
+            checkin("h1", "2026-10-09"),
+        )
+        val data = computeReport(listOf(h), checkins, emptyList(), ReportPeriod.MES, TZ, todayOverride = "2026-10-18".toLocalDate())
+        assertEquals(
+            listOf("2026-09-28".toLocalDate()),
+            data.habits[0].missedWeeks,
+        )
+        assertTrue(data.habits[0].missedDates.isEmpty())
+    }
+
+    @Test
     fun computeReport_pausedHabitExcludedFromDue() {
         val h = habit(paused = true)
         val data = computeReport(listOf(h), emptyList(), emptyList(), ReportPeriod.SEMANA, TZ, todayOverride = "2026-10-18".toLocalDate())
