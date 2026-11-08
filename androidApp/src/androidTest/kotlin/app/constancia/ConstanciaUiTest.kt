@@ -1524,6 +1524,77 @@ class ConstanciaUiTest {
         device.pressBack()
         composeRule.waitForIdle()
     }
+
+    @Test
+    fun roteiro37_registroEmDiaPassadoPedeConfirmacao() {
+        // Pacote "dias passados" (2026-11-07, relato do Renner com
+        // print): marcar feito num dia passado que estava pendente
+        // NÃO é mais silencioso — pede confirmação; e os Relatórios
+        // ganham a seção do que ficou sem fazer. A semente (tarefa
+        // vencida ontem) entra pelo repositório: a captura rápida não
+        // cria no passado, é um dado que já existia no aparelho.
+        val yesterday = java.time.LocalDate.now().minusDays(1).toString()
+        runBlocking {
+            deps.tasks.add(
+                app.constancia.model.NewTask(
+                    title = "Revisar planilha",
+                    dueDate = yesterday,
+                ),
+            )
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Revisar planilha")
+        }
+        // Abre o dia de ontem pela pílula da semana.
+        composeRule.onNodeWithTag("week_pill_$yesterday").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Revisar planilha")
+        }
+        shot("58_dia_passado_pendente")
+        // O check NÃO marca direto: a confirmação aparece.
+        composeRule.onNodeWithTag("task_check").performScrollTo()
+            .performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Registrar como feito?")
+        }
+        shot("59_confirmacao_registro_passado")
+        // Cancelar mantém a tarefa pendente naquele dia.
+        composeRule.onNodeWithText("Cancelar").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            !nodesWith("Registrar como feito?")
+        }
+        org.junit.Assert.assertTrue(nodesWith("Revisar planilha"))
+        // Confirmar marca de verdade — a tarefa aparece nas Feitas.
+        composeRule.onNodeWithTag("task_check").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Registrar como feito?")
+        }
+        composeRule.onNodeWithTag("past_confirm_btn").performClick()
+        composeRule.onNodeWithTag("tab_TAREFAS").performClick()
+        composeRule.onNodeWithTag("view_chips_row")
+            .performTouchInput { swipeLeft() }
+        composeRule.onNodeWithTag("view_chip_FEITAS").performClick()
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("Revisar planilha")
+        }
+        // Relatórios: a seção nova registra a conclusão com atraso.
+        composeRule.onNodeWithTag("tab_MAIS").performClick()
+        openMaisItem("mais_progresso")
+        var tries = 0
+        while (!nodesWith("O que ficou sem fazer") && tries < 12) {
+            swipeList("reports_list")
+            tries++
+        }
+        composeRule.waitUntil(timeoutMillis = 8000) {
+            nodesWith("O que ficou sem fazer")
+        }
+        org.junit.Assert.assertTrue(
+            composeRule.onAllNodesWithText("concluída com atraso", substring = true)
+                .fetchSemanticsNodes().isNotEmpty(),
+        )
+        shot("60_relatorio_dias_nao_feitos")
+        composeRule.waitForIdle()
+    }
 }
 
 /**
