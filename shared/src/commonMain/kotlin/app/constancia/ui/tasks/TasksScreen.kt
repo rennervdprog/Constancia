@@ -1003,14 +1003,6 @@ fun TasksScreen(
                         }
                     }
                 }
-                item {
-                    Text(
-                        text = "Histórico completo de 90 dias no Constância Pro.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 2.dp, top = 12.dp),
-                    )
-                }
             }
         }
     }
