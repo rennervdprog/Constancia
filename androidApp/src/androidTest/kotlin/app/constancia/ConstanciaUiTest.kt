@@ -1404,32 +1404,50 @@ class ConstanciaUiTest {
         ) as android.app.NotificationManager
         nm.cancelAll()
         composeRule.onNodeWithTag("tab_MAIS").performClick()
-        // A lista da Mais não compõe itens fora da tela com o gesto
-        // do Compose — a caça é com gestos REAIS do aparelho, como no
-        // openMaisItem (lição dos roteiros da Mais).
-        var tries = 0
-        while (!nodesWithTag("notif_status_card") && tries < 14) {
-            device.swipe(160, 470, 160, 300, 12)
-            composeRule.waitForIdle()
-            tries++
-        }
-        composeRule.waitUntil(timeoutMillis = 8000) {
-            nodesWithTag("notif_status_card")
-        }
         // Emulador API 30: notificações liberadas por padrão — o
         // cartão tem que dizer "Ativadas" e oferecer o teste.
         composeRule.waitUntil(timeoutMillis = 8000) {
             composeRule.onAllNodesWithText("Ativadas", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        // Levanta o cartão para a zona segura antes do toque: ele
-        // mora no fim da lista da Mais e o botão pode nascer sob a
-        // barra flutuante, que engole o clique (armadilha conhecida).
-        device.swipe(160, 470, 160, 380, 12)
-        composeRule.waitForIdle()
+        // CAUSA RAIZ das falhas repetidas (provada pelo print 56a de
+        // 2026-11-08): a caça por semântica "encontra" o cartão
+        // COMPOSTO fora da tela e o performClick cai fora da viewport
+        // — o botão nunca é tocado e nada é postado. O toque certo é
+        // o do openMaisItem: gestos reais até o centro do BOTÃO ficar
+        // na zona segura (150..490) e clique por coordenadas.
+        fun tapTestButton(): Boolean {
+            var rounds = 0
+            while (rounds < 16) {
+                composeRule.waitForIdle()
+                val node = runCatching {
+                    composeRule.onNodeWithTag("notif_test_btn")
+                        .fetchSemanticsNode()
+                }.getOrNull()
+                if (node != null) {
+                    val b = node.boundsInRoot
+                    when {
+                        b.center.y in 150f..490f -> {
+                            device.click(
+                                b.center.x.toInt(), b.center.y.toInt(),
+                            )
+                            composeRule.waitForIdle()
+                            return true
+                        }
+                        b.center.y > 490f ->
+                            device.swipe(160, 470, 160, 300, 12)
+                        else ->
+                            device.swipe(160, 300, 160, 470, 12)
+                    }
+                } else {
+                    device.swipe(160, 470, 160, 300, 12)
+                }
+                rounds++
+            }
+            return false
+        }
+        org.junit.Assert.assertTrue(tapTestButton())
         shot("56a_cartao_notificacoes")
-        composeRule.onNodeWithTag("notif_test_btn").performClick()
-        composeRule.waitForIdle()
         var found = false
         var attempt = 0
         while (!found && attempt < 2) {
@@ -1445,11 +1463,9 @@ class ConstanciaUiTest {
                 }
             }
             if (!found) {
-                // Um toque pode ter sido engolido: volta e tenta de novo.
                 device.pressBack()
                 composeRule.waitForIdle()
-                composeRule.onNodeWithTag("notif_test_btn").performClick()
-                composeRule.waitForIdle()
+                tapTestButton()
                 attempt++
             }
         }
