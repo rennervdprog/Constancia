@@ -7,6 +7,7 @@ import app.constancia.domain.isDueOn
 import app.constancia.domain.rateOf
 import app.constancia.domain.satisfiedDates
 import app.constancia.model.Checkin
+import app.constancia.model.CheckinStatus
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
 import app.constancia.model.Habit
@@ -77,6 +78,28 @@ class ReportsTest {
         assertEquals(5.0 / 7.0, data.completionRate, 0.0001)
         assertEquals(5, data.perfectDays)
         assertEquals(5, data.totalCheckins)
+    }
+
+    @Test
+    fun computeReport_skippedDayDoesNotCountAsCheckin() {
+        val h = habit()
+        // Dias 12..18 (hoje = 18). DONE em 12; SKIPPED em 13.
+        val checkins = listOf(
+            checkin("h1", "2026-10-12"),
+            Checkin(
+                id = "h1-2026-10-13",
+                habitId = "h1",
+                date = "2026-10-13",
+                quantity = 0.0,
+                status = CheckinStatus.SKIPPED,
+            ),
+        )
+        val data = computeReport(listOf(h), checkins, emptyList(), ReportPeriod.SEMANA, TZ, todayOverride = "2026-10-18".toLocalDate())
+        // B3: total, dias ativos e o ponto do dia contam só conclusões.
+        assertEquals(1, data.totalCheckins)
+        assertEquals(1, data.activeDays)
+        val point13 = data.days.first { it.date == "2026-10-13".toLocalDate() }
+        assertEquals(0, point13.checkins)
     }
 
     @Test
