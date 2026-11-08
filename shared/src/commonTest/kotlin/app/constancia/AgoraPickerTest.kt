@@ -10,6 +10,8 @@ import app.constancia.model.Session
 import app.constancia.model.TaskItem
 import app.constancia.ui.home.AgoraTarget
 import app.constancia.ui.home.pickAgoraTarget
+import app.constancia.ui.home.resolveRollover
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -152,6 +154,23 @@ class AgoraPickerTest {
         )
         assertTrue(picked is AgoraTarget.HabitTarget)
         assertEquals("manha", (picked as AgoraTarget.HabitTarget).status.habit.id)
+    }
+
+    // B13: a virada da meia-noite promove o novo dia sem arrastar
+    // uma navegação manual para um dia escolhido.
+    @Test
+    fun rollover_selectionOnOldTodayFollowsToNewDay() {
+        val old = LocalDate(2026, 11, 7)
+        val new = LocalDate(2026, 11, 8)
+        assertEquals(new, resolveRollover(old, old, new))
+    }
+
+    @Test
+    fun rollover_selectionOnAnotherDayStays() {
+        val old = LocalDate(2026, 11, 7)
+        val new = LocalDate(2026, 11, 8)
+        val picked = LocalDate(2026, 11, 5)
+        assertEquals(picked, resolveRollover(picked, old, new))
     }
 
     @Test
