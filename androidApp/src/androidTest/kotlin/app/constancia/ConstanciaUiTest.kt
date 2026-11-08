@@ -1429,32 +1429,36 @@ class ConstanciaUiTest {
         // o do openMaisItem: gestos reais até o centro do BOTÃO ficar
         // na zona segura (150..490) e clique por coordenadas.
         fun tapTestButton(): Boolean {
-            // A geometria manual falhou duas vezes: com o cartão só
-            // COMPOSTO (ainda fora do layout), boundsInRoot vem vazio
-            // e o laço de gestos rolava para o lado errado. Quem sabe
-            // trazer o nó para a tela é o performScrollTo da própria
-            // lista; com o nó visível, o clique por coordenadas no
-            // centro real é determinístico.
-            composeRule.waitForIdle()
-            runCatching {
-                composeRule.onNodeWithTag("notif_test_btn")
-                    .performScrollTo()
-            }
-            composeRule.waitForIdle()
-            val node = runCatching {
-                composeRule.onNodeWithTag("notif_test_btn")
-                    .fetchSemanticsNode()
-            }.getOrNull() ?: return false
-            val b = node.boundsInRoot
-            return if (b.center.y in 100f..600f && b.center.x in 10f..310f) {
-                device.click(b.center.x.toInt(), b.center.y.toInt())
+            // Gestos reais até o centro do botão entrar na zona
+            // visível segura, tratando os três estados do nó: ausente
+            // (não composto), presente sem layout (bounds VAZIO —
+            // centro 0,0, que fazia o laço antigo rolar para o lado
+            // errado) e fora da zona. Sem fallback mentiroso: ou o
+            // clique sai em coordenada visível, ou devolve false.
+            var rounds = 0
+            while (rounds < 24) {
                 composeRule.waitForIdle()
-                true
-            } else {
-                composeRule.onNodeWithTag("notif_test_btn").performClick()
-                composeRule.waitForIdle()
-                true
+                val node = runCatching {
+                    composeRule.onNodeWithTag("notif_test_btn")
+                        .fetchSemanticsNode()
+                }.getOrNull()
+                val b = node?.boundsInRoot
+                when {
+                    b == null || b.height <= 0f || b.center.y > 520f ->
+                        device.swipe(160, 470, 160, 300, 12)
+                    b.center.y < 120f ->
+                        device.swipe(160, 300, 160, 470, 12)
+                    else -> {
+                        device.click(
+                            b.center.x.toInt(), b.center.y.toInt(),
+                        )
+                        composeRule.waitForIdle()
+                        return true
+                    }
+                }
+                rounds++
             }
+            return false
         }
         org.junit.Assert.assertTrue(tapTestButton())
         shot("56a_cartao_notificacoes")
