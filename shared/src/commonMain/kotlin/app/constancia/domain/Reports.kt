@@ -47,6 +47,11 @@ data class HabitReport(
     val doneDays: Int,
     val checkinCount: Int,
     val totalQuantity: Double,
+    // Relatório de perdas (2026-11-07): dias devidos passados não
+    // feitos (fora pulos, pausas e descanso) e, para meta semanal,
+    // as semanas fechadas sem bater a meta (início da semana).
+    val missedDates: List<LocalDate> = emptyList(),
+    val missedWeeks: List<LocalDate> = emptyList(),
 ) {
     val rate: Double get() = if (dueDays > 0) doneDays.toDouble() / dueDays else 0.0
 }
@@ -189,6 +194,33 @@ fun computeReport(
             }
         }
         val hcis = checkinsByHabit[h.id].orEmpty()
+        // Perdas do período: só dia PASSADO devido conta; pulo, pausa
+        // (perdoados) e dia de descanso (não devido) ficam fora.
+        val skipped = skippedDatesFor(hcis)
+        val forgiven = forgivenByHabit[h.id].orEmpty()
+        val missedDates = mutableListOf<LocalDate>()
+        val missedWeeks = mutableListOf<LocalDate>()
+        if (h.frequencyType == FrequencyType.WEEKLY_X) {
+            val rawDone = doneDatesFor(h, donePairs(hcis))
+            dayList.filter { dueOn(h, it) }
+                .groupBy { weekStartOf(it) }
+                .forEach { (ws, days) ->
+                    val weekDone = days.count { rawDone.contains(it.toYmd()) }
+                    if (ws < weekStartOf(today) && weekDone < h.weeklyTarget) {
+                        missedWeeks += ws
+                    }
+                }
+        } else {
+            dayList.forEach { d ->
+                if (d < today && dueOn(h, d) &&
+                    !doneDates.contains(d.toYmd()) &&
+                    !skipped.contains(d.toYmd()) &&
+                    !forgiven.contains(d.toYmd())
+                ) {
+                    missedDates += d
+                }
+            }
+        }
         HabitReport(
             habit = h,
             streak = currentStreak(h, doneDates, today.toYmd(), timeZone, forgivenByHabit[h.id].orEmpty(), h.ignoreWeekdays),
@@ -196,6 +228,8 @@ fun computeReport(
             doneDays = done,
             checkinCount = hcis.size,
             totalQuantity = hcis.sumOf { it.quantity },
+            missedDates = missedDates,
+            missedWeeks = missedWeeks,
         )
     }.sortedByDescending { it.rate }
 
