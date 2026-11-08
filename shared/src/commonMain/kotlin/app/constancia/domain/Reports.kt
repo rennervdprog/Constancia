@@ -180,7 +180,12 @@ fun computeReport(
         val dueHabits = habits.filter { dueOn(it, d) }
         val doneCount =
             dueHabits.count { doneDatesByHabit[it.id].orEmpty().contains(ymd) }
-        DayPoint(d, dueHabits.size, doneCount, checkinsByDate[ymd].orEmpty().size)
+        // B3: o contador de check-ins do dia é de conclusões — dia só
+        // de pulo não é dia ativo nem check-in (o resto do sistema
+        // trata SKIPPED à parte).
+        val doneCheckins = checkinsByDate[ymd].orEmpty()
+            .count { it.status == CheckinStatus.DONE }
+        DayPoint(d, dueHabits.size, doneCount, doneCheckins)
     }
 
     val habitReports = habits.map { h ->
@@ -296,7 +301,7 @@ fun computeReport(
         to = today,
         days = points,
         completionRate = rateOf(points),
-        totalCheckins = checkins.size,
+        totalCheckins = checkins.count { it.status == CheckinStatus.DONE },
         perfectDays = perfectDays,
         activeDays = points.count { it.checkins > 0 },
         maxStreak = habitReports.maxOfOrNull { it.streak } ?: 0,
