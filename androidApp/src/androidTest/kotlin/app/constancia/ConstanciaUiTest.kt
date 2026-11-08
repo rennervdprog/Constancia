@@ -1551,9 +1551,13 @@ class ConstanciaUiTest {
             nodesWith("Revisar planilha")
         }
         shot("58_dia_passado_pendente")
+        // Sobe a lista para o cartão da sessão sair de trás da barra
+        // flutuante (o clique sob o overlay não atravessa).
+        device.swipe(160, 470, 160, 300, 12)
+        device.swipe(160, 470, 160, 300, 12)
+        composeRule.waitForIdle()
         // O check NÃO marca direto: a confirmação aparece.
-        composeRule.onNodeWithTag("task_check").performScrollTo()
-            .performClick()
+        composeRule.onNodeWithTag("task_check").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Registrar como feito?")
         }
