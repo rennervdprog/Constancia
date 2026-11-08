@@ -51,6 +51,7 @@ import app.constancia.theme.ConstanciaTheme
 import app.constancia.theme.constanciaExtra
 import app.constancia.ui.CreateSheet
 import app.constancia.ui.challenges.ChallengesScreen
+import app.constancia.ui.common.SystemBarsAppearance
 import app.constancia.ui.diary.DiaryScreen
 import app.constancia.ui.habits.HabitsScreen
 import app.constancia.ui.home.HomeScreen
@@ -126,6 +127,10 @@ fun AppContent(deps: AppDeps) {
     }
 
     ConstanciaTheme(darkTheme = darkTheme) {
+        // Ícones das barras do sistema seguem o tema do APP (a faixa
+        // atrás deles é a cor de fundo): tema claro = ícones escuros;
+        // no onboarding (fundo roxo escuro em tela cheia), claros.
+        SystemBarsAppearance(darkIcons = !darkTheme && !showOnboarding)
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -151,6 +156,8 @@ fun AppContent(deps: AppDeps) {
                     onOpenReports = {
                         navigator.openMaisSection(MaisSection.PROGRESSO)
                     },
+                    isPro = isPro,
+                    onOpenPaywall = { navigator.showPaywall = true },
                 )
                 AppTab.TAREFAS -> TasksScreen(
                     deps,
