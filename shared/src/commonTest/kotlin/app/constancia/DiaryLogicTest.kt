@@ -10,7 +10,10 @@ import app.constancia.domain.completionRateLast30
 import app.constancia.domain.promptFor
 import app.constancia.domain.promptIndexFor
 import app.constancia.domain.weekFractions
+import app.constancia.domain.weekMissedDays
 import app.constancia.model.Checkin
+import app.constancia.model.CheckinStatus
+import app.constancia.model.TaskItem
 import app.constancia.model.DiaryEntry
 import app.constancia.model.FrequencyType
 import app.constancia.model.GoalType
@@ -131,6 +134,52 @@ class DiaryLogicTest {
         assertEquals(0.0, fractions[2]) // hoje pendente
         assertEquals(-1.0, fractions[3]) // futuro
         assertEquals(-1.0, fractions[6])
+    }
+
+    @Test
+    fun weekMissedDaysFlagsOnlyPastPendingDays() {
+        val h = habit()
+        // Seg 19 feita; ter 20 pendente; hoje (21) pendente NÃO entra.
+        val checkins = listOf(checkin("h1", "2026-10-19"))
+        val missed = weekMissedDays(listOf(h), checkins, emptyList(), today)
+        assertEquals(setOf(LocalDate(2026, 10, 20)), missed)
+    }
+
+    @Test
+    fun weekMissedDaysForgivesSkipAndPause() {
+        val h = habit()
+        val skipped = Checkin(
+            id = "c-skip", habitId = "h1", date = "2026-10-19",
+            quantity = 0.0, status = CheckinStatus.SKIPPED,
+        )
+        // Seg pulada (perdoada); ter perdoada por pausa informada.
+        val missed = weekMissedDays(
+            listOf(h), listOf(skipped), emptyList(), today,
+            forgivenByHabit = mapOf("h1" to setOf("2026-10-20")),
+        )
+        assertTrue(missed.isEmpty())
+    }
+
+    @Test
+    fun weekMissedDaysCountsOpenTaskAndIgnoresWeeklyHabit() {
+        val weekly = habit(id = "h2").copy(
+            frequencyType = FrequencyType.WEEKLY_X, weeklyTarget = 3,
+        )
+        val task = TaskItem(
+            id = "t1", title = "Ligar para o banco", dueTime = null,
+            done = false, date = "2026-10-20", dueDate = "2026-10-20",
+        )
+        // Hábito semanal sem nenhum check-in: a semana ainda corre,
+        // nada de traço. A tarefa aberta de terça marca o dia.
+        val missed = weekMissedDays(
+            listOf(weekly), emptyList(), listOf(task), today,
+        )
+        assertEquals(setOf(LocalDate(2026, 10, 20)), missed)
+        val doneTask = task.copy(done = true)
+        assertTrue(
+            weekMissedDays(listOf(weekly), emptyList(), listOf(doneTask), today)
+                .isEmpty(),
+        )
     }
 
     @Test
