@@ -220,6 +220,22 @@ fun ReportsScreen(
     val summary = remember(reportTasks, diaryEntries, data, prevData) {
         periodSummary(reportTasks, diaryEntries, data, prevData)
     }
+    // Relatório de perdas (2026-11-07): tarefas atrasadas AGORA e
+    // concluídas com atraso DENTRO do período (data da conclusão
+    // depois do prazo; mesma leitura take(10) do Raio-X).
+    val overdueNow = remember(reportTasks, toYmd) {
+        reportTasks.count {
+            !it.done && it.dueDate != null && it.dueDate < toYmd
+        }
+    }
+    val completedLate = remember(reportTasks, data) {
+        val fromYmd = data.from.toString()
+        reportTasks.count { t ->
+            val doneDay = t.completedAt?.take(10)
+            t.done && t.dueDate != null && doneDay != null &&
+                doneDay > t.dueDate && doneDay >= fromYmd
+        }
+    }
     val review = remember(reportTasks, data, prevData) {
         periodReview(reportTasks, data, prevData)
     }
@@ -301,6 +317,14 @@ fun ReportsScreen(
             HeatmapSection(data)
             Spacer(Modifier.height(12.dp))
             WeekdayPatternSection(data)
+            Spacer(Modifier.height(12.dp))
+
+            ReportGroupHeader("Dias não feitos")
+            MissedDaysSection(
+                habits = data.habits,
+                overdueNow = overdueNow,
+                completedLate = completedLate,
+            )
 
             ReportGroupHeader("Diário")
             MoodSection(data)
@@ -823,6 +847,133 @@ private fun HabitPerformanceSection(habits: List<HabitReport>) {
                     )
                 }
                 HabitRow(hr)
+            }
+        }
+    }
+}
+
+/** "3, 5 e 12 de nov" / "28 de out e 3 de nov" — dias agrupados por mês. */
+private fun missedDatesLabel(dates: List<LocalDate>): String {
+    val shown = dates.take(8)
+    val parts = shown.groupBy { it.monthNumber }.entries.map { (month, ds) ->
+        ds.joinToString(", ") { it.dayOfMonth.toString() } +
+            " de " + app.constancia.domain.MONTHS[month - 1]
+    }
+    val joined = parts.joinToString(" · ")
+    return if (dates.size > shown.size) {
+        joined + " · +" + (dates.size - shown.size)
+    } else {
+        joined
+    }
+}
+
+@Composable
+private fun MissedDaysSection(
+    habits: List<HabitReport>,
+    overdueNow: Int,
+    completedLate: Int,
+) {
+    val extra = MaterialTheme.constanciaExtra
+    val withLoss = habits.filter {
+        it.missedDates.isNotEmpty() || it.missedWeeks.isNotEmpty()
+    }
+    CardBox(Modifier.fillMaxWidth()) {
+        CardTitle(
+            "O que ficou sem fazer",
+            "Pulos, pausas e dias de descanso não contam como perda",
+        )
+        Spacer(Modifier.height(6.dp))
+        if (withLoss.isEmpty() && overdueNow == 0 && completedLate == 0) {
+            Text(
+                "Nenhum dia devido ficou sem fazer no período — constância em dia.",
+                fontSize = 13.sp,
+                color = extra.ink3,
+            )
+        } else {
+            withLoss.forEachIndexed { i, hr ->
+                if (i > 0) {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(extra.pageLine),
+                    )
+                }
+                Column(Modifier.padding(vertical = 10.dp)) {
+                    Text(
+                        hr.habit.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    if (hr.missedDates.isNotEmpty()) {
+                        Text(
+                            hr.missedDates.size.toString() +
+                                (if (hr.missedDates.size == 1) {
+                                    " dia não feito: "
+                                } else {
+                                    " dias não feitos: "
+                                }) + missedDatesLabel(hr.missedDates),
+                            fontSize = 13.sp,
+                            color = extra.ink3,
+                        )
+                    }
+                    if (hr.missedWeeks.isNotEmpty()) {
+                        Text(
+                            hr.missedWeeks.size.toString() +
+                                (if (hr.missedWeeks.size == 1) {
+                                    " semana sem bater a meta (semana de "
+                                } else {
+                                    " semanas sem bater a meta (semanas de "
+                                }) + hr.missedWeeks.joinToString(", ") {
+                                    it.dayOfMonth.toString() + " de " +
+                                        app.constancia.domain.MONTHS[it.monthNumber - 1]
+                                } + ")",
+                            fontSize = 13.sp,
+                            color = extra.ink3,
+                        )
+                    }
+                }
+            }
+            if (overdueNow > 0 || completedLate > 0) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(extra.pageLine),
+                )
+                Column(Modifier.padding(vertical = 10.dp)) {
+                    Text(
+                        "Tarefas",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    if (overdueNow > 0) {
+                        Text(
+                            "$overdueNow " +
+                                (if (overdueNow == 1) {
+                                    "tarefa atrasada agora"
+                                } else {
+                                    "tarefas atrasadas agora"
+                                }) + " — reagende ou conclua pela aba Tarefas.",
+                            fontSize = 13.sp,
+                            color = extra.ink3,
+                        )
+                    }
+                    if (completedLate > 0) {
+                        Text(
+                            "$completedLate " +
+                                (if (completedLate == 1) {
+                                    "tarefa foi concluída com atraso"
+                                } else {
+                                    "tarefas foram concluídas com atraso"
+                                }) + " no período.",
+                            fontSize = 13.sp,
+                            color = extra.ink3,
+                        )
+                    }
+                }
             }
         }
     }
