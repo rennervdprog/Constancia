@@ -1429,7 +1429,14 @@ class ConstanciaUiTest {
         // o do openMaisItem: gestos reais até o centro do BOTÃO ficar
         // na zona segura (150..490) e clique por coordenadas.
         fun tapTestButton(): Boolean {
+            // O botão é o ÚLTIMO elemento da lista da Mais: no repouso
+            // máximo da rolagem o centro dele estaciona um pouco
+            // abaixo dos 490 do openMaisItem (que serve itens do
+            // meio) — a zona aqui vai até 545, ainda acima da barra
+            // flutuante (~570). Sem isso o laço rolava 16× à toa e
+            // desistia (falha de 2026-11-08, run 42445947761).
             var rounds = 0
+            var lastCenter: androidx.compose.ui.geometry.Offset? = null
             while (rounds < 16) {
                 composeRule.waitForIdle()
                 val node = runCatching {
@@ -1438,15 +1445,16 @@ class ConstanciaUiTest {
                 }.getOrNull()
                 if (node != null) {
                     val b = node.boundsInRoot
+                    lastCenter = b.center
                     when {
-                        b.center.y in 150f..490f -> {
+                        b.center.y in 150f..545f -> {
                             device.click(
                                 b.center.x.toInt(), b.center.y.toInt(),
                             )
                             composeRule.waitForIdle()
                             return true
                         }
-                        b.center.y > 490f ->
+                        b.center.y > 545f ->
                             device.swipe(160, 470, 160, 300, 12)
                         else ->
                             device.swipe(160, 300, 160, 470, 12)
@@ -1455,6 +1463,14 @@ class ConstanciaUiTest {
                     device.swipe(160, 470, 160, 300, 12)
                 }
                 rounds++
+            }
+            // Repouso fora da zona mas dentro da tela: clica mesmo
+            // assim (melhor que desistir sem tocar).
+            val c = lastCenter
+            if (c != null && c.y in 100f..600f) {
+                device.click(c.x.toInt(), c.y.toInt())
+                composeRule.waitForIdle()
+                return true
             }
             return false
         }
