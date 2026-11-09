@@ -11,6 +11,7 @@ import android.content.Intent
 import android.os.Build
 import app.cash.sqldelight.driver.android.AndroidSqliteDriver
 import app.constancia.data.local.PrefsRepositoryImpl
+import app.constancia.shared.R
 import app.constancia.db.ConstanciaDb
 import app.constancia.domain.asTaskItem
 import app.constancia.domain.dailyReviewSummary
@@ -114,10 +115,12 @@ actual class NotificationScheduler {
 
     actual fun notifyMissedReminders(count: Int) {
         val context = NotificationPlatform.appContext ?: return
+        // A4 (Fase 2): sem vocabulário de perda — o app inteiro fala
+        // "ficou para trás" (é a linguagem da Hoje e dos relatórios).
         val title = if (count == 1) {
-            "Você perdeu 1 lembrete"
+            "1 lembrete ficou para trás"
         } else {
-            "Você perdeu $count lembretes"
+            "$count lembretes ficaram para trás"
         }
         postNotification(
             context, MISSED_SUMMARY_ID, title,
@@ -287,7 +290,8 @@ internal fun postNotification(
         Notification.Builder(context)
     }
     val notification = builder
-        .setSmallIcon(android.R.drawable.ic_popup_reminder)
+        // A3 (Fase 2): a chama da marca no lugar do sino genérico.
+        .setSmallIcon(R.drawable.ic_stat_flame)
         .setContentTitle(title)
         .setContentText(body)
         .setStyle(Notification.BigTextStyle().bigText(body))
