@@ -1610,8 +1610,25 @@ class ConstanciaUiTest {
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Revisar planilha")
         }
-        // Abre o dia de ontem pela pílula da semana.
-        composeRule.onNodeWithTag("week_pill_$yesterday").performClick()
+        // Abre o dia de ontem pela pílula da semana. Este é o
+        // primeiro toque do roteiro e falhou 3× seguidas com "Failed
+        // to inject touch input": o logcat mostra a janela ainda em
+        // transição (animation-leash) no instante do clique. A
+        // injeção que falha NÃO entrega o toque, então repetir com
+        // uma pausa é seguro — e abrir o mesmo dia 2× é inofensivo.
+        var pillClicked = false
+        for (attempt in 1..4) {
+            try {
+                composeRule.onNodeWithTag("week_pill_$yesterday").performClick()
+                pillClicked = true
+                break
+            } catch (e: AssertionError) {
+                if (attempt == 4) throw e
+                Thread.sleep(600)
+                composeRule.waitForIdle()
+            }
+        }
+        org.junit.Assert.assertTrue(pillClicked)
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Revisar planilha")
         }
