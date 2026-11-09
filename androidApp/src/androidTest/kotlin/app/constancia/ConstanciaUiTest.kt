@@ -1690,12 +1690,11 @@ class ConstanciaUiTest {
         }
         composeRule.waitUntil(timeoutMillis = 8000) { nodesWith("AMOSTRA DO PRO") }
         shot("61_padrao_amostra_pro")
-        // O link do cartão abre o paywall (não os relatórios).
+        // O link do cartão abre o paywall (não os relatórios) — o
+        // marcador é o mesmo do roteiro 33: a lista do paywall.
         composeRule.onNodeWithText("Ver no Pro").performClick()
-        composeRule.waitUntil(timeoutMillis = 8000) {
-            composeRule.onAllNodesWithText("Começar 7 dias grátis", substring = true)
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.waitUntil(timeoutMillis = 8000) { nodesWithTag("paywall_list") }
+        org.junit.Assert.assertTrue(nodesWith("Constância Pro"))
         shot("62_amostra_abre_paywall")
         composeRule.onNodeWithContentDescription("Voltar").performClick()
         composeRule.waitForIdle()
