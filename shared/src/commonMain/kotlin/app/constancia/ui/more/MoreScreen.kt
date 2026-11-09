@@ -73,8 +73,10 @@ import app.constancia.domain.buildExportCsv
 import app.constancia.domain.goalForgivenDates
 import app.constancia.domain.parseTimeOrNull
 import app.constancia.notify.NotificationScheduler
+import app.constancia.notify.batteryOptimizationExempt
 import app.constancia.notify.exactAlarmsGranted
 import app.constancia.notify.notificationsGranted
+import app.constancia.notify.openBatteryOptimizationSettings
 import app.constancia.notify.openExactAlarmSettings
 import app.constancia.notify.openNotificationSettings
 import app.constancia.notify.postTestNotification
@@ -510,6 +512,9 @@ fun MoreScreen(
                 val exactGranted = remember(notifTick) {
                     exactAlarmsGranted()
                 }
+                val batteryExempt = remember(notifTick) {
+                    batteryOptimizationExempt()
+                }
                 StackCard(modifier = Modifier.testTag("notif_status_card")) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconTile(
@@ -602,6 +607,51 @@ fun MoreScreen(
                             modifier = Modifier.testTag("notif_exact_btn"),
                         ) {
                             Text("Liberar horário exato")
+                        }
+                    }
+                    // M3 (Fase 2): a terceira perna da saúde — a
+                    // otimização de bateria. Em aparelho real é a
+                    // causa nº 1 de lembrete que não chega (o
+                    // fabricante fecha o app em segundo plano), e o
+                    // cartão não a enxergava.
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Bateria",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                if (batteryExempt) {
+                                    "Sem restrições — o aparelho não " +
+                                        "fecha o Constância em segundo " +
+                                        "plano."
+                                } else {
+                                    "Otimização ativa — o aparelho " +
+                                        "pode fechar o app e atrasar ou " +
+                                        "engolir lembretes."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (batteryExempt) {
+                                    scheme.onSurfaceVariant
+                                } else {
+                                    extra.red
+                                },
+                                fontWeight = if (batteryExempt) {
+                                    null
+                                } else {
+                                    FontWeight.Bold
+                                },
+                            )
+                        }
+                        if (!batteryExempt) {
+                            Spacer(Modifier.size(8.dp))
+                            OutlinedButton(
+                                onClick = { openBatteryOptimizationSettings() },
+                                modifier = Modifier.testTag("notif_battery_btn"),
+                            ) {
+                                Text("Liberar")
+                            }
                         }
                     }
                 }
