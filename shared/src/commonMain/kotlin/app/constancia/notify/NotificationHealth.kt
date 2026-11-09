@@ -20,6 +20,17 @@ expect fun notificationsGranted(): Boolean
  *  Fora do Android, sempre true.) */
 expect fun exactAlarmsGranted(): Boolean
 
+/** A otimização de bateria está deixando os alarmes do app em paz?
+ *  (M3, Fase 2: em aparelho real, o fabricante fechar o app em segundo
+ *  plano é a causa nº 1 de lembrete que não chega — e o estado é
+ *  legível, então o cartão mostra e oferece o atalho.) true = isento
+ *  ("sem restrições"). Fora do Android, sempre true. */
+expect fun batteryOptimizationExempt(): Boolean
+
+/** Abre a tela do sistema para tirar o app da otimização de bateria
+ *  (Android); fora do Android, não faz nada. */
+expect fun openBatteryOptimizationSettings()
+
 /** Abre a tela do sistema onde o usuário ativa as notificações do app. */
 expect fun openNotificationSettings()
 
