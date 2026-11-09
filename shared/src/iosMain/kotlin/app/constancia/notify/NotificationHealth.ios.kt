@@ -17,6 +17,11 @@ actual fun notificationsGranted(): Boolean = true
 
 actual fun exactAlarmsGranted(): Boolean = true
 
+// iOS não tem o conceito de otimização de bateria por app: isento.
+actual fun batteryOptimizationExempt(): Boolean = true
+
+actual fun openBatteryOptimizationSettings() = Unit
+
 actual fun openNotificationSettings() = Unit
 
 actual fun openExactAlarmSettings() = Unit
