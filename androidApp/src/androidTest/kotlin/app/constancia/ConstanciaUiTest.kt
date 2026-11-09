@@ -1423,6 +1423,17 @@ class ConstanciaUiTest {
             composeRule.onAllNodesWithText("Ativadas", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        // Fase 2 (M3): o cartão mostra também a terceira perna — a
+        // bateria. O estado no emulador depende da whitelist (o
+        // roteiro 36 a liga via shell e ela sobrevive entre testes),
+        // então a prova é a linha existir com UM dos dois estados.
+        org.junit.Assert.assertTrue(nodesWith("Bateria"))
+        org.junit.Assert.assertTrue(
+            composeRule.onAllNodesWithText("Otimização ativa", substring = true)
+                .fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithText("Sem restrições", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty(),
+        )
         // CAUSA RAIZ das falhas repetidas (provada pelo print 56a de
         // 2026-11-08): a caça por semântica "encontra" o cartão
         // COMPOSTO fora da tela e o performClick cai fora da viewport
