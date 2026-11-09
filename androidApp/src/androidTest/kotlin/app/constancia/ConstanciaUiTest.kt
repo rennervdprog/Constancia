@@ -1590,6 +1590,14 @@ class ConstanciaUiTest {
         // ganham a seção do que ficou sem fazer. A semente (tarefa
         // vencida ontem) entra pelo repositório: a captura rápida não
         // cria no passado, é um dado que já existia no aparelho.
+        // Com os roteiros 38/39, a ordem de execução da classe
+        // mudou e este roteiro pode rodar logo após um dos roteiros
+        // de notificação, que terminam com a bandeja do sistema
+        // aberta: com a bandeja por cima, o toque na pílula falha na
+        // injeção ("Failed to inject touch input"). Fecha a bandeja
+        // por garantia — o comando é inofensivo se já estiver fechada.
+        runCatching { device.executeShellCommand("cmd statusbar collapse") }
+        composeRule.waitForIdle()
         val yesterday = java.time.LocalDate.now().minusDays(1).toString()
         runBlocking {
             deps.tasks.add(
