@@ -1590,15 +1590,12 @@ class ConstanciaUiTest {
         // ganham a seção do que ficou sem fazer. A semente (tarefa
         // vencida ontem) entra pelo repositório: a captura rápida não
         // cria no passado, é um dado que já existia no aparelho.
-        // Com os roteiros 38/39, a ordem de execução da classe
-        // mudou e este roteiro pode rodar logo após um dos roteiros
-        // de notificação, que terminam com a bandeja do sistema
-        // aberta: com a bandeja por cima, o toque na pílula falha na
-        // injeção ("Failed to inject touch input"). Fecha a bandeja
-        // por garantia — o comando é inofensivo se já estiver fechada.
+        // Fecha a bandeja do sistema por garantia (inofensivo se já
+        // estiver fechada): roteiros de notificação a deixam aberta.
         runCatching { device.executeShellCommand("cmd statusbar collapse") }
         composeRule.waitForIdle()
-        val yesterday = java.time.LocalDate.now().minusDays(1).toString()
+        val todayJ = java.time.LocalDate.now()
+        val yesterday = todayJ.minusDays(1).toString()
         runBlocking {
             deps.tasks.add(
                 app.constancia.model.NewTask(
@@ -1610,25 +1607,35 @@ class ConstanciaUiTest {
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Revisar planilha")
         }
-        // Abre o dia de ontem pela pílula da semana. Este é o
-        // primeiro toque do roteiro e falhou 3× seguidas com "Failed
-        // to inject touch input": o logcat mostra a janela ainda em
-        // transição (animation-leash) no instante do clique. A
-        // injeção que falha NÃO entrega o toque, então repetir com
-        // uma pausa é seguro — e abrir o mesmo dia 2× é inofensivo.
-        var pillClicked = false
-        for (attempt in 1..4) {
-            try {
-                composeRule.onNodeWithTag("week_pill_$yesterday").performClick()
-                pillClicked = true
-                break
-            } catch (e: AssertionError) {
-                if (attempt == 4) throw e
-                Thread.sleep(600)
-                composeRule.waitForIdle()
+        if (todayJ.dayOfWeek == java.time.DayOfWeek.MONDAY) {
+            // Segunda-feira: a faixa da semana começa HOJE (semana
+            // de segunda a domingo) — ontem não tem pílula e o fluxo
+            // do dia passado não é alcançável pela Hoje. Foi assim
+            // que este roteiro quebrou no CI de 2026-11-09: a exceção
+            // real era "nó week_pill_<ontem> não encontrado". O fluxo
+            // completo roda de terça a domingo; na segunda, valida a
+            // outra metade do pacote: a seção de perdas lista a
+            // tarefa vencida e ainda pendente.
+            composeRule.onNodeWithTag("tab_MAIS").performClick()
+            openMaisItem("mais_progresso")
+            var triesM = 0
+            while (!nodesWith("O que ficou sem fazer") && triesM < 12) {
+                swipeList("reports_list")
+                triesM++
             }
+            composeRule.waitUntil(timeoutMillis = 8000) {
+                nodesWith("O que ficou sem fazer")
+            }
+            org.junit.Assert.assertTrue(
+                composeRule.onAllNodesWithText("tarefa atrasada agora", substring = true)
+                    .fetchSemanticsNodes().isNotEmpty(),
+            )
+            shot("60_relatorio_dias_nao_feitos")
+            composeRule.waitForIdle()
+            return
         }
-        org.junit.Assert.assertTrue(pillClicked)
+        // Abre o dia de ontem pela pílula da semana.
+        composeRule.onNodeWithTag("week_pill_$yesterday").performClick()
         composeRule.waitUntil(timeoutMillis = 8000) {
             nodesWith("Revisar planilha")
         }
