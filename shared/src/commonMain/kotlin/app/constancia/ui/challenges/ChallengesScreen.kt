@@ -58,6 +58,7 @@ import app.constancia.model.todayYmd
 import app.constancia.theme.HabitPalette
 import app.constancia.ui.common.argbLongOf
 import app.constancia.ui.common.habitIcon
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.minus
@@ -142,6 +143,23 @@ fun ChallengesScreen(
                         starting = true
                         scope.launch {
                             try {
+                                // B14 (prova do roteiro 39): o
+                                // `starting` cobre o toque durante o
+                                // voo, mas um 2º toque DEPOIS de o 1º
+                                // start terminar (banco local é
+                                // rápido) passava e criava um segundo
+                                // hábito do mesmo pacote. Relê o
+                                // estado fresco: desafio já ativo ou
+                                // já vinculado = toque ignorado.
+                                val fresh = deps.challenges.challengesFlow()
+                                    .first()
+                                    .firstOrNull { it.id == challenge.id }
+                                if (fresh != null &&
+                                    (fresh.status == ChallengeStatus.ACTIVE ||
+                                        fresh.habitId != null)
+                                ) {
+                                    return@launch
+                                }
                                 val habit = buildHabitFor(challenge)
                                 deps.habits.save(habit)
                                 deps.challenges.start(challenge.id, today, habit.id)
